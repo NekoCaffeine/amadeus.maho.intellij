@@ -1,0 +1,50 @@
+<idea-plugin>
+    <id>amadeus.maho</id>
+    <name>Maho</name>
+    <vendor email="nekocaffeine@qq.com" url="https://github.com/NekoCaffeine">NekoCaffeine</vendor>
+    <description><![CDATA[
+    <br>TODO..................................<br>
+    ]]></description>
+
+    <category>Tools Integration</category>
+
+    <depends>com.intellij.modules.lang</depends>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <application-components>
+        <component>
+            <implementation-class>amadeus.maho.lang.idea.MahoIDEA</implementation-class>
+        </component>
+    </application-components>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <referencesSearch implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ReferenceSearcher"/>
+        <lang.psiAugmentProvider implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$EntryPoint"/>
+        <renamePsiElementProcessor
+                implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$RenameLightElementProcessor"
+                order="first"/>
+        <!--        <renamePsiElementProcessor-->
+        <!--                implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$RenameFieldAccessorProcessor"-->
+        <!--                order="first"/>-->
+        <lang.structureViewExtension
+                implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$StructureInjecter"/>
+        <implicitUsageProvider implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ImplicitUsageChecker"/>
+        <canBeFinal implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ImplicitUsageChecker"/>
+        <java.elementFinder implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ElementFinder"
+                            order="last"/>
+        <renameHandler implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$InplaceRenameHandler"
+                       order="first"/>
+        <inspectionToolProvider implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$InspectionTool"/>
+        <referencesSearch implementation="amadeus.maho.lang.idea.handler.SelfHandler$SelfReferenceSearcher"/>
+
+        <intentionAction>
+            <className>amadeus.maho.lang.idea.handler.ExternalAnnotationsHandler$MakeCommentExternal</className>
+            <category>Java/Annotations</category>
+            <descriptionDirectoryName>MakeCommentExternal</descriptionDirectoryName>
+        </intentionAction>
+    </extensions>
+
+    <actions>
+
+    </actions>
+</idea-plugin>

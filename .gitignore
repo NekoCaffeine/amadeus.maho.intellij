@@ -1,0 +1,17 @@
+/logs/
+/dump/
+/build/distributive/
+/build/output/
+/build/IntellijConfig.default.cfg
+hs_err*
+*.iml
+/intellij.run/config/
+/intellij.run/dump/
+/intellij.run/log/
+/intellij.run/logs/
+/intellij.run/plugins/
+/intellij.run/system/
+/intellij.run/agent/
+/intellij.run/dokiThemeAssets/
+/intellij.run/build/
+/intellij.run/Project_Default.xml
