@@ -178,9 +178,7 @@ public class SelfHandler extends BaseSyntaxHandler {
         for (PsiElement scope = expression.getContext(); scope != null; scope = scope.getContext())
             switch (scope) {
                 case PsiExpressionList list && list.getParent() instanceof PsiAnonymousClass -> scope = scope.getParent();
-                case PsiClass psiClass                                                       -> {
-                    return new PsiImmediateClassType(psiClass, PsiSubstitutor.EMPTY);
-                }
+                case PsiClass psiClass                                                       -> new PsiImmediateClassType(psiClass, PsiSubstitutor.EMPTY);
                 case JavaCodeFragment fragment                                               -> {
                     final @Nullable PsiType fragmentThisType = fragment.getThisType();
                     if (fragmentThisType != null)
