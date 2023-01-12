@@ -14,6 +14,8 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiClass;
 
 import amadeus.maho.lang.Privilege;
+import amadeus.maho.lang.idea.debugger.render.CodePathPerceptionRenderer;
+import amadeus.maho.lang.idea.debugger.render.LambdaRenderer;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.runtime.DebugHelper;
@@ -39,6 +41,8 @@ public interface DebugRenderer {
                     renderers.add(renderer);
                 }
             });
+            renderers.add(new LambdaRenderer().createRenderer());
+            renderers.add(new CodePathPerceptionRenderer().createRenderer());
         } catch (final IndexNotReadyException | ProcessCanceledException ignore) { } catch (final Exception e) { LOG.error(e); }
     }
     
