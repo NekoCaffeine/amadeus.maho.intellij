@@ -13,7 +13,6 @@ import com.intellij.debugger.SourcePosition;
 import com.intellij.debugger.engine.DebugProcessImpl;
 import com.intellij.debugger.engine.FullValueEvaluatorProvider;
 import com.intellij.debugger.engine.JavaValue;
-import com.intellij.debugger.engine.evaluation.EvaluateException;
 import com.intellij.debugger.engine.evaluation.EvaluationContext;
 import com.intellij.debugger.engine.evaluation.EvaluationContextImpl;
 import com.intellij.debugger.impl.DebuggerUtilsEx;
@@ -34,7 +33,6 @@ import com.intellij.xdebugger.impl.ui.DebuggerUIUtil;
 
 import amadeus.maho.lang.idea.debugger.JDIHelper;
 import amadeus.maho.lang.inspection.Nullable;
-import amadeus.maho.util.runtime.DebugHelper;
 
 public class LambdaRenderer extends CompoundRendererProvider {
     
@@ -87,12 +85,10 @@ public class LambdaRenderer extends CompoundRendererProvider {
                 
                 @Override
                 public void evaluate(final XFullValueEvaluationCallback callback) {
-                    try {
-                        callback.evaluated("");
-                        final @Nullable SourcePosition lambdaPosition = lambdaPosition(evaluationContext, valueDescriptor);
-                        if (lambdaPosition != null)
-                            DebuggerUIUtil.invokeLater(() -> lambdaPosition.navigate(true));
-                    } catch (final EvaluateException e) { DebugHelper.breakpoint(); }
+                    callback.evaluated("");
+                    final @Nullable SourcePosition lambdaPosition = lambdaPosition(evaluationContext, valueDescriptor);
+                    if (lambdaPosition != null)
+                        DebuggerUIUtil.invokeLater(() -> lambdaPosition.navigate(true));
                 }
                 
                 @Override

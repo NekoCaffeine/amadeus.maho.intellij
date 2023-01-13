@@ -41,8 +41,8 @@ public interface DebugRenderer {
                     renderers.add(renderer);
                 }
             });
-            renderers.add(new LambdaRenderer().createRenderer());
             renderers.add(new CodePathPerceptionRenderer().createRenderer());
+            renderers.add(new LambdaRenderer().createRenderer());
         } catch (final IndexNotReadyException | ProcessCanceledException ignore) { } catch (final Exception e) { LOG.error(e); }
     }
     
