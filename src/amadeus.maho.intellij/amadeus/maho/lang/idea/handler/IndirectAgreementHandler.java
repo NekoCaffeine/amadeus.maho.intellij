@@ -17,6 +17,7 @@ import amadeus.maho.transform.mark.Proxy;
 import amadeus.maho.transform.mark.Redirect;
 import amadeus.maho.transform.mark.TransformTarget;
 import amadeus.maho.transform.mark.base.TransformProvider;
+import amadeus.maho.util.event.Listener;
 
 public class IndirectAgreementHandler<A extends Annotation> extends BaseHandler<A> {
     
@@ -43,6 +44,9 @@ public class IndirectAgreementHandler<A extends Annotation> extends BaseHandler<
     
     @Handler(ResourceAgent.class)
     public static final class ResourceAgentHandler extends IndirectAgreementHandler<ResourceAgent> { }
+    
+    @Handler(Listener.class)
+    public static final class ListenerHandler extends IndirectAgreementHandler<Listener> { }
     
     @Override
     public boolean isImplicitUsage(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData)
