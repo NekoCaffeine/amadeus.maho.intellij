@@ -2,6 +2,7 @@
 /dump/
 /build/distributive/
 /build/output/
+/build/compiled-script/
 /build/IntellijConfig.default.cfg
 hs_err*
 *.iml

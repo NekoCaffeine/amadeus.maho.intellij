@@ -93,7 +93,7 @@ public class PrivilegeHandler {
     private static Hook.Result isExpressionStatementExpression(final PsiElement element) = Hook.Result.falseToVoid(element instanceof PsiTypeCastExpression castExpression && isPrivilegeTypeCast(castExpression));
     
     @Hook(value = HighlightMethodUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static @Nullable HighlightInfo checkConstructorCallsBaseClassConstructor(final @Nullable HighlightInfo capture, final PsiMethod method, final RefCountHolder holder, final PsiResolveHelper resolveHelper) {
+    private static @Nullable HighlightInfo.Builder checkConstructorCallsBaseClassConstructor(final @Nullable HighlightInfo.Builder capture, final PsiMethod method, final RefCountHolder holder, final PsiResolveHelper resolveHelper) {
         if (capture != null && method.isConstructor() && method.hasAnnotation(Privilege.class.getCanonicalName())) {
             final @Nullable PsiClass superClass = method.getContainingClass()?.getSuperClass() ?? null;
             if (superClass != null && Stream.of(superClass.getMethods())
@@ -105,7 +105,8 @@ public class PrivilegeHandler {
     }
     
     @Hook(value = HighlightFixUtil.class, isStatic = true)
-    private static void registerAccessQuickFixAction(final @Nullable HighlightInfo info, final PsiJvmMember refElement, final PsiJavaCodeReferenceElement place, final PsiElement fileResolveScope, final TextRange parentFixRange) {
+    private static void registerAccessQuickFixAction(final @Nullable HighlightInfo.Builder info, final TextRange fixRange, final PsiJvmMember refElement,
+            final PsiJavaCodeReferenceElement place, final PsiElement fileResolveScope, final TextRange parentFixRange) {
         if (info != null) {
             final @Nullable PsiExpression target = switch (place.getParent()) {
                 case PsiMethodCallExpression callExpression && callExpression.getMethodExpression() == place        -> callExpression;

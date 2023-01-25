@@ -374,7 +374,7 @@ public class IDEAContext {
     static Hook.Result checkUnderscore(final PsiIdentifier identifier, final LanguageLevel languageLevel) {
         if ("_".equals(identifier.getText()) && !(identifier.getParent() instanceof PsiParameter parameter && parameter.getNameIdentifier() == identifier &&
                                                   parameter.getParent() instanceof PsiParameterList parameterList && parameterList.getParent() instanceof PsiLambdaExpression))
-            return { HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(identifier).descriptionAndTooltip(JavaErrorBundle.message("underscore.identifier.error")).create() };
+            return { HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(identifier).descriptionAndTooltip(JavaErrorBundle.message("underscore.identifier.error")) };
         return Hook.Result.NULL;
     }
     

@@ -5,7 +5,6 @@ import java.util.Map;
 
 import com.intellij.openapi.components.ComponentManager;
 import com.intellij.openapi.extensions.impl.XmlExtensionAdapter;
-import com.intellij.openapi.project.Project;
 import com.intellij.refactoring.suggested.SuggestedRefactoringProvider;
 import com.intellij.refactoring.suggested.SuggestedRefactoringProviderImpl;
 import com.intellij.serviceContainer.ComponentManagerImpl;
@@ -23,8 +22,8 @@ interface ServiceRedirect {
         
     }
     
-    @Hook
-    private static Hook.Result runActivity(final SuggestedRefactoringProviderImpl.Startup $this, final Project project) = Hook.Result.NULL;
+    @Hook(exactMatch = false)
+    private static Hook.Result execute(final SuggestedRefactoringProviderImpl.Startup $this) = Hook.Result.NULL;
     
     Map<Class<?>, Object> redirectIntellectualDisability = Map.of(SuggestedRefactoringProvider.class, new FakeSuggestedRefactoringProvider());
     

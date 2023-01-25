@@ -11,18 +11,23 @@ import javax.swing.JRootPane;
 import javax.swing.RootPaneContainer;
 import javax.swing.border.Border;
 
+import com.intellij.openapi.ui.popup.Balloon;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.wm.impl.IdeFrameDecorator;
 import com.intellij.openapi.wm.impl.customFrameDecorations.header.CustomHeader;
 import com.intellij.ui.AppIcon;
 import com.intellij.ui.AppUIUtil;
+import com.intellij.ui.BalloonImpl;
+import com.intellij.ui.Splash;
 import com.intellij.ui.WindowMoveListener;
 import com.intellij.ui.WindowResizeListener;
 import com.intellij.util.ui.JBEmptyBorder;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.PositionTracker;
 
 import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.Privilege;
+import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
@@ -40,7 +45,7 @@ public interface IdeFrameDecoratorHelper {
         instance;
         
         @Override
-        public void setCustomDecorationEnabled(final Window window, final boolean enabled) = setHasCustomDecoration(window);
+        public void setCustomDecorationEnabled(final Window window, final boolean enabled) { }
         
         @Override
         public boolean isCustomDecorationEnabled(final Window window) = true;
@@ -83,27 +88,36 @@ public interface IdeFrameDecoratorHelper {
     @Hook
     private static Hook.Result setUndecorated(final Frame $this, final boolean flag) = Hook.Result.falseToVoid(shouldEnable() && !flag && $this instanceof RootPaneContainer, null);
     
+    @Hook
+    private static void addNotify(final Frame $this) = decoration($this);
+    
+    @Hook
+    private static void addNotify(final Dialog $this) = decoration($this);
+    
     static JBEmptyBorder outerBorder() = { 2 };
     
-    private static void setHasCustomDecoration(final Window window) {
-        AppUIUtil.updateWindowIcon(window);
-        if (window instanceof RootPaneContainer container) {
-            switch (window) {
-                case Frame frame   -> frame.setUndecorated(true);
-                case Dialog dialog -> dialog.setUndecorated(true);
-                default            -> { }
-            }
-            final Border border = outerBorder();
-            final JRootPane rootPane = container.getRootPane();
-            rootPane.setBorder(border);
-            final Container contentPane = container.getContentPane();
-            final WindowResizeListener resizeListener = { rootPane, JBUI.insets(10), null };
-            window.addMouseListener(resizeListener);
-            window.addMouseMotionListener(resizeListener);
-            rootPane.addMouseListener(resizeListener);
-            rootPane.addMouseMotionListener(resizeListener);
-            contentPane.addMouseListener(resizeListener);
-            contentPane.addMouseMotionListener(resizeListener);
+    private static void decoration(final Window window) {
+        if (!window.isDisplayable() && shouldEnable()) {
+            AppUIUtil.updateWindowIcon(window);
+            if (window instanceof final RootPaneContainer container) {
+                switch (window) {
+                    case final Frame frame   -> frame.setUndecorated(true);
+                    case final Dialog dialog -> dialog.setUndecorated(true);
+                    default                  -> { }
+                }
+                final Border border = outerBorder();
+                final @Nullable JRootPane rootPane = container.getRootPane();
+                rootPane?.setBorder(border);
+                final @Nullable Container contentPane = container.getContentPane();
+                final WindowResizeListener resizeListener = { rootPane, JBUI.insets(10), null };
+                window.addMouseListener(resizeListener);
+                window.addMouseMotionListener(resizeListener);
+                rootPane?.addMouseListener(resizeListener);
+                rootPane?.addMouseMotionListener(resizeListener);
+                contentPane?.addMouseListener(resizeListener);
+                contentPane?.addMouseMotionListener(resizeListener);
+            } else if (window instanceof final Splash splash)
+                splash.setUndecorated(true);
         }
     }
     
@@ -115,5 +129,8 @@ public interface IdeFrameDecoratorHelper {
             $this.addMouseMotionListener(moveListener);
         }
     }
+    
+    @Hook
+    private static Hook.Result revalidate(final BalloonImpl $this, final @Nullable PositionTracker<Balloon> tracker) = Hook.Result.falseToVoid(tracker == null, null);
     
 }

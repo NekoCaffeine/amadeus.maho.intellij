@@ -261,20 +261,17 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
             .distinct()
             .toArray(PsiMethod.ARRAY_FACTORY::create);
     
-    // Type check the default values
-    @Hook
-    private static void visitParameter(final HighlightVisitorImpl $this, final PsiParameter parameter) {
-        final HighlightInfoHolder holder = myHolder($this);
-        checkVariableDefaultValueType(parameter).forEach(holder::add);
-        checkVariableDefaultValueNotInitialized(parameter).forEach(holder::add);
+    private static void checkVariableDefaultValue(final PsiVariable variable, final HighlightInfoHolder holder) {
+        checkVariableDefaultValueType(variable).map(HighlightInfo.Builder::create).forEach(holder::add);
+        checkVariableDefaultValueNotInitialized(variable).map(HighlightInfo.Builder::create).forEach(holder::add);
     }
     
+    // Type check the default values
     @Hook
-    private static void visitRecordComponent(final HighlightVisitorImpl $this, final PsiRecordComponent recordComponent) {
-        final HighlightInfoHolder holder = myHolder($this);
-        checkVariableDefaultValueType(recordComponent).forEach(holder::add);
-        checkVariableDefaultValueNotInitialized(recordComponent).forEach(holder::add);
-    }
+    private static void visitParameter(final HighlightVisitorImpl $this, final PsiParameter parameter) = checkVariableDefaultValue(parameter, myHolder($this));
+    
+    @Hook
+    private static void visitRecordComponent(final HighlightVisitorImpl $this, final PsiRecordComponent recordComponent) = checkVariableDefaultValue(recordComponent, myHolder($this));
     
     public static @Nullable PsiVariable recordComponentForParameter(final PsiParameter parameter) {
         final @Nullable PsiMethod context = PsiTreeUtil.getContextOfType(parameter, PsiMethod.class);
@@ -351,7 +348,7 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
     private static Hook.Result checkArrayInitializerApplicable(final PsiArrayInitializerExpression expression)
     = Hook.Result.falseToVoid(expression.getParent() instanceof PsiParameterList || expression.getParent() instanceof PsiRecordHeader, null);
     
-    private static Stream<HighlightInfo> checkVariableDefaultValueType(final PsiVariable variable) {
+    private static Stream<HighlightInfo.Builder> checkVariableDefaultValueType(final PsiVariable variable) {
         final @Nullable PsiExpression expression = defaultValue(variable);
         if (expression != null) {
             if (expression instanceof PsiArrayInitializerExpression initializer && AssignHandler.type(initializer) instanceof PsiNewExpression)
@@ -367,7 +364,7 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
                         return Stream.empty();
                 else if (TypeConversionUtil.isAssignable(arrayType.getComponentType(), expressionType))
                     return Stream.empty();
-            final @Nullable HighlightInfo info = (Privilege) HighlightUtil.checkAssignability(type, expressionType, expression, variable.getTextRange().union(expression.getTextRange()), 0);
+            final @Nullable HighlightInfo.Builder info = (Privilege) HighlightUtil.checkAssignability(type, expressionType, expression, variable.getTextRange().union(expression.getTextRange()), 0);
             if (info == null)
                 return Stream.empty();
             final PsiType unpackedType = HandlerMarker.EntryPoint.unwrapType(variable);
@@ -387,12 +384,12 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
         return Stream.empty();
     }
     
-    private static Stream<HighlightInfo> checkVariableDefaultValueNotInitialized(final PsiVariable variable) {
+    private static Stream<HighlightInfo.Builder> checkVariableDefaultValueNotInitialized(final PsiVariable variable) {
         final @Nullable PsiExpression expression = defaultValue(variable);
         if (expression != null)
             return PsiTreeUtil.findChildrenOfAnyType(expression, false, PsiReferenceExpression.class).stream()
                     .filter(reference -> reference.resolve() == variable)
-                    .map(reference -> HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(reference).descriptionAndTooltip(JavaErrorBundle.message("variable.not.initialized", variable.getName())).create());
+                    .map(reference -> HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(reference).descriptionAndTooltip(JavaErrorBundle.message("variable.not.initialized", variable.getName())));
         return Stream.empty();
     }
     

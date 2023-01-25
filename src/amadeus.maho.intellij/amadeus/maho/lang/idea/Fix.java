@@ -17,8 +17,7 @@ import com.intellij.codeInsight.completion.CompletionPhase;
 import com.intellij.codeInsight.completion.CompletionType;
 import com.intellij.codeInsight.completion.actions.BaseCodeCompletionAction;
 import com.intellij.codeInsight.daemon.impl.LibrarySourceNotificationProvider;
-import com.intellij.codeInsight.folding.impl.CodeFoldingManagerImpl;
-import com.intellij.codeInsight.folding.impl.FoldingUpdate;
+import com.intellij.codeInsight.folding.impl.JavaFoldingBuilderBase;
 import com.intellij.codeInsight.generation.GenerateEqualsHandler;
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerBase;
 import com.intellij.codeInspection.InspectionManager;
@@ -33,14 +32,18 @@ import com.intellij.ide.SystemHealthMonitorKt;
 import com.intellij.ide.actions.CopyTBXReferenceProvider;
 import com.intellij.ide.actions.RevealFileAction;
 import com.intellij.jna.JnaLoader;
+import com.intellij.lang.folding.CompositeFoldingBuilder;
+import com.intellij.lang.folding.CustomFoldingBuilder;
+import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
+import com.intellij.lang.parameterInfo.ParameterInfoUtils;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.application.impl.ApplicationImpl;
-import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicatorProvider;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
@@ -186,12 +189,18 @@ interface Fix {
     private static Hook.Result setCurrent(final SchemeManagerBase $this, final Object scheme, final boolean notify, final boolean processChangeSynchronously)
     = Hook.Result.falseToVoid(scheme instanceof EditorColorsScheme && CallerContext.Stack.walker().walk(stream -> stream.anyMatch(frame -> frame.getMethodName().equals("initScheme"))) && setCurrentCounter.getAndIncrement() == 0);
     
-    @Hook(isStatic = true, value = FoldingUpdate.class)
-    private static Hook.Result supportsDumbModeFolding(final Editor editor) = Hook.Result.FALSE;
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+    private static boolean isDumbAware(final boolean capture, final CustomFoldingBuilder $this) = capture || !($this instanceof JavaFoldingBuilderBase);
     
-    // Prohibit pre-folding : IndexNotReadyException
     @Hook
-    private static Hook.Result buildInitialFoldings(final CodeFoldingManagerImpl $this, final Document document) = Hook.Result.NULL;
+    private static Hook.Result isDumbAware(final CompositeFoldingBuilder $this) = { ((Privilege) $this.myBuilders).stream().allMatch(DumbService::isDumbAware) };
+    
+    // @Hook(isStatic = true, value = FoldingUpdate.class)
+    // private static Hook.Result supportsDumbModeFolding(final Editor editor) = Hook.Result.FALSE;
+    //
+    // // Prohibit pre-folding : IndexNotReadyException
+    // @Hook
+    // private static Hook.Result buildInitialFoldings(final CodeFoldingManagerImpl $this, final Document document) = Hook.Result.NULL;
     
     // Hook.Result disabledResult = { JavaSourceInference.InferenceMode.DISABLED };
     //
@@ -210,7 +219,7 @@ interface Fix {
     // <T> @A T, '@A' not applicable to type use
     @Hook(value = AnnotationTargetUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static PsiAnnotation.TargetType[] getTargetsForLocation(final PsiAnnotation.TargetType capture[], final @Nullable PsiAnnotationOwner owner)
-    = owner instanceof PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement && PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof PsiMethod method &&
+    = owner instanceof final PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement && PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof final PsiMethod method &&
       method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod)) ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
     
     // This eliminates the need to wait for input to stop for a period of time before the auto-complete candidate prompt appears
@@ -308,12 +317,19 @@ interface Fix {
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "subSequence")), before = false, capture = true)
     private static CharSequence createMemberCopyFromText(final CharSequence capture, final PsiMember member, final TextRange range)
-            = member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
+            = member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "findPsiByAST")), capture = true)
     private static int getNonPhysicalCopy(final int capture, final Map<TextRange, PsiFile> fragmentCache, final JavaFunctionalExpressionIndex.IndexEntry entry, final PsiFunctionalExpression expression) {
         final PsiMember member = PsiTreeUtil.getStubOrPsiParentOfType(expression, PsiMember.class);
-        return member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? capture + field.getTypeElement().getText().length() + 1 : capture;
+        return member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? capture + field.getTypeElement().getText().length() + 1 : capture;
+    }
+    
+    @Hook(value = ParameterInfoUtils.class, isStatic = true)
+    private static <E extends PsiElement> Hook.Result findArgumentList(final PsiFile file, final int offset, @Hook.Reference int lbraceOffset,
+            final ParameterInfoHandlerWithTabActionSupport findArgumentListHelper, final boolean allowOuter) {
+        lbraceOffset = -1;
+        return { };
     }
     
 }
