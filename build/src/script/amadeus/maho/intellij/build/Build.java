@@ -1,4 +1,4 @@
-package amadeus.maho.inteliij.build;
+package amadeus.maho.intellij.build;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

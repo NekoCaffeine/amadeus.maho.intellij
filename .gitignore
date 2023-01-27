@@ -4,6 +4,7 @@
 /build/output/
 /build/compiled-script/
 /build/IntellijConfig.default.cfg
+/build/GithubConfig.default.cfg
 hs_err*
 *.iml
 /intellij.run/config/

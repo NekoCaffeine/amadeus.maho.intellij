@@ -13,7 +13,8 @@ import amadeus.maho.core.extension.ReflectBreaker;
 import amadeus.maho.lang.SneakyThrows;
 import amadeus.maho.util.resource.ResourcePath;
 
-@SneakyThrows final class MahoIDEA {
+@SneakyThrows
+final class MahoIDEA {
     
     private static Predicate<URL> sourceChecker(final Class<?> target) {
         final Function<URL, String> name = url -> {
@@ -32,6 +33,7 @@ import amadeus.maho.util.resource.ResourcePath;
     
     static {
         try {
+            LargeMemoryPatcher.extendWorkingSetSize();
             ResourcePath.classMapperChain().add(target -> target
                     .stream()
                     .map(Class::getClassLoader)

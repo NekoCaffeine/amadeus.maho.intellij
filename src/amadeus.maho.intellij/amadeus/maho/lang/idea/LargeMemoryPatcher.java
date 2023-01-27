@@ -5,7 +5,14 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+import com.sun.jna.Native;
+import com.sun.jna.platform.win32.Kernel32;
+import com.sun.jna.platform.win32.WinNT;
+import com.sun.jna.win32.StdCallLibrary;
+import com.sun.jna.win32.W32APIOptions;
+
 import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.FileViewProvider;
 import com.intellij.psi.PsiDirectory;
@@ -54,6 +61,29 @@ public interface LargeMemoryPatcher {
                     .forEach(manager -> (Privilege) manager.processFileTypesChanged(true));
         }
         
+    }
+    
+    interface MemoryAPI extends StdCallLibrary, WinNT {
+        
+        MemoryAPI INSTANCE = Native.load("kernel32", MemoryAPI.class, W32APIOptions.DEFAULT_OPTIONS);
+        
+        int
+                QUOTA_LIMITS_HARDWS_MIN_ENABLE  = 0x00000001,
+                QUOTA_LIMITS_HARDWS_MIN_DISABLE = 0x00000002,
+                QUOTA_LIMITS_HARDWS_MAX_ENABLE  = 0x00000004,
+                QUOTA_LIMITS_HARDWS_MAX_DISABLE = 0x00000008;
+        
+        boolean SetProcessWorkingSetSizeEx(WinNT.HANDLE hProcess, long dwMinimumWorkingSetSize, long dwMaximumWorkingSetSize, int flags);
+        
+    }
+    
+    static void extendWorkingSetSize() {
+        if (SystemInfo.isWindows) {
+            final WinNT.HANDLE hProcess = Kernel32.INSTANCE.GetCurrentProcess();
+            final long maxMemory = Runtime.getRuntime().maxMemory(), workingSet = maxMemory / 4 * 5;
+            final boolean result = MemoryAPI.INSTANCE.SetProcessWorkingSetSizeEx(hProcess, workingSet, workingSet, MemoryAPI.QUOTA_LIMITS_HARDWS_MIN_ENABLE | MemoryAPI.QUOTA_LIMITS_HARDWS_MAX_DISABLE);
+            System.out.println("SetProcessWorkingSetSizeEx: " + result);
+        }
     }
     
     ReferenceCollector.Base collector = new ReferenceCollector.Base().let(ReferenceCollector.Base::start);

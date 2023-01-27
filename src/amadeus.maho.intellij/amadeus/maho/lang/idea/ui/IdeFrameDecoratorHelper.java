@@ -11,19 +11,16 @@ import javax.swing.JRootPane;
 import javax.swing.RootPaneContainer;
 import javax.swing.border.Border;
 
-import com.intellij.openapi.ui.popup.Balloon;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.wm.impl.IdeFrameDecorator;
 import com.intellij.openapi.wm.impl.customFrameDecorations.header.CustomHeader;
 import com.intellij.ui.AppIcon;
 import com.intellij.ui.AppUIUtil;
-import com.intellij.ui.BalloonImpl;
 import com.intellij.ui.Splash;
 import com.intellij.ui.WindowMoveListener;
 import com.intellij.ui.WindowResizeListener;
 import com.intellij.util.ui.JBEmptyBorder;
 import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.PositionTracker;
 
 import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.Privilege;
@@ -129,8 +126,5 @@ public interface IdeFrameDecoratorHelper {
             $this.addMouseMotionListener(moveListener);
         }
     }
-    
-    @Hook
-    private static Hook.Result revalidate(final BalloonImpl $this, final @Nullable PositionTracker<Balloon> tracker) = Hook.Result.falseToVoid(tracker == null, null);
     
 }
