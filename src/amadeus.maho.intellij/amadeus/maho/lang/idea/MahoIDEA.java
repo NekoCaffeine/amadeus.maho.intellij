@@ -29,8 +29,6 @@ final class MahoIDEA {
         throw new IllegalArgumentException(target.getName());
     }
     
-    // public static final Sampler.Interceptor interceptor = { };
-    
     static {
         try {
             LargeMemoryPatcher.extendWorkingSetSize();
@@ -44,10 +42,11 @@ final class MahoIDEA {
                     .filter(sourceChecker(target.orElseThrow()))
                     .findFirst());
             MahoExport.Setup.minimize();
+            Maho.instrumentation();
+            Maho.inject(HookResultInjector.instance());
             Maho.setupFromClass();
             ReflectBreaker.jailbreak();
             ObjectTreeInjector.inject();
-            // async(() -> InterceptorManager.instance().install(() -> interceptor, (loader, name) -> name.startsWith("amadeus.maho.lang.idea.handler.base.HandlerMarker")));
         } catch (final Throwable throwable) { throwable.printStackTrace(); }
     }
     

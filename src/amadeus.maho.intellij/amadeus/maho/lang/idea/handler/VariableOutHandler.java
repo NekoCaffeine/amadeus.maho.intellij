@@ -10,7 +10,7 @@ import com.intellij.psi.PsiVariable;
 
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.Handler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
@@ -30,6 +30,6 @@ public class VariableOutHandler<A extends Annotation> extends BaseHandler<A> {
     
     @Hook(value = DefUseInspection.class, isStatic = true)
     private static Hook.Result reportAssignmentProblem(final PsiVariable variable, final PsiAssignmentExpression assignment, final ProblemsHolder holder) = Hook.Result.falseToVoid(
-            HandlerMarker.Marker.baseHandlers().stream().anyMatch(handler -> handler.isVariableOut(variable)) || HandlerMarker.SyntaxMarker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isVariableOut(variable)));
+            Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isVariableOut(variable)) || Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isVariableOut(variable)));
     
 }

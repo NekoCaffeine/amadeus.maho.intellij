@@ -3,6 +3,7 @@ package amadeus.maho.lang.idea;
 import com.intellij.ide.plugins.cl.PluginClassLoader;
 import com.intellij.util.lang.UrlClassLoader;
 
+import amadeus.maho.lang.Privilege;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
@@ -10,6 +11,8 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 public interface ClassLoaderBridge {
     
     ClassLoader loader = MahoIDEA.class.getClassLoader();
+    
+    String HOOK_RESULT = "amadeus.maho.transform.mark$Hook";
     
     ThreadLocal<Boolean> forkLoadClassMark = ThreadLocal.withInitial(() -> false);
     
@@ -20,6 +23,8 @@ public interface ClassLoaderBridge {
     private static Hook.Result loadClass(final PluginClassLoader $this, final String name, final boolean resolve) = tryLoadMahoClass($this, name);
     
     private static Hook.Result tryLoadMahoClass(final UrlClassLoader $this, final String name) {
+        if (name.equals(HOOK_RESULT))
+            return { (Privilege) ClassLoader.findBootstrapClass(HOOK_RESULT) };
         if (forkLoadClassMark.get() || $this == loader || !name.startsWith("amadeus.maho."))
             return Hook.Result.VOID;
         forkLoadClassMark.set(true);

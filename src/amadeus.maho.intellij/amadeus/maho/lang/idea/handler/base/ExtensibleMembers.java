@@ -40,11 +40,9 @@ import amadeus.maho.lang.idea.light.LightBridgeMethod;
 import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.util.function.FunctionHelper;
-import amadeus.maho.vm.transform.mark.HotSpotJIT;
 
 import static com.intellij.psi.PsiModifier.*;
 
-@HotSpotJIT
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class ExtensibleMembers {
@@ -167,7 +165,7 @@ public class ExtensibleMembers {
     protected <E extends PsiMember> void process(final E member) {
         final PsiExtensibleClass extensible = extensible();
         HandlerMarker.EntryPoint.process(member, (handler, target, annotation, annotationTree) -> handler.process(target, annotation, annotationTree, this, extensible));
-        HandlerMarker.SyntaxMarker.syntaxHandlers().values().forEach(handler -> handler.process(member, this, extensible));
+        Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.process(member, this, extensible));
     }
     
     protected <K, E extends PsiMember> void collectAugments(final Namespace<K, E> namespace) = PsiAugmentProvider.collectAugments(extensible(), namespace.memberType(), null).stream().peek(adder(namespace)).forEach(this::process);

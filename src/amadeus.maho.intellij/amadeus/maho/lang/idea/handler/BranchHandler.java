@@ -100,9 +100,8 @@ public class BranchHandler {
     private static ExpressionParser.ExprType parseExpression(final ExpressionParser.ExprType capture, final ExpressionParser $this, final PsiBuilder builder, final ExpressionParser.ExprType type, final int mode) = NULL_OR_TYPE;
     
     @Hook
-    @Privilege
-    private static Hook.Result parseExpression(final ExpressionParser $this, final PsiBuilder builder, final ExpressionParser.ExprType type,
-            final int mode) = type == NULL_OR_TYPE ? new Hook.Result($this.parseBinary(builder, ExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
+    private static Hook.Result parseExpression(final ExpressionParser $this, final PsiBuilder builder, final ExpressionParser.ExprType type, final int mode)
+            = type == NULL_OR_TYPE ? new Hook.Result((Privilege) $this.parseBinary(builder, ExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
     
     @Hook
     private static Hook.Result visitPolyadicExpression(final JavaSpacePropertyProcessor $this, final PsiPolyadicExpression expression) {
@@ -114,54 +113,64 @@ public class BranchHandler {
     }
     
     public static boolean isSafeAccess(final @Nullable PsiExpression expression) = switch (expression) {
-        case PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
-        case PsiReferenceExpression referenceExpression -> referenceExpression instanceof CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
-        case null, default                              -> false;
+        case final PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof final CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
+        case final PsiReferenceExpression referenceExpression -> referenceExpression instanceof final CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
+        case null, default                                    -> false;
     };
     
     @Hook
     public static <T extends PsiElement> Hook.Result ifMyProblem(final NullabilityProblemKind<T> $this, final NullabilityProblemKind.NullabilityProblem<?> problem, final Consumer<? super T> consumer) {
         if ($this == callNPE || $this == fieldAccessNPE) {
             final NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
-            if (myProblem != null && isSafeAccess((PsiExpression) ($this == fieldAccessNPE ? myProblem.getAnchor().getParent() : myProblem.getAnchor()))) return Hook.Result.NULL;
+            if (myProblem != null && isSafeAccess((PsiExpression) ($this == fieldAccessNPE ? myProblem.getAnchor().getParent() : myProblem.getAnchor())))
+                return Hook.Result.NULL;
         }
         return Hook.Result.VOID;
     }
     
     @Hook
-    private static Hook.Result isUnboxingNecessary(final UnnecessaryUnboxingInspection.UnnecessaryUnboxingVisitor $this, final PsiExpression expression,
-            final PsiExpression unboxedExpression) = Hook.Result.falseToVoid(isSafeAccess(expression));
+    private static Hook.Result isUnboxingNecessary(final UnnecessaryUnboxingInspection.UnnecessaryUnboxingVisitor $this, final PsiExpression expression, final PsiExpression unboxedExpression)
+            = Hook.Result.falseToVoid(isSafeAccess(expression));
     
     @Hook(value = PsiPrecedenceUtil.class, isStatic = true)
-    private static Hook.Result getPrecedenceForOperator(final IElementType operator) = Hook.Result.falseToVoid(operator == NULL_OR, PsiPrecedenceUtil.TYPE_CAST_PRECEDENCE);
+    private static Hook.Result getPrecedenceForOperator(final IElementType operator)
+            = Hook.Result.falseToVoid(operator == NULL_OR, PsiPrecedenceUtil.TYPE_CAST_PRECEDENCE);
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static @Nullable ASTNode findChildByRole(final @Nullable ASTNode capture, final PsiBinaryExpressionImpl $this, final int role) = role == ChildRole.OPERATION_SIGN && capture == null ? $this.findChildByType(NULL_OR) : capture;
+    private static @Nullable ASTNode findChildByRole(final @Nullable ASTNode capture, final PsiBinaryExpressionImpl $this, final int role)
+            = role == ChildRole.OPERATION_SIGN && capture == null ? $this.findChildByType(NULL_OR) : capture;
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static int getChildRole(final int capture, final PsiBinaryExpressionImpl $this, final ASTNode child) = child.getElementType() == NULL_OR && capture == ChildRoleBase.NONE ? ChildRole.OPERATION_SIGN : capture;
+    private static int getChildRole(final int capture, final PsiBinaryExpressionImpl $this, final ASTNode child)
+            = child.getElementType() == NULL_OR && capture == ChildRoleBase.NONE ? ChildRole.OPERATION_SIGN : capture;
     
     @Hook(value = PsiBinaryExpressionImpl.class, isStatic = true)
-    private static Hook.Result doGetType(
-            final PsiBinaryExpressionImpl expression) = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getLOperand(), expression.getROperand())) : Hook.Result.VOID;
+    private static Hook.Result doGetType(final PsiBinaryExpressionImpl expression)
+            = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getLOperand(), expression.getROperand())) : Hook.Result.VOID;
     
     @Hook(value = PsiPolyadicExpressionImpl.class, isStatic = true)
-    private static Hook.Result doGetType(final PsiPolyadicExpressionImpl expression) = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getOperands())) : Hook.Result.VOID;
+    private static Hook.Result doGetType(final PsiPolyadicExpressionImpl expression)
+            = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getOperands())) : Hook.Result.VOID;
     
     private static @Nullable PsiType condType(final PsiExpression owner, final Function<PsiExpression, PsiType> typeEvaluator = expression -> expression?.getType() ?? null, final PsiExpression... expressions) {
-        if (expressions.length == 0) return null;
+        if (expressions.length == 0)
+            return null;
         final PsiType types[] = Stream.of(expressions).map(expression -> expression?.getType() ?? null).toArray(PsiType::createArray);
-        if (Stream.of(types).distinct().count() == 1) return types[0];
+        if (Stream.of(types).distinct().count() == 1)
+            return types[0];
         final PsiConstantEvaluationHelper evaluationHelper = JavaPsiFacade.getInstance(owner.getProject()).getConstantEvaluationHelper();
         final Object constValues[] = Stream.of(expressions).map(expression -> {
             final @Nullable PsiType type = typeEvaluator.apply(expression);
-            if (type == null) return null;
+            if (type == null)
+                return null;
             return getTypeRank(type) < LONG_RANK ? evaluationHelper.computeConstantExpression(expression) : null;
         }).toArray();
         if (PsiPolyExpressionUtil.isPolyExpression(owner)) {
             final @Nullable PsiType targetType = InferenceSession.getTargetType(owner);
-            if (MethodCandidateInfo.isOverloadCheck()) return targetType != null && Stream.of(types).allMatch(type -> type != null && targetType.isAssignableFrom(type)) ? targetType : null;
-            if (targetType != null) return targetType;
+            if (MethodCandidateInfo.isOverloadCheck())
+                return targetType != null && Stream.of(types).allMatch(type -> type != null && targetType.isAssignableFrom(type)) ? targetType : null;
+            if (targetType != null)
+                return targetType;
         }
         @Nullable PsiType result = types[0];
         @Nullable Object constValue = constValues[0];
@@ -173,47 +182,73 @@ public class BranchHandler {
     }
     
     private static @Nullable Object mergeConstInt(final @Nullable Object constValue1, final @Nullable Object constValue2) =
-    constValue1 instanceof Integer integer1 ? constValue2 instanceof Integer integer2 ? (Integer) Math.max(integer1, integer2) : constValue2 instanceof Character integer2 ? (Integer) Math.max(integer1, integer2) : null : constValue1 instanceof Character integer1 ? constValue2 instanceof Integer integer2 ? (Integer) Math.max(integer1, integer2) : constValue2 instanceof Character integer2 ? (Integer) Math.max(integer1, integer2) : null : null;
+    constValue1 instanceof final Integer integer1 ? constValue2 instanceof final Integer integer2 ? (Integer) Math.max(integer1, integer2) : constValue2 instanceof final Character integer2 ? (Integer) Math.max(integer1, integer2) : null : constValue1 instanceof final Character integer1 ? constValue2 instanceof final Integer integer2 ? (Integer) Math.max(integer1, integer2) : constValue2 instanceof final Character integer2 ? (Integer) Math.max(integer1, integer2) : null : null;
     
     private static @Nullable PsiType lubType(final PsiExpression context, final @Nullable PsiType type1, final @Nullable PsiType type2, final @Nullable Object constValue1, final @Nullable Object constValue2) {
-        if (Objects.equals(type1, type2)) return type1;
-        if (type1 == null) return type2;
-        if (type2 == null) return type1;
+        if (Objects.equals(type1, type2))
+            return type1;
+        if (type1 == null)
+            return type2;
+        if (type2 == null)
+            return type1;
         final int typeRank1 = getTypeRank(type1), typeRank2 = getTypeRank(type2);
-        if (type1 instanceof PsiClassType && type2.equals(PsiPrimitiveType.getUnboxedType(type1))) return type2;
-        if (type2 instanceof PsiClassType && type1.equals(PsiPrimitiveType.getUnboxedType(type2))) return type1;
+        if (type1 instanceof PsiClassType && type2.equals(PsiPrimitiveType.getUnboxedType(type1)))
+            return type2;
+        if (type2 instanceof PsiClassType && type1.equals(PsiPrimitiveType.getUnboxedType(type2)))
+            return type1;
         if (isNumericType(typeRank1) && isNumericType(typeRank2)) {
-            if (typeRank1 == BYTE_RANK && typeRank2 == SHORT_RANK) return type2 instanceof PsiPrimitiveType ? type2 : PsiPrimitiveType.getUnboxedType(type2);
-            if (typeRank1 == SHORT_RANK && typeRank2 == BYTE_RANK) return type1 instanceof PsiPrimitiveType ? type1 : PsiPrimitiveType.getUnboxedType(type1);
-            if (typeRank2 == INT_RANK && (typeRank1 == BYTE_RANK || typeRank1 == SHORT_RANK || typeRank1 == CHAR_RANK)) if (areTypesAssignmentCompatible(type1, type2, constValue2)) return type1;
-            if (typeRank1 == INT_RANK && (typeRank2 == BYTE_RANK || typeRank2 == SHORT_RANK || typeRank2 == CHAR_RANK)) if (areTypesAssignmentCompatible(type2, type1, constValue1)) return type2;
+            if (typeRank1 == BYTE_RANK && typeRank2 == SHORT_RANK)
+                return type2 instanceof PsiPrimitiveType ? type2 : PsiPrimitiveType.getUnboxedType(type2);
+            if (typeRank1 == SHORT_RANK && typeRank2 == BYTE_RANK)
+                return type1 instanceof PsiPrimitiveType ? type1 : PsiPrimitiveType.getUnboxedType(type1);
+            if (typeRank2 == INT_RANK && (typeRank1 == BYTE_RANK || typeRank1 == SHORT_RANK || typeRank1 == CHAR_RANK))
+                if (areTypesAssignmentCompatible(type1, type2, constValue2))
+                    return type1;
+            if (typeRank1 == INT_RANK && (typeRank2 == BYTE_RANK || typeRank2 == SHORT_RANK || typeRank2 == CHAR_RANK))
+                if (areTypesAssignmentCompatible(type2, type1, constValue1))
+                    return type2;
             return binaryNumericPromotion(type1, type2);
         }
-        if (isNullType(type1) && !(type2 instanceof PsiPrimitiveType)) return type2;
-        if (isNullType(type2) && !(type1 instanceof PsiPrimitiveType)) return type1;
-        if (isAssignable(type1, type2, false)) return type1;
-        if (isAssignable(type2, type1, false)) return type2;
+        if (isNullType(type1) && !(type2 instanceof PsiPrimitiveType))
+            return type2;
+        if (isNullType(type2) && !(type1 instanceof PsiPrimitiveType))
+            return type1;
+        if (isAssignable(type1, type2, false))
+            return type1;
+        if (isAssignable(type2, type1, false))
+            return type2;
         @Nullable PsiType boxedType1 = null, boxedType2 = null;
-        if (isPrimitiveAndNotNull(type1) && type1 instanceof PsiPrimitiveType primitiveType1 && (boxedType1 = primitiveType1.getBoxedType(context)) == null) return null;
-        if (isPrimitiveAndNotNull(type2) && type2 instanceof PsiPrimitiveType primitiveType2 && (boxedType2 = primitiveType2.getBoxedType(context)) == null) return null;
+        if (isPrimitiveAndNotNull(type1) && type1 instanceof final PsiPrimitiveType primitiveType1 && (boxedType1 = primitiveType1.getBoxedType(context)) == null)
+            return null;
+        if (isPrimitiveAndNotNull(type2) && type2 instanceof final PsiPrimitiveType primitiveType2 && (boxedType2 = primitiveType2.getBoxedType(context)) == null)
+            return null;
         final @Nullable PsiType leastUpperBound = GenericsUtil.getLeastUpperBound(boxedType1, boxedType2, context.getManager());
         return leastUpperBound != null ? PsiUtil.captureToplevelWildcards(leastUpperBound, context) : null;
     }
     
     private static boolean areTypesAssignmentCompatible(final PsiType lType, final PsiType rType, final @Nullable Object constValue) {
-        if (lType == null || rType == null) return true;
-        if (isAssignable(lType, rType)) return true;
+        if (lType == null || rType == null)
+            return true;
+        if (isAssignable(lType, rType))
+            return true;
         final PsiType unboxedLType = !(lType instanceof PsiPrimitiveType) ? PsiPrimitiveType.getUnboxedType(lType) : lType;
-        if (unboxedLType == null) return false;
+        if (unboxedLType == null)
+            return false;
         final int rTypeRank = getTypeRank(rType);
         if (rType instanceof PsiPrimitiveType && rTypeRank < LONG_RANK) {
             final int value;
-            if (constValue instanceof Number number) value = number.intValue();
-            else if (constValue instanceof Character character) value = character;
-            else return false;
-            if (PsiType.BYTE.equals(unboxedLType)) return -128 <= value && value <= 127;
-            else if (PsiType.SHORT.equals(unboxedLType)) return -32768 <= value && value <= 32767;
-            else if (PsiType.CHAR.equals(unboxedLType)) return 0 <= value && value <= 0xFFFF;
+            if (constValue instanceof final Number number)
+                value = number.intValue();
+            else if (constValue instanceof final Character character)
+                value = character;
+            else
+                return false;
+            if (PsiType.BYTE.equals(unboxedLType))
+                return -128 <= value && value <= 127;
+            else if (PsiType.SHORT.equals(unboxedLType))
+                return -32768 <= value && value <= 32767;
+            else if (PsiType.CHAR.equals(unboxedLType))
+                return 0 <= value && value <= 0xFFFF;
         }
         return false;
     }
@@ -240,17 +275,17 @@ public class BranchHandler {
         
         @Override
         public DfaValue eval(final DfaValueFactory factory, final DfaMemoryState state, final DfaValue... arguments) = switch (state.getDfType(arguments[0])) {
-            case DfReferenceType referenceType  -> switch (referenceType.getNullability()) {
+            case final DfReferenceType referenceType  -> switch (referenceType.getNullability()) {
                 case NULL     -> arguments[1];
                 case NOT_NULL -> arguments[0];
-                case NULLABLE -> state.getDfType(arguments[1]) instanceof DfReferenceType otherType && otherType.getNullability() != DfaNullability.NULL ?
+                case NULLABLE -> state.getDfType(arguments[1]) instanceof final DfReferenceType otherType && otherType.getNullability() != DfaNullability.NULL ?
                         factory.fromDfType(typedObject(targetType, DfaNullability.toNullability(otherType.getNullability()))) : factory.fromDfType(typedObject(targetType, Nullability.NULLABLE));
                 default       -> factory.fromDfType(typedObject(targetType, Nullability.UNKNOWN));
             };
-            case DfConstantType<?> constantType -> constantType.getValue() != null ? arguments[0] : arguments[1];
-            case DfAntiConstantType<?> ignored  -> arguments[0];
-            case DfStreamStateType ignored      -> arguments[0];
-            default                             -> factory.fromDfType(typedObject(targetType, Nullability.UNKNOWN));
+            case final DfConstantType<?> constantType -> constantType.getValue() != null ? arguments[0] : arguments[1];
+            case final DfAntiConstantType<?> ignored  -> arguments[0];
+            case final DfStreamStateType ignored      -> arguments[0];
+            default                                   -> factory.fromDfType(typedObject(targetType, Nullability.UNKNOWN));
         };
         
         public String toString() = "NULL_OR";
@@ -266,58 +301,21 @@ public class BranchHandler {
         return Hook.Result.VOID;
     }
     
-    @Privilege
     private static void generateBinOpChain(final ControlFlowAnalyzer $this, final PsiPolyadicExpression expression, final PsiExpression[] operands) {
         operands[0].accept($this);
         for (int i = 1; i < operands.length; i++) {
             operands[i].accept($this);
-            $this.addInstruction(new NullOrInstruction(i == operands.length - 1 ? new JavaExpressionAnchor(expression) : new JavaPolyadicPartAnchor(expression, i), expression.getType() ?? PsiType.NULL));
+            (Privilege) $this.addInstruction(new NullOrInstruction(i == operands.length - 1 ? new JavaExpressionAnchor(expression) : new JavaPolyadicPartAnchor(expression, i), expression.getType() ?? PsiType.NULL));
         }
     }
-    
-    // private static final ThreadLocal<LinkedList<ControlFlow.DeferredOffset>> context = ThreadLocal.withInitial(LinkedList::new);
-    
-    // @Privilege
-    // private static void generateBinOpChain(final ControlFlowAnalyzer $this, final PsiExpression[] operands) {
-    //     if (operands.length > 0) {
-    //         final ControlFlow.DeferredOffset offset = { };
-    //         // final LinkedList<ControlFlow.DeferredOffset> context = BranchHandler.context.get();
-    //         // context << offset;
-    //         // try {
-    //         for (int i = 1; i < operands.length - 1; i++) {
-    //             final PsiExpression operand = operands[i];
-    //             operand.accept($this);
-    //             if (operand.getType() instanceof PsiPrimitiveType)
-    //                 $this.addInstruction(new GotoInstruction(offset));
-    //             else {
-    //                 $this.addInstruction(new DupInstruction());
-    //                 $this.addInstruction(new ConditionalGotoInstruction(offset, NOT_NULL_OBJECT));
-    //                 $this.addInstruction(new PopInstruction());
-    //             }
-    //             // $this.addInstruction(new NullOrInstruction(i == operands.length - 1 ? new JavaExpressionAnchor(expression) : new JavaPolyadicPartAnchor(expression, i), expression.getType()));
-    //         }
-    //         operands[operands.length - 1].accept($this);
-    //         offset.setOffset($this.getInstructionCount());
-    //         // } finally { context--; }
-    //     }
-    // }
-    
-    // @Hook(at = @At(method = @At.MethodInsn(name = "finishElement")))
-    // private static void finishCall(final ControlFlowAnalyzer $this, final PsiMethodCallExpression expression) {
-    //     if (isSafeAccess(expression)) {
-    //         final @Nullable ControlFlow.DeferredOffset offset = context.get().peekLast();
-    //         if (offset != null) {
-    //             PsiTreeUtil.getParentOfType(expression, PsiExpressionList.class, PsiPrefixExpression.class)
-    //         }
-    //     }
-    // }
     
     @Hook(value = HighlightUtil.class, isStatic = true)
     private static Hook.Result checkPolyadicOperatorApplicable(final PsiPolyadicExpression expression) = Hook.Result.falseToVoid(expression.getOperationTokenType() == NULL_OR, null);
     
     @Hook
     private static Hook.Result evaluateType(final TypeEvaluator $this, final PsiExpression expr) {
-        if (expr instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR) return { condType(polyadicExpression, $this::evaluateType, polyadicExpression.getOperands()) };
+        if (expr instanceof final PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR)
+            return { condType(polyadicExpression, $this::evaluateType, polyadicExpression.getOperands()) };
         return Hook.Result.VOID;
     }
     
@@ -331,7 +329,7 @@ public class BranchHandler {
                 final PsiExpression operand = operands[i];
                 value = value ?? (Privilege) $this.getStoredValue(operand);
             }
-            if (value instanceof String string)
+            if (value instanceof final String string)
                 value = ((Privilege) $this.myInterner).intern(string);
             // noinspection DataFlowIssue
             (Privilege) ($this.myResult = value);

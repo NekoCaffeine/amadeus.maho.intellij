@@ -9,16 +9,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-import org.objectweb.asm.Type;
-
 import com.intellij.codeHighlighting.HighlightDisplayLevel;
+import com.intellij.codeHighlighting.HighlightingPass;
 import com.intellij.codeInsight.TargetElementUtil;
 import com.intellij.codeInsight.daemon.ImplicitUsageProvider;
 import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerEx;
@@ -54,7 +51,9 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.ScrollType;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Pass;
 import com.intellij.openapi.util.TextRange;
@@ -147,13 +146,13 @@ import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.NoArgsConstructor;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.RequiredArgsConstructor;
+import amadeus.maho.lang.SneakyThrows;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.handler.AccessibleHandler;
 import amadeus.maho.lang.idea.light.LightBridgeMethod;
 import amadeus.maho.lang.idea.light.LightElement;
 import amadeus.maho.lang.idea.light.LightElementReference;
 import amadeus.maho.lang.inspection.Nullable;
-import amadeus.maho.transform.handler.base.marker.BaseMarker;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.Proxy;
 import amadeus.maho.transform.mark.Redirect;
@@ -166,7 +165,6 @@ import amadeus.maho.util.dynamic.InvokeContext;
 import amadeus.maho.util.function.Consumer4;
 import amadeus.maho.util.function.FunctionHelper;
 import amadeus.maho.util.tuple.Tuple2;
-import amadeus.maho.vm.transform.mark.HotSpotJIT;
 
 import static amadeus.maho.util.bytecode.Bytecodes.*;
 
@@ -197,7 +195,7 @@ public class HandlerMarker {
                 = search(parameters.getElementToSearch(), parameters.getEffectiveSearchScope(), parameters.getOptimizer(), consumer);
         
         private static void search(final PsiElement elementToSearch, final SearchScope effectiveSearchScope, final SearchRequestCollector optimizer, final Processor<? super PsiReference> consumer) {
-            if (elementToSearch instanceof PsiModifierListOwner owner && owner instanceof PsiNamedElement namedElement) {
+            if (elementToSearch instanceof final PsiModifierListOwner owner && owner instanceof final PsiNamedElement namedElement) {
                 final @Nullable String name = namedElement.getName();
                 if (name != null) {
                     final HashSet<PsiNameIdentifierOwner> targets = { };
@@ -206,7 +204,7 @@ public class HandlerMarker {
                     targets.forEach(target -> {
                         if (target.getNameIdentifier() != null)
                             consumer.process(new PsiMemberReference<>(target, target, name));
-                        if (target instanceof PsiMethod method)
+                        if (target instanceof final PsiMethod method)
                             OverridingMethodsSearch.search(method).forEach((Consumer<? super PsiMethod>) impl -> {
                                 if (impl.getNameIdentifier() != null)
                                     consumer.process(new PsiMemberReference<>(impl, impl, name));
@@ -216,7 +214,7 @@ public class HandlerMarker {
                         
                         @Override
                         public PsiElement handleElementRename(final String newElementName) throws IncorrectOperationException
-                                = super.handleElementRename(reference.resolve() instanceof PsiNamedElement named ? remapName(newElementName, named, name) : newElementName);
+                                = super.handleElementRename(reference.resolve() instanceof final PsiNamedElement named ? remapName(newElementName, named, name) : newElementName);
                         
                     })));
                 }
@@ -239,7 +237,7 @@ public class HandlerMarker {
             final PsiMethod method = (PsiMethod) element;
             final String name = method.getName();
             usages = Stream.of(usages).filter(usage -> {
-                if (usage.getElement() instanceof PsiMethod usageMethod && !name.equals(usageMethod.getName())) {
+                if (usage.getElement() instanceof final PsiMethod usageMethod && !name.equals(usageMethod.getName())) {
                     usageMethod.setName(remapName(newName, usageMethod, name));
                     return false;
                 }
@@ -336,7 +334,7 @@ public class HandlerMarker {
             protected TextRange getRangeToRename(final PsiReference reference) {
                 final TextRange range = super.getRangeToRename(reference);
                 final PsiElement resolved = reference.resolve();
-                if (resolved instanceof PsiNamedElement namedElement) {
+                if (resolved instanceof final PsiNamedElement namedElement) {
                     final @Nullable String
                             name = namedElement.getName(),
                             toRename = myElementToRename.getName();
@@ -364,13 +362,13 @@ public class HandlerMarker {
             final @Nullable PsiFile file = CommonDataKeys.PSI_FILE.getData(dataContext);
             if (editor != null && file != null) {
                 final @Nullable PsiReference at = file.findReferenceAt(editor.getCaretModel().getOffset());
-                if (checkReference(at) || at instanceof PsiMultiReference reference && Stream.of(reference.getReferences()).anyMatch(InplaceRenameHandler::checkReference))
+                if (checkReference(at) || at instanceof final PsiMultiReference reference && Stream.of(reference.getReferences()).anyMatch(InplaceRenameHandler::checkReference))
                     return Hook.Result.FALSE;
             }
             return Hook.Result.VOID;
         }
         
-        public static boolean checkReference(final @Nullable PsiReference at) = at instanceof LightElementReference || at instanceof PsiJavaCodeReferenceElement reference && reference.getText().equals("self");
+        public static boolean checkReference(final @Nullable PsiReference at) = at instanceof LightElementReference || at instanceof final PsiJavaCodeReferenceElement reference && reference.getText().equals("self");
         
         @Override
         protected boolean isAvailable(PsiElement element, final Editor editor, final PsiFile file) {
@@ -476,7 +474,7 @@ public class HandlerMarker {
                 if (usage.getReference() instanceof com.intellij.psi.impl.light.LightElement)
                     continue; //filter out implicit references (e.g. from derived class to super class' default constructor)
                 final MoveRenameUsageInfo usageInfo = (MoveRenameUsageInfo) usage;
-                if (usage instanceof RelatedUsageInfo relatedUsageInfo) {
+                if (usage instanceof final RelatedUsageInfo relatedUsageInfo) {
                     final PsiElement relatedElement = relatedUsageInfo.getRelatedElement();
                     if (elements.contains(relatedElement))
                         result.putValue(relatedElement, usage);
@@ -542,7 +540,7 @@ public class HandlerMarker {
         
         private static @Nullable RefData refData(final PsiElement element) {
             @Nullable PsiFile file = PsiTreeUtil.getParentOfType(element, PsiFile.class);
-            if (file == null && element instanceof LightElement lightElement)
+            if (file == null && element instanceof final LightElement lightElement)
                 file = lightElement.equivalents().stream()
                         .map(it -> PsiTreeUtil.getParentOfType(it, PsiFile.class))
                         .nonnull()
@@ -552,7 +550,7 @@ public class HandlerMarker {
                 return null;
             final Project project = element.getProject();
             final Document document = PsiDocumentManager.getInstance(project).getDocument(file);
-            final @Nullable TextRange dirtyScope = document == null ? null : DaemonCodeAnalyzerEx.getInstanceEx(project).getFileStatusMap().getFileDirtyScope(document, com.intellij.codeHighlighting.Pass.UPDATE_ALL);
+            final @Nullable TextRange dirtyScope = document == null ? null : DaemonCodeAnalyzerEx.getInstanceEx(project).getFileStatusMap().getFileDirtyScope(document, file, com.intellij.codeHighlighting.Pass.UPDATE_ALL);
             return { get(file, dirtyScope ?? file.getTextRange()) };
         }
         
@@ -560,8 +558,8 @@ public class HandlerMarker {
         public boolean isImplicitUsage(final PsiElement element) {
             final @Nullable RefData refData = refData(element);
             return refData != null && (
-                    Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitUsage(element, refData) || handler.isImplicitRead(element, refData)) ||
-                    SyntaxMarker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitUsage(element, refData) || handler.isImplicitRead(element, refData))
+                    Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitUsage(element, refData) || handler.isImplicitRead(element, refData)) ||
+                    Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitUsage(element, refData) || handler.isImplicitRead(element, refData))
             );
         }
         
@@ -569,8 +567,8 @@ public class HandlerMarker {
         public boolean isImplicitRead(final PsiElement element) {
             final @Nullable RefData helper = refData(element);
             return helper != null && (
-                    Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitRead(element, helper)) ||
-                    SyntaxMarker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitRead(element, helper))
+                    Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitRead(element, helper)) ||
+                    Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitRead(element, helper))
             );
         }
         
@@ -578,8 +576,8 @@ public class HandlerMarker {
         public boolean isImplicitWrite(final PsiElement element) {
             final @Nullable RefData helper = refData(element);
             return helper != null && (
-                    Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitWrite(element, helper)) ||
-                    SyntaxMarker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitWrite(element, helper))
+                    Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitWrite(element, helper)) ||
+                    Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitWrite(element, helper))
             );
         }
         
@@ -588,8 +586,8 @@ public class HandlerMarker {
         
         @Hook(value = DefUseUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
         public static void getUnusedDefs(final @Nullable List<DefUseUtil.Info> capture, final PsiElement body, final Set<? super PsiVariable> outUsedVariables)
-                = capture?.removeIf(info -> Marker.baseHandlers().stream().anyMatch(handler -> handler.isVariableOut(info.getVariable())) ||
-                                            SyntaxMarker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isVariableOut(info.getVariable())));
+                = capture?.removeIf(info -> Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isVariableOut(info.getVariable())) ||
+                                            Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isVariableOut(info.getVariable())));
         
     }
     
@@ -636,7 +634,7 @@ public class HandlerMarker {
                 @Override
                 public void visitElement(final PsiElement element) {
                     super.visitElement(element);
-                    SyntaxMarker.syntaxHandlers().values().forEach(handler -> handler.check(element, holder, quickFix, isOnTheFly));
+                    Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.check(element, holder, quickFix, isOnTheFly));
                     EntryPoint.check(element, holder, quickFix, isOnTheFly);
                 }
                 
@@ -697,7 +695,7 @@ public class HandlerMarker {
         }
         
         private static PsiElement physicalElement(final PsiElement element) {
-            if (element instanceof LightElement lightElement)
+            if (element instanceof final LightElement lightElement)
                 return lightElement.equivalents().stream()
                         .filter(PsiAnnotation.class::isInstance)
                         .findFirst()
@@ -719,84 +717,75 @@ public class HandlerMarker {
         
         @Hook
         private static Hook.Result getTokenizer(final JavaSpellcheckingStrategy $this, final PsiElement element)
-                = Hook.Result.falseToVoid(Marker.baseHandlers().stream().anyMatch(handler -> handler.isSuppressedSpellCheckingFor(element)), SpellcheckingStrategy.EMPTY_TOKENIZER);
+                = Hook.Result.falseToVoid(amadeus.maho.lang.idea.handler.base.Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isSuppressedSpellCheckingFor(element)), SpellcheckingStrategy.EMPTY_TOKENIZER);
         
     }
     
-    @NoArgsConstructor
-    public static class Marker extends BaseMarker<Handler> {
-        
-        @Getter
-        private static final CopyOnWriteArrayList<BaseHandler<Annotation>> baseHandlers = { };
-        
-        @Override
-        public synchronized void onMark() = baseHandlers() += (BaseHandler<Annotation>) ASMHelper.loadType(Type.getObjectType(sourceClass.name), true, contextClassLoader()).defaultInstance();
-        
-    }
-    
-    @NoArgsConstructor
-    public static class SyntaxMarker extends BaseMarker<Syntax> {
-        
-        @Getter
-        private static final ConcurrentSkipListMap<Integer, BaseSyntaxHandler> syntaxHandlers = { };
-        
-        @Override
-        public synchronized void onMark() = syntaxHandlers()[annotation.priority()] = (BaseSyntaxHandler) ASMHelper.loadType(Type.getObjectType(sourceClass.name), true, contextClassLoader()).defaultInstance();
-        
-    }
-    
-    @HotSpotJIT
     @TransformProvider
     public static class EntryPoint extends PsiAugmentProvider {
+        
+        public static final Key<Boolean> transformedKey = { "transformed" };
+        
+        @Hook(value = DumbService.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+        private static boolean isDumbAware(final boolean capture, final Object o) = capture && !(o instanceof HighlightingPass);
         
         public static ASTNode transformASTNodes(final ASTNode astNode, final boolean loadingTreeElement) {
             if (astNode instanceof JavaFileElement) {
                 for (ASTNode node = astNode.getFirstChildNode(); node != null; node = node.getTreeNext())
-                    if (node instanceof ClassElement targetNode)
-                        SyntaxMarker.syntaxHandlers().values().forEach(handler -> handler.transformASTNode(targetNode, loadingTreeElement));
+                    if (node instanceof final ClassElement targetNode)
+                        Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.transformASTNode(targetNode, loadingTreeElement));
             } else if (astNode.getFirstChildNode() != null && astNode.getElementType().getLanguage() == JavaLanguage.INSTANCE)
-                SyntaxMarker.syntaxHandlers().values().forEach(handler -> handler.transformASTNode(astNode, loadingTreeElement));
+                Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.transformASTNode(astNode, loadingTreeElement));
             return astNode;
         }
         
-        private static final ThreadLocal<AtomicInteger> loadingTreeElementLocal = ThreadLocal.withInitial(AtomicInteger::new);
+        private static final ThreadLocal<AtomicInteger> calcCount = ThreadLocal.withInitial(AtomicInteger::new);
         
         @Hook(at = @At(method = @At.MethodInsn(name = "performPsiModification")), before = false)
         private static void ensureParsed(final LazyParseableElement $this) {
-            if ($this.getElementType().getLanguage() == JavaLanguage.INSTANCE && loadingTreeElementLocal.get().get() == 0)
-                IDEAContext.computeReadActionIgnoreDumbMode(() -> transformASTNodes($this, false));
+            if ($this.getElementType().getLanguage() == JavaLanguage.INSTANCE) {
+                if (calcCount.get().get() == 0)
+                    IDEAContext.computeReadActionIgnoreDumbMode(() -> transformASTNodes($this, false));
+            }
         }
         
-        @Privilege
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
         private static void doActualPsiChange(final DiffLog $this, final PsiFile file) {
             if (file.getLanguage() == JavaLanguage.INSTANCE)
-                $this.myEntries.forEach(entry -> {
+                ((Privilege) $this.myEntries).forEach(entry -> {
                     switch (entry) {
-                        case DiffLog.InsertEntry insert               -> transformASTNodes(insert.myNewNode, false);
-                        case DiffLog.ReplaceEntry replace             -> transformASTNodes(replace.myNewChild, false);
-                        case DiffLog.ReplaceElementWithEvents replace -> transformASTNodes(replace.myNewRoot, false);
-                        default                                       -> { }
+                        case final DiffLog.InsertEntry insert               -> transformASTNodes((Privilege) insert.myNewNode, false);
+                        case final DiffLog.ReplaceEntry replace             -> transformASTNodes((Privilege) replace.myNewChild, false);
+                        case final DiffLog.ReplaceElementWithEvents replace -> transformASTNodes((Privilege) replace.myNewRoot, false);
+                        default                                             -> { }
                     }
                 });
         }
         
-        @Hook
-        private static void loadTreeElement_$Enter(final PsiFileImpl $this) = loadingTreeElementLocal.get().getAndIncrement();
+        private static final ThreadLocal<LinkedList<Object>> reentrant = ThreadLocal.withInitial(LinkedList::new);
         
-        // @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-        @Hook(at = @At(method = @At.MethodInsn(name = "isDebugEnabled")))
-        // private static void loadTreeElement_$Return(final FileElement capture, final PsiFileImpl $this) {
-        private static void loadTreeElement_$Return(final PsiFileImpl $this) {
-            IDEAContext.computeReadActionIgnoreDumbMode(() -> transformASTNodes($this.getNode(), true));
-            // FileBasedIndexImpl.disableUpToDateCheckIn(() -> IDEAContext.computeReadActionIgnoreDumbMode(() -> transformASTNodes($this.getNode(), true)));
-            // FileBasedIndexImpl.disableUpToDateCheckIn(() -> transformASTNodes($this.getNode(), true));
-            // transformASTNodes(capture, true);
-            loadingTreeElementLocal.get().getAndDecrement();
+        @SneakyThrows
+        @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
+        private static void calcTreeElement(final PsiFileImpl $this) {
+            if ($this.isPhysical() && $this.getUserData(transformedKey) == null) {
+                final LinkedList<Object> objects = reentrant.get();
+                final AtomicInteger count = calcCount.get();
+                if (!objects.contains($this)) {
+                    objects << $this;
+                    try {
+                        count.getAndIncrement();
+                        IDEAContext.computeReadActionIgnoreDumbMode(() -> transformASTNodes($this.getNode(), true));
+                        $this.putUserData(transformedKey, Boolean.TRUE);
+                    } finally {
+                        objects--;
+                        count.getAndDecrement();
+                    }
+                }
+            }
         }
         
         public static void check(final PsiElement element, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
-            if (element instanceof PsiModifierListOwner owner)
+            if (element instanceof final PsiModifierListOwner owner)
                 process(owner, (handler, target, annotation, annotationTree) -> handler.check(element, annotation, annotationTree, holder, quickFix));
         }
         
@@ -859,10 +848,10 @@ public class HandlerMarker {
                 final GlobalSearchScope resolveScope) {
             if (!capture)
                 return false;
-            if (psiClass instanceof PsiExtensibleClass extensible) {
+            if (psiClass instanceof final PsiExtensibleClass extensible) {
                 if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList && psiClass.getModifierList() == last || visited != null && visited.contains(psiClass))
                     return true;
-                if (!(processor instanceof MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
+                if (!(processor instanceof final MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
                     final ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
                     if (classHint == null || classHint.shouldProcess(ElementClassHint.DeclarationKind.METHOD)) {
                         final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
@@ -896,13 +885,13 @@ public class HandlerMarker {
         public static PsiType wrapTypeIfNecessary(final PsiTypeElement typeElement, final PsiElement anchor, final @Nullable PsiAnnotation stopAt, final boolean wrap) {
             final PsiType p_type[] = { typeElement.getType() };
             ((Privilege) JavaSharedImplUtil.collectAnnotations(anchor, stopAt))?.forEach(annotations -> p_type[0] = p_type[0].createArrayType().annotate(TypeAnnotationProvider.Static.create(annotations)));
-            return wrap && typeElement.getParent() instanceof PsiModifierListOwner owner ? p_type.let(result -> process(owner,
+            return wrap && typeElement.getParent() instanceof final PsiModifierListOwner owner ? p_type.let(result -> process(owner,
                     (handler, target, annotation, annotationTree) -> handler.wrapperType(typeElement, annotation, annotationTree, result)))[0] : p_type[0];
         }
         
         @Hook(value = PsiTypesUtil.class, isStatic = true)
         private static Hook.Result getExpectedTypeByParent(final PsiElement element) {
-            if (PsiUtil.skipParenthesizedExprUp(element.getParent()) instanceof PsiVariable variable && (Privilege) PsiUtil.checkSameExpression(element, variable.getInitializer())) {
+            if (PsiUtil.skipParenthesizedExprUp(element.getParent()) instanceof final PsiVariable variable && (Privilege) PsiUtil.checkSameExpression(element, variable.getInitializer())) {
                 final @Nullable PsiTypeElement typeElement = variable.getTypeElement();
                 if (typeElement != null) {
                     if (typeElement.isInferredType())
@@ -931,13 +920,13 @@ public class HandlerMarker {
         
         @Override
         protected @Nullable PsiType inferType(final PsiTypeElement typeElement) = CachedValuesManager.getProjectPsiDependentCache(typeElement,
-                it -> new PsiType[]{ null }.let(result -> SyntaxMarker.syntaxHandlers().values().forEach(handler -> handler.inferType(it, result)))[0]);
+                it -> new PsiType[]{ null }.let(result -> Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.inferType(it, result)))[0]);
         
         private static final ThreadLocal<LinkedList<PsiModifierList>> transformModifiersContextLocal = ThreadLocal.withInitial(LinkedList::new);
         
         @Override
         protected Set<String> transformModifiers(final PsiModifierList modifierList, final Set<String> modifiers) {
-            if (modifierList.getParent() instanceof PsiModifierListOwner owner) {
+            if (modifierList.getParent() instanceof final PsiModifierListOwner owner) {
                 final var context = transformModifiersContextLocal.get();
                 if (!context.contains(modifierList)) {
                     context.addLast(modifierList);
@@ -962,7 +951,7 @@ public class HandlerMarker {
                 = process(tree, it -> it.handler().value() == annotationType, consumer);
         
         public static void process(final PsiModifierListOwner tree, final Predicate<BaseHandler<?>> predicate = _ -> true, final Consumer4<BaseHandler<Annotation>, PsiElement, Annotation, PsiAnnotation> consumer)
-                = Marker.baseHandlers().stream()
+                = Handler.Marker.baseHandlers().stream()
                 .filter(predicate)
                 .map(baseHandler -> getAnnotationsByTypeWithOuter(tree, baseHandler))
                 .nonnull()
@@ -974,7 +963,7 @@ public class HandlerMarker {
         public static boolean hasAnnotation(final PsiModifierListOwner tree, final BaseHandler<?> baseHandler) = getAnnotationsByTypeWithOuter(tree, baseHandler) != null;
         
         public static <A extends Annotation> List<Tuple2<A, PsiAnnotation>> getAnnotationsByTypeWithOuter(final PsiModifierListOwner tree, final Class<A> annotationType) {
-            for (final BaseHandler<Annotation> baseHandler : Marker.baseHandlers())
+            for (final BaseHandler<Annotation> baseHandler : Handler.Marker.baseHandlers())
                 if (baseHandler.handler().value() == annotationType)
                     return getAnnotationsByTypeWithOuter(tree, (BaseHandler<A>) baseHandler)?.getValue() ?? List.<Tuple2<A, PsiAnnotation>>of();
             return getAnnotationsByType(tree, annotationType);
@@ -1018,12 +1007,14 @@ public class HandlerMarker {
         public static boolean accessSourceAST() = accessSourceASTCounterLocal.get().get() > 0;
         
         public static <A extends Annotation> List<Tuple2<A, PsiAnnotation>> getAnnotationsByType(final PsiModifierListOwner tree, final Class<A> annotationType) {
+            if (tree.getAnnotations().length == 0 && (!(tree instanceof PsiExtensibleClass) || !annotationType.isAnnotationPresent(Inherited.class)))
+                return List.of();
             final var cache = CachedValuesManager.<PsiModifierListOwner, Map<Class<A>, List<Tuple2<A, PsiAnnotation>>>>getProjectPsiDependentCache(tree, FunctionHelper.abandon(ConcurrentHashMap::new));
             @Nullable List<Tuple2<A, PsiAnnotation>> result = cache[annotationType]; // avoid computeIfAbsent deadlock
             if (result == null)
                 cache[annotationType] = result = accessSourceASTContextLocal.get() ^ () -> {
                     final List<Tuple2<A, PsiAnnotation>> annotations = getAnnotationsByType(tree.getProject(), annotationType, tree.getAnnotations());
-                    if (tree instanceof PsiExtensibleClass extensibleClass && annotationType.isAnnotationPresent(Inherited.class) && extensibleClass.getSuperClass() instanceof PsiExtensibleClass parent)
+                    if (tree instanceof final PsiExtensibleClass extensibleClass && annotationType.isAnnotationPresent(Inherited.class) && extensibleClass.getSuperClass() instanceof final PsiExtensibleClass parent)
                         annotations *= getAnnotationsByType(parent, annotationType);
                     return annotations;
                 };
@@ -1050,17 +1041,17 @@ public class HandlerMarker {
             if (reference != null) {
                 final JavaResolveResult result = reference.advancedResolve(true);
                 final @Nullable PsiElement element = result.getElement();
-                if (element instanceof PsiClass psiClass)
+                if (element instanceof final PsiClass psiClass)
                     return annotationType.getCanonicalName().equals(psiClass.getQualifiedName());
             }
             return false;
         }
         
         private static boolean checkRange(final Handler.Range range, final PsiElement tree) = switch (tree) {
-            case PsiField ignored  -> range == Handler.Range.FIELD;
-            case PsiMethod ignored -> range == Handler.Range.METHOD;
-            case PsiClass ignored  -> range == Handler.Range.CLASS;
-            case null, default     -> false;
+            case final PsiField ignored  -> range == Handler.Range.FIELD;
+            case final PsiMethod ignored -> range == Handler.Range.METHOD;
+            case final PsiClass ignored  -> range == Handler.Range.CLASS;
+            case null, default           -> false;
         };
         
     }

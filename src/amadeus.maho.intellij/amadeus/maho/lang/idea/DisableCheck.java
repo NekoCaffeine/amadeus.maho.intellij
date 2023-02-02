@@ -6,6 +6,8 @@ import com.intellij.codeInsight.daemon.impl.analysis.AnnotationsHighlightUtil;
 import com.intellij.debugger.impl.InvokeThread;
 import com.intellij.diagnostic.LoadingState;
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
+import com.intellij.openapi.application.TransactionGuardImpl;
+import com.intellij.openapi.application.impl.ApplicationImpl;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.NoAccessDuringPsiEvents;
 import com.intellij.openapi.util.Computable;
@@ -33,26 +35,32 @@ import amadeus.maho.util.misc.ConstantLookup;
 @TransformProvider
 interface DisableCheck {
     
-    @Hook(isStatic = true, value = IdempotenceChecker.class)
-    private static <T> Hook.Result checkEquivalence(final @Nullable T existing, final @Nullable T fresh, final Class<?> providerClass, final @Nullable Computable<? extends T> recomputeValue) = Hook.Result.NULL;
+    @Hook(isStatic = true, value = IdempotenceChecker.class, forceReturn = true)
+    private static <T> void checkEquivalence(final @Nullable T existing, final @Nullable T fresh, final Class<?> providerClass, final @Nullable Computable<? extends T> recomputeValue) { }
     
-    @Hook(isStatic = true, value = CachedValueStabilityChecker.class)
-    private static <T> Hook.Result checkProvidersEquivalent(final CachedValueProvider<?> p1, final CachedValueProvider<?> p2, final Key<?> key) = Hook.Result.NULL;
+    @Hook(isStatic = true, value = CachedValueStabilityChecker.class, forceReturn = true)
+    private static <T> void checkProvidersEquivalent(final CachedValueProvider<?> p1, final CachedValueProvider<?> p2, final Key<?> key) { }
     
-    @Hook
-    private static Hook.Result assertTrue(final Logger $this, final boolean value, final @Nullable Object message) = Hook.Result.TRUE;
+    @Hook(forceReturn = true)
+    private static boolean assertTrue(final Logger $this, final boolean value, final @Nullable Object message) = true;
     
-    @Hook
-    private static Hook.Result assertTrue(final Logger $this, final boolean value) = Hook.Result.TRUE;
+    @Hook(forceReturn = true)
+    private static boolean assertTrue(final Logger $this, final boolean value) = true;
     
-    @Hook
-    private static Hook.Result checkOccurred(final LoadingState $this) = Hook.Result.NULL;
+    @Hook(forceReturn = true)
+    private static void checkOccurred(final LoadingState $this) { }
     
-    @Hook(value = NoAccessDuringPsiEvents.class, isStatic = true)
-    private static Hook.Result checkCallContext(final ID<?, ?> indexId) = Hook.Result.NULL;
+    @Hook(forceReturn = true)
+    private static void assertReadAccessAllowed(final ApplicationImpl $this) { }
     
-    @Hook(value = NoAccessDuringPsiEvents.class, isStatic = true)
-    private static Hook.Result checkCallContext(final String contextDescription) = Hook.Result.NULL;
+    @Hook(value = TransactionGuardImpl.class, isStatic = true)
+    private static Hook.Result areAssertionsEnabled() = Hook.Result.FALSE;
+    
+    @Hook(value = NoAccessDuringPsiEvents.class, isStatic = true, forceReturn = true)
+    private static void checkCallContext(final ID<?, ?> indexId) { }
+    
+    @Hook(value = NoAccessDuringPsiEvents.class, isStatic = true, forceReturn = true)
+    private static void checkCallContext(final String contextDescription) { }
     
     // e.g. E @NotNull []
     @Hook(value = AnnotationsHighlightUtil.class, isStatic = true)
@@ -65,8 +73,8 @@ interface DisableCheck {
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static @Nullable Object getClientProperty(final @Nullable Object capture, final JComponent $this, final Object key) = capture ?? (ActionToolbarImpl_suppress.constantMapping().containsValue(key) ? Boolean.TRUE : (Object) null);
     
-    @Hook(value = InvokeThread.class, isStatic = true)
-    private static Hook.Result reportCommandError(final Throwable throwable) = Hook.Result.NULL;
+    @Hook(value = InvokeThread.class, isStatic = true, forceReturn = true)
+    private static void reportCommandError(final Throwable throwable) { }
     
     @Hook
     private static Hook.Result inconsistencyDetected(final StubProcessingHelperBase $this, final ObjectStubTree stubTree, final PsiFileWithStubSupport support) {

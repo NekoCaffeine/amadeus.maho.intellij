@@ -58,7 +58,7 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
             return;
         try {
             final Path location = location(tree, annotation);
-            final FieldDefaultsHandler fieldDefaultsHandler = HandlerMarker.Marker.baseHandlers().stream().cast(FieldDefaultsHandler.class).findFirst().orElseThrow();
+            final FieldDefaultsHandler fieldDefaultsHandler = Handler.Marker.baseHandlers().stream().cast(FieldDefaultsHandler.class).findFirst().orElseThrow();
             final PsiAnnotation fieldDefaultAnnotationTree = JavaPsiFacade.getElementFactory(tree.getProject()).createAnnotationFromText("@%s".formatted(FieldDefaults.class.getCanonicalName()), context);
             final HashMap<String, Tuple2<PsiMethod, ResourceAgent>> agents = { };
             final boolean itf = tree.isInterface();

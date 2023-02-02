@@ -26,7 +26,7 @@ public class IndirectAgreementHandler<A extends Annotation> extends BaseHandler<
         
         @Override
         public boolean isImplicitUsage(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData)
-                = tree instanceof PsiClass clazz && clazz.hasAnnotation(handler().value().getCanonicalName());
+                = tree instanceof final PsiClass clazz && clazz.hasAnnotation(handler().value().getCanonicalName());
         
     }
     
@@ -36,7 +36,7 @@ public class IndirectAgreementHandler<A extends Annotation> extends BaseHandler<
     @Handler(Redirect.class)
     public static final class RedirectHandler extends IndirectAgreementHandler<Redirect> { }
     
-    @Handler(Redirect.class)
+    @Handler(Proxy.class)
     public static final class ProxyHandler extends IndirectAgreementHandler<Proxy> { }
     
     @Handler(TransformTarget.class)
@@ -50,7 +50,7 @@ public class IndirectAgreementHandler<A extends Annotation> extends BaseHandler<
     
     @Override
     public boolean isImplicitUsage(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData)
-            = tree instanceof PsiMethod method && method.hasAnnotation(handler().value().getCanonicalName()) || isImplicitRead(tree, refData);
+            = tree instanceof final PsiMethod method && method.hasAnnotation(handler().value().getCanonicalName()) || isImplicitRead(tree, refData);
     
     @Override
     public boolean isImplicitRead(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData)

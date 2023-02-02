@@ -20,23 +20,16 @@
     <extensions defaultExtensionNs="com.intellij">
         <referencesSearch implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ReferenceSearcher"/>
         <lang.psiAugmentProvider implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$EntryPoint"/>
-        <renamePsiElementProcessor
-                implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$RenameLightElementProcessor"
-                order="first"/>
-        <!--        <renamePsiElementProcessor-->
-        <!--                implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$RenameFieldAccessorProcessor"-->
-        <!--                order="first"/>-->
-        <lang.structureViewExtension
-                implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$StructureInjecter"/>
+        <renamePsiElementProcessor implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$RenameLightElementProcessor" order="first"/>
+        <!--        <renamePsiElementProcessor implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$RenameFieldAccessorProcessor" order="first"/>-->
+        <lang.structureViewExtension implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$StructureInjecter"/>
         <implicitUsageProvider implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ImplicitUsageChecker"/>
         <canBeFinal implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ImplicitUsageChecker"/>
-        <java.elementFinder implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ElementFinder"
-                            order="last"/>
-        <renameHandler implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$InplaceRenameHandler"
-                       order="first"/>
+        <java.elementFinder implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ElementFinder" order="last"/>
+        <renameHandler implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$InplaceRenameHandler" order="first"/>
         <inspectionToolProvider implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$InspectionTool"/>
         <referencesSearch implementation="amadeus.maho.lang.idea.handler.SelfHandler$SelfReferenceSearcher"/>
-
+        <lang.jvm.annotationPackageSupport implementation="amadeus.maho.lang.idea.handler.NullableHandler" order="first"/>
         <intentionAction>
             <className>amadeus.maho.lang.idea.handler.ExternalAnnotationsHandler$MakeCommentExternal</className>
             <category>Java/Annotations</category>

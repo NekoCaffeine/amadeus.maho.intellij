@@ -98,9 +98,9 @@ public interface IdeFrameDecoratorHelper {
             AppUIUtil.updateWindowIcon(window);
             if (window instanceof final RootPaneContainer container) {
                 switch (window) {
-                    case final Frame frame   -> frame.setUndecorated(true);
-                    case final Dialog dialog -> dialog.setUndecorated(true);
-                    default                  -> { }
+                    case Frame frame   -> frame.setUndecorated(true);
+                    case Dialog dialog -> dialog.setUndecorated(true);
+                    default            -> { }
                 }
                 final Border border = outerBorder();
                 final @Nullable JRootPane rootPane = container.getRootPane();

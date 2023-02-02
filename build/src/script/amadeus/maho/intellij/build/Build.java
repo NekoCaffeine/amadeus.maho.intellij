@@ -48,7 +48,7 @@ public interface Build {
     Set<String> plugins = Set.of("java");
     
     // avoid analyzing unnecessary libraries, thereby improving compilation speed
-    List<String> shouldInCompile = Stream.of("app", "platform-api", "platform-impl", "util", "util_rt", "spellchecker", "java-api", "java-impl").map(name -> name + Jar.SUFFIX).collect(Collectors.toList());
+    List<String> shouldInCompile = Stream.of("app", "platform-api", "platform-impl", "util", "util-8", "util_rt", "spellchecker", "java-api", "java-impl").map(name -> name + Jar.SUFFIX).collect(Collectors.toList());
     
     static Set<Module.Dependency> dependencies() = IDEA.DevKit.attachLocalInstance(Path.of(config.intellijPath), plugins, path -> shouldInCompile.contains(path.getFileName().toString())) += Module.DependencySet.maho();
     
@@ -112,9 +112,15 @@ public interface Build {
             it *= List.of(config.appendArgs.split(" "));
     });
     
+    List<String> fastArgs = List.of("-XX:CICompilerCount=24", "-XX:CompileThresholdScaling=0.05");
+    
     Path runDir = workspace.root() / run.path();
     
     int debugPort = 36879;
+    
+    static void fast() = runArgs *= fastArgs;
+    
+    static void slow() = runArgs /= fastArgs;
     
     static Process run() = workspace.run(run, -1, runArgs, true, runDir, _ -> false);
     
