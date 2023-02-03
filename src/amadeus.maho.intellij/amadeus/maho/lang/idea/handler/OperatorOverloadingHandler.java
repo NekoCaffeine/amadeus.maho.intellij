@@ -1,5 +1,6 @@
 package amadeus.maho.lang.idea.handler;
 
+import java.util.LinkedList;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -105,7 +106,8 @@ public class OperatorOverloadingHandler {
         
         PsiExpression args[];
         
-        @Nullable OverloadInfo lower;
+        @Nullable
+        OverloadInfo lower;
         
     }
     
@@ -536,6 +538,8 @@ public class OperatorOverloadingHandler {
     @Hook(value = ExpressionUtils.class, isStatic = true)
     private static Hook.Result isStringConcatenation(final PsiElement element) = Hook.Result.falseToVoid(element instanceof final PsiPolyadicExpression expression && expression.getOperationTokenType() != PLUS, false);
     
+    public static final ThreadLocal<LinkedList<PsiElement>> inferFunctionInterfaceTypeStackLocal = ThreadLocal.withInitial(LinkedList::new);
+    
     @Hook(value = PsiParameterImpl.class, isStatic = true, forceReturn = true)
     private static PsiType getLambdaParameterType(final PsiParameter parameter) {
         final PsiElement parent = parameter.getParent();
@@ -544,8 +548,16 @@ public class OperatorOverloadingHandler {
             if (parameterIndex > -1) {
                 final PsiLambdaExpression lambdaExpression = PsiTreeUtil.getParentOfType(parameter, PsiLambdaExpression.class);
                 if (lambdaExpression != null) {
-                    final PsiType functionalInterfaceType = LambdaUtil.getFunctionalInterfaceType(lambdaExpression, true);
-                    final PsiType type = lambdaExpression.getGroundTargetType(functionalInterfaceType);
+                    final LinkedList<PsiElement> stack = inferFunctionInterfaceTypeStackLocal.get();
+                    final @Nullable PsiType functionalInterfaceType;
+                    if (stack.stream().filter(element -> element == parameter).count() < 2) {
+                        stack << parameter;
+                        try {
+                            functionalInterfaceType = LambdaUtil.getFunctionalInterfaceType(lambdaExpression, true);
+                        } finally { stack--; }
+                    } else
+                        functionalInterfaceType = null;
+                    final @Nullable PsiType type = lambdaExpression.getGroundTargetType(functionalInterfaceType);
                     if (type instanceof PsiIntersectionType intersectionType)
                         for (final PsiType conjunct : intersectionType.getConjuncts()) {
                             final @Nullable PsiType lambdaParameterFromType = LambdaUtil.getLambdaParameterFromType(conjunct, parameterIndex);
