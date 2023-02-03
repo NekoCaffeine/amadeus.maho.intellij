@@ -30,6 +30,7 @@ import com.intellij.lang.java.parser.DeclarationParser;
 import com.intellij.lang.java.parser.JavaParser;
 import com.intellij.lang.java.parser.StatementParser;
 import com.intellij.lexer.FlexLexer;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.util.Getter;
@@ -83,6 +84,7 @@ import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.SmartList;
 import com.intellij.util.indexing.DumbModeAccessType;
+import com.intellij.util.indexing.FileBasedIndexEx;
 
 import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
@@ -601,9 +603,29 @@ public class IDEAContext {
     
     public static boolean marked(final PsiAnnotation annotation, final String mark) = annotation.resolveAnnotationType()?.hasAnnotation(mark) ?? false;
     
-    public static void runReadActionIgnoreDumbMode(final Runnable runnable) = ReadAction.run(() -> DumbModeAccessType.RELIABLE_DATA_ONLY.ignoreDumbMode(runnable));
+    public static void runReadActionIgnoreDumbMode(final Runnable runnable) {
+        if (((Privilege) FileBasedIndexEx.ourDumbModeAccessTypeStack).get().contains(DumbModeAccessType.RELIABLE_DATA_ONLY))
+            if (ApplicationManager.getApplication().isReadAccessAllowed())
+                runnable.run();
+            else
+                ReadAction.run(runnable::run);
+        else if (ApplicationManager.getApplication().isReadAccessAllowed())
+            DumbModeAccessType.RELIABLE_DATA_ONLY.ignoreDumbMode(runnable);
+        else
+            ReadAction.run(() -> DumbModeAccessType.RELIABLE_DATA_ONLY.ignoreDumbMode(runnable));
+    }
     
-    public static <T, E extends Throwable> T computeReadActionIgnoreDumbMode(final ThrowableComputable<T, E> computable) throws E = ReadAction.compute(() -> DumbModeAccessType.RELIABLE_DATA_ONLY.ignoreDumbMode(computable));
+    public static <T, E extends Throwable> T computeReadActionIgnoreDumbMode(final ThrowableComputable<T, E> computable) throws E {
+        if (((Privilege) FileBasedIndexEx.ourDumbModeAccessTypeStack).get().contains(DumbModeAccessType.RELIABLE_DATA_ONLY))
+            if (ApplicationManager.getApplication().isReadAccessAllowed())
+                return computable.compute();
+            else
+                return ReadAction.compute(computable);
+        else if (ApplicationManager.getApplication().isReadAccessAllowed())
+            return DumbModeAccessType.RELIABLE_DATA_ONLY.ignoreDumbMode(computable);
+        else
+            return ReadAction.compute(() -> DumbModeAccessType.RELIABLE_DATA_ONLY.ignoreDumbMode(computable));
+    }
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static String getFullProductName(final String capture, final ApplicationNamesInfo $this) = capture + " with Maho";

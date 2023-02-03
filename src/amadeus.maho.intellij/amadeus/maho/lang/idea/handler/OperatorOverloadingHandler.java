@@ -28,10 +28,14 @@ import com.intellij.psi.PsiExpressionList;
 import com.intellij.psi.PsiExpressionStatement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFunctionalExpression;
+import com.intellij.psi.PsiIntersectionType;
 import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiLambdaExpression;
+import com.intellij.psi.PsiLambdaParameterType;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
+import com.intellij.psi.PsiParameter;
+import com.intellij.psi.PsiParameterList;
 import com.intellij.psi.PsiPolyadicExpression;
 import com.intellij.psi.PsiPostfixExpression;
 import com.intellij.psi.PsiPrefixExpression;
@@ -45,6 +49,7 @@ import com.intellij.psi.PsiUnaryExpression;
 import com.intellij.psi.controlFlow.ControlFlowAnalyzer;
 import com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
 import com.intellij.psi.impl.search.MethodUsagesSearcher;
+import com.intellij.psi.impl.source.PsiParameterImpl;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
 import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import com.intellij.psi.impl.source.tree.java.PsiArrayAccessExpressionImpl;
@@ -301,7 +306,7 @@ public class OperatorOverloadingHandler {
         case final PsiPolyadicExpression polyadic     -> calculatePolyadicType(polyadic);
         case final PsiAssignmentExpression assignment -> calculateAssignmentType(assignment);
         case final PsiArrayAccessExpression access    -> calculateAccessType(access);
-        default                                 -> null;
+        default                                       -> null;
     };
     
     public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null ? null :
@@ -422,7 +427,7 @@ public class OperatorOverloadingHandler {
         case final PsiPolyadicExpression polyadic     -> polyadic.getOperands();
         case final PsiAssignmentExpression assignment -> new PsiExpression[]{ assignment.getLExpression(), assignment.getRExpression() };
         case final PsiArrayAccessExpression access    -> new PsiExpression[]{ access.getArrayExpression(), access.getIndexExpression() };
-        default                                 -> null;
+        default                                       -> null;
     };
     
     public static int lambdaIdx(final PsiExpression expressions[], final PsiElement element) {
@@ -530,5 +535,32 @@ public class OperatorOverloadingHandler {
     
     @Hook(value = ExpressionUtils.class, isStatic = true)
     private static Hook.Result isStringConcatenation(final PsiElement element) = Hook.Result.falseToVoid(element instanceof final PsiPolyadicExpression expression && expression.getOperationTokenType() != PLUS, false);
+    
+    @Hook(value = PsiParameterImpl.class, isStatic = true, forceReturn = true)
+    private static PsiType getLambdaParameterType(final PsiParameter parameter) {
+        final PsiElement parent = parameter.getParent();
+        if (parent instanceof PsiParameterList list) {
+            final int parameterIndex = list.getParameterIndex(parameter);
+            if (parameterIndex > -1) {
+                final PsiLambdaExpression lambdaExpression = PsiTreeUtil.getParentOfType(parameter, PsiLambdaExpression.class);
+                if (lambdaExpression != null) {
+                    final PsiType functionalInterfaceType = LambdaUtil.getFunctionalInterfaceType(lambdaExpression, true);
+                    final PsiType type = lambdaExpression.getGroundTargetType(functionalInterfaceType);
+                    if (type instanceof PsiIntersectionType intersectionType)
+                        for (final PsiType conjunct : intersectionType.getConjuncts()) {
+                            final @Nullable PsiType lambdaParameterFromType = LambdaUtil.getLambdaParameterFromType(conjunct, parameterIndex);
+                            if (lambdaParameterFromType != null)
+                                return lambdaParameterFromType;
+                        }
+                    else {
+                        final @Nullable PsiType lambdaParameterFromType = LambdaUtil.getLambdaParameterFromType(type, parameterIndex);
+                        if (lambdaParameterFromType != null)
+                            return lambdaParameterFromType;
+                    }
+                }
+            }
+        }
+        return new PsiLambdaParameterType(parameter);
+    }
     
 }

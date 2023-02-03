@@ -19,6 +19,7 @@ import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.impl.PsiManagerEx;
 import com.intellij.psi.impl.file.impl.FileManagerImpl;
+import com.intellij.psi.impl.source.PsiFileImpl;
 import com.intellij.psi.stubs.StubStringInterner;
 import com.intellij.ui.ClickListener;
 import com.intellij.util.ConcurrencyUtil;
@@ -36,6 +37,9 @@ public interface LargeMemoryPatcher {
         
         @Hook(forceReturn = true)
         private static String intern(final StubStringInterner $this, final String str) = str;
+        
+        @Hook(forceReturn = true)
+        private static boolean isKeepTreeElementByHardReference(final PsiFileImpl $this) = true;
         
         @Hook(forceReturn = true)
         private static ConcurrentMap<VirtualFile, FileViewProvider> getVFileToViewProviderMap(final FileManagerImpl $this) {

@@ -28,7 +28,6 @@ import com.intellij.configurationStore.schemeManager.SchemeManagerBase;
 import com.intellij.diagnostic.IdeaFreezeReporter;
 import com.intellij.find.FindModel;
 import com.intellij.find.impl.FindInProjectUtil;
-import com.intellij.ide.SystemHealthMonitorKt;
 import com.intellij.ide.actions.CopyTBXReferenceProvider;
 import com.intellij.ide.actions.RevealFileAction;
 import com.intellij.jna.JnaLoader;
@@ -37,7 +36,6 @@ import com.intellij.lang.folding.CustomFoldingBuilder;
 import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
 import com.intellij.lang.parameterInfo.ParameterInfoUtils;
 import com.intellij.openapi.actionSystem.DataContext;
-import com.intellij.openapi.application.impl.ApplicationImpl;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
@@ -74,22 +72,16 @@ import com.intellij.psi.impl.search.AllClassesSearchExecutor;
 import com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.intellij.psi.impl.source.PsiFieldImpl;
-import com.intellij.psi.impl.source.PsiFileImpl;
 import com.intellij.psi.impl.source.resolve.ParameterTypeInferencePolicy;
-import com.intellij.psi.impl.source.tree.LazyParseableElement;
-import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.scope.conflictResolvers.JavaMethodsConflictResolver;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.Processor;
-import com.intellij.util.SlowOperations;
 import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndexEx;
-import com.intellij.util.indexing.FileBasedIndexImpl;
 import com.intellij.util.indexing.UnindexedFilesUpdater;
-import com.intellij.vcs.log.data.index.IndexDiagnosticRunner;
 
 import amadeus.maho.lang.NoArgsConstructor;
 import amadeus.maho.lang.Privilege;
@@ -124,18 +116,6 @@ interface Fix {
     
     @Redirect(targetClass = RevealFileAction.class, slice = @Slice(@At(method = @At.MethodInsn(name = "error"))))
     private static Hook.Result openViaShellApi(final String message) = Hook.Result.NULL;
-    
-    // Maho must be running on the latest OpenJDK
-    @Hook(value = SystemHealthMonitorKt.class, isStatic = true, exactMatch = false)
-    private static Hook.Result checkRuntime() = Hook.Result.NULL; // kt suspend fun
-    
-    // #IC-223.6160.11 2022.3 EAP
-    @Hook(value = ApplicationImpl.class, isStatic = true, exactMatch = false)
-    private static Hook.Result throwThreadAccessException() = Hook.Result.NULL;
-    
-    // #IC-223.6160.11 2022.3 EAP
-    @Hook(exactMatch = false)
-    private static Hook.Result runDiagnostic(final IndexDiagnosticRunner $this) = Hook.Result.NULL;
     
     @Hook
     private static Hook.Result addOccurrence(final HighlightUsagesHandlerBase $this, final @Nullable PsiElement element) = Hook.Result.falseToVoid(element != null, null);
@@ -195,23 +175,6 @@ interface Fix {
     @Hook
     private static Hook.Result isDumbAware(final CompositeFoldingBuilder $this) = { ((Privilege) $this.myBuilders).stream().allMatch(DumbService::isDumbAware) };
     
-    // @Hook(isStatic = true, value = FoldingUpdate.class)
-    // private static Hook.Result supportsDumbModeFolding(final Editor editor) = Hook.Result.FALSE;
-    //
-    // // Prohibit pre-folding : IndexNotReadyException
-    // @Hook
-    // private static Hook.Result buildInitialFoldings(final CodeFoldingManagerImpl $this, final Document document) = Hook.Result.NULL;
-    
-    // Hook.Result disabledResult = { JavaSourceInference.InferenceMode.DISABLED };
-    //
-    // // Prohibit annotation inference : IndexNotReadyException
-    // @Hook(value = JavaSourceInference.class, isStatic = true)
-    // private static Hook.Result getInferenceMode(final PsiMethodImpl method) = disabledResult;
-    
-    // java.lang.IllegalArgumentException: Not a Java node: Element(java.FILE) (java.FILE, Language: JAVA)
-    @Hook
-    private static Hook.Result assertTextLengthIntact(final LazyParseableElement $this, final CharSequence text, final TreeElement child) = Hook.Result.NULL;
-    
     // Disable smart-ass template generation
     @Hook(value = GenerateEqualsHandler.class, isStatic = true, metadata = @TransformMetadata(disable = "needGenEqAndHash"))
     private static Hook.Result hasNonStaticFields(final PsiClass aClass) = Hook.Result.FALSE;
@@ -237,14 +200,8 @@ interface Fix {
             final @Nullable Condition<? super PsiFile> condition) = ArrayHelper.add(capture, CompletionPhase.ItemsCalculated.class);
     
     // Some annotations(e.g. @Mutable) will generate initialization expression
-    @Hook
-    private static Hook.Result hasInitializer(final PsiFieldImpl $this) = $this.getInitializer() != null ? Hook.Result.TRUE : Hook.Result.FALSE;
-    
-    @Hook
-    private static Hook.Result isKeepTreeElementByHardReference(final PsiFileImpl $this) = Hook.Result.TRUE;
-    
-    @Hook(value = SlowOperations.class, isStatic = true)
-    private static Hook.Result assertSlowOperationsAreAllowed() = Hook.Result.NULL;
+    @Hook(forceReturn = true)
+    private static boolean hasInitializer(final PsiFieldImpl $this) = $this.getInitializer() != null;
     
     @Hook
     @SneakyThrows
@@ -254,22 +211,19 @@ interface Fix {
         return Hook.Result.VOID;
     }
     
-    Hook.Result availableProcessors = { Runtime.getRuntime().availableProcessors() };
+    int availableProcessors = Runtime.getRuntime().availableProcessors();
     
-    @Hook(value = UnindexedFilesUpdater.class, isStatic = true)
-    private static Hook.Result getMaxNumberOfIndexingThreads() = availableProcessors;
+    @Hook(value = UnindexedFilesUpdater.class, isStatic = true, forceReturn = true)
+    private static int getMaxNumberOfIndexingThreads() = availableProcessors;
     
-    @Hook(value = UnindexedFilesUpdater.class, isStatic = true)
-    private static Hook.Result getNumberOfScanningThreads() = availableProcessors;
+    @Hook(value = UnindexedFilesUpdater.class, isStatic = true, forceReturn = true)
+    private static int getNumberOfScanningThreads() = availableProcessors;
     
-    @Hook(value = UnindexedFilesUpdater.class, isStatic = true)
-    private static Hook.Result getNumberOfIndexingThreads() = availableProcessors;
+    @Hook(value = UnindexedFilesUpdater.class, isStatic = true, forceReturn = true)
+    private static int getNumberOfIndexingThreads() = availableProcessors;
     
-    @Hook
-    private static Hook.Result setUpHealthCheck(final FileBasedIndexImpl $this) = Hook.Result.NULL;
-    
-    @Hook
-    private static Hook.Result getQualifiedName(final CopyTBXReferenceProvider $this, final Project project, final List<? extends PsiElement> elements, final @Nullable Editor editor, final DataContext dataContext) = Hook.Result.NULL;
+    @Hook(forceReturn = true)
+    private static @Nullable String getQualifiedName(final CopyTBXReferenceProvider $this, final Project project, final List<? extends PsiElement> elements, final @Nullable Editor editor, final DataContext dataContext) = null;
     
     @Hook(at = @At(var = @At.VarInsn(opcode = ASTORE, var = 4)), capture = true)
     private static Hook.Result inferTypeArguments(final Computable<PsiSubstitutor> capture, final MethodCandidateInfo $this, final ParameterTypeInferencePolicy policy, final PsiExpression arguments[], final boolean includeConstraint) {
@@ -277,8 +231,8 @@ interface Fix {
         return { !includeConstraint ? myArgumentList == null ? PsiSubstitutor.EMPTY : MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(myArgumentList, false, capture) ?? capture.get() : capture.get() };
     }
     
-    @Hook
-    private static Hook.Result resolveConflict(final JavaMethodsConflictResolver $this, final List<CandidateInfo> conflicts) = { (Privilege) $this.guardedOverloadResolution(conflicts) };
+    @Hook(forceReturn = true)
+    private static @Nullable CandidateInfo resolveConflict(final JavaMethodsConflictResolver $this, final List<CandidateInfo> conflicts) = (Privilege) $this.guardedOverloadResolution(conflicts);
     
     @Hook
     private static Hook.Result createDescription(final RedundantCastInspection $this, final PsiTypeCastExpression cast, final InspectionManager manager, final boolean onTheFly)

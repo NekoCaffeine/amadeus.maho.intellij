@@ -5,6 +5,7 @@ import javax.swing.JComponent;
 import com.intellij.codeInsight.daemon.impl.analysis.AnnotationsHighlightUtil;
 import com.intellij.debugger.impl.InvokeThread;
 import com.intellij.diagnostic.LoadingState;
+import com.intellij.ide.SystemHealthMonitorKt;
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
 import com.intellij.openapi.application.TransactionGuardImpl;
 import com.intellij.openapi.application.impl.ApplicationImpl;
@@ -16,12 +17,17 @@ import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.impl.source.PsiFileWithStubSupport;
+import com.intellij.psi.impl.source.tree.LazyParseableElement;
+import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.stubs.ObjectStubTree;
 import com.intellij.psi.stubs.StubProcessingHelperBase;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.util.CachedValueStabilityChecker;
 import com.intellij.util.IdempotenceChecker;
+import com.intellij.util.SlowOperations;
+import com.intellij.util.indexing.FileBasedIndexImpl;
 import com.intellij.util.indexing.ID;
+import com.intellij.vcs.log.data.index.IndexDiagnosticRunner;
 
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.SneakyThrows;
@@ -34,6 +40,25 @@ import amadeus.maho.util.misc.ConstantLookup;
 // These checks are too expensive, and most of the time are almost purely redundant calculations
 @TransformProvider
 interface DisableCheck {
+    
+    // Maho must be running on the latest OpenJDK
+    @Hook(value = SystemHealthMonitorKt.class, isStatic = true, exactMatch = false, forceReturn = true)
+    private static void checkRuntime() { } // kt suspend fun
+    
+    @Hook(value = ApplicationImpl.class, isStatic = true, exactMatch = false, forceReturn = true)
+    private static void throwThreadAccessException() { }
+    
+    @Hook(exactMatch = false, forceReturn = true)
+    private static void runDiagnostic(final IndexDiagnosticRunner $this) { }
+    
+    @Hook(value = SlowOperations.class, isStatic = true, forceReturn = true)
+    private static void assertSlowOperationsAreAllowed() { }
+    
+    @Hook(forceReturn = true)
+    private static void assertTextLengthIntact(final LazyParseableElement $this, final CharSequence text, final TreeElement child) { }
+    
+    @Hook(forceReturn = true)
+    private static void setUpHealthCheck(final FileBasedIndexImpl $this) { }
     
     @Hook(isStatic = true, value = IdempotenceChecker.class, forceReturn = true)
     private static <T> void checkEquivalence(final @Nullable T existing, final @Nullable T fresh, final Class<?> providerClass, final @Nullable Computable<? extends T> recomputeValue) { }
@@ -76,10 +101,7 @@ interface DisableCheck {
     @Hook(value = InvokeThread.class, isStatic = true, forceReturn = true)
     private static void reportCommandError(final Throwable throwable) { }
     
-    @Hook
-    private static Hook.Result inconsistencyDetected(final StubProcessingHelperBase $this, final ObjectStubTree stubTree, final PsiFileWithStubSupport support) {
-        (Privilege) $this.onInternalError(support.getVirtualFile());
-        return Hook.Result.NULL;
-    }
+    @Hook(forceReturn = true)
+    private static void inconsistencyDetected(final StubProcessingHelperBase $this, final ObjectStubTree stubTree, final PsiFileWithStubSupport support) = (Privilege) $this.onInternalError(support.getVirtualFile());
     
 }
