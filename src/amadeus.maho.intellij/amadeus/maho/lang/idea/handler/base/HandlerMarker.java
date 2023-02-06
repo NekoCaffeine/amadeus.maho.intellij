@@ -91,6 +91,7 @@ import com.intellij.psi.TypeAnnotationProvider;
 import com.intellij.psi.augment.PsiAugmentProvider;
 import com.intellij.psi.controlFlow.DefUseUtil;
 import com.intellij.psi.impl.DiffLog;
+import com.intellij.psi.impl.ElementBase;
 import com.intellij.psi.impl.PsiClassImplUtil;
 import com.intellij.psi.impl.search.MethodUsagesSearcher;
 import com.intellij.psi.impl.source.ClassInnerStuffCache;
@@ -739,13 +740,13 @@ public class HandlerMarker {
             return astNode;
         }
         
-        private static final ThreadLocal<AtomicInteger> calcCount = ThreadLocal.withInitial(AtomicInteger::new);
+        private static final ThreadLocal<AtomicInteger> loadTreeGuard = ThreadLocal.withInitial(AtomicInteger::new);
         
         @Hook(at = @At(method = @At.MethodInsn(name = "performPsiModification")), before = false)
         private static void ensureParsed(final LazyParseableElement $this) {
             if ($this.getElementType().getLanguage() == JavaLanguage.INSTANCE) {
-                if (calcCount.get().get() == 0)
-                    IDEAContext.computeReadActionIgnoreDumbMode(() -> transformASTNodes($this, false));
+                if (loadTreeGuard.get().get() == 0)
+                    transform($this);
             }
         }
         
@@ -766,16 +767,28 @@ public class HandlerMarker {
         
         @SneakyThrows
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
-        private static void calcTreeElement(final PsiFileImpl $this) {
-            if ($this.isPhysical() && $this.getUserData(transformedKey) == null) {
+        private static void calcTreeElement(final PsiFileImpl $this) = transform($this);
+        
+        @Hook
+        private static void loadTreeElement_$Enter(final PsiFileImpl $this) = loadTreeGuard.get().getAndIncrement();
+        
+        @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.FINALLY)))
+        private static void loadTreeElement_$Exit(final PsiFileImpl $this) = loadTreeGuard.get().getAndDecrement();
+        
+        private static void transform(final ElementBase element) {
+            if ((!(element instanceof PsiElement psiElement) || psiElement.isPhysical()) && element.getUserData(transformedKey) == null) {
                 final LinkedList<Object> objects = reentrant.get();
-                final AtomicInteger count = calcCount.get();
-                if (!objects.contains($this)) {
-                    objects << $this;
+                final AtomicInteger count = loadTreeGuard.get();
+                if (!objects.contains(element)) {
+                    objects << element;
                     try {
                         count.getAndIncrement();
-                        IDEAContext.computeReadActionIgnoreDumbMode(() -> transformASTNodes($this.getNode(), true));
-                        $this.putUserData(transformedKey, Boolean.TRUE);
+                        IDEAContext.computeReadActionIgnoreDumbMode(() -> transformASTNodes(switch (element) {
+                            case PsiElement psiElement -> psiElement.getNode();
+                            case ASTNode astNode       -> astNode;
+                            default                    -> throw new IllegalStateException("Unexpected value: " + element);
+                        }, true));
+                        element.putUserData(transformedKey, Boolean.TRUE);
                     } finally {
                         objects--;
                         count.getAndDecrement();

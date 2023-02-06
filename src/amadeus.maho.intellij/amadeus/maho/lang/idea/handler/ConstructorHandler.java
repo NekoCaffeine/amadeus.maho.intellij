@@ -15,6 +15,7 @@ import com.intellij.codeInsight.daemon.JavaErrorBundle;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightControlFlowUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.JavaHighlightUtil;
 import com.intellij.codeInsight.intention.QuickFixFactory;
+import com.intellij.codeInsight.intention.impl.MoveInitializerToConstructorAction;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.psi.PsiAnnotation;
@@ -42,10 +43,12 @@ import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
 import amadeus.maho.lang.idea.handler.base.Handler;
 import amadeus.maho.lang.idea.handler.base.HandlerMarker;
 import amadeus.maho.lang.idea.light.LightDefaultParameter;
+import amadeus.maho.lang.idea.light.LightElement;
 import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.idea.light.LightParameter;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
+import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
 @TransformProvider
@@ -126,6 +129,9 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
                         .anyMatch(other -> other instanceof LightMethod lightMethod && lightMethod.fieldInitialized() || other.getBody() != null && HighlightControlFlowUtil.variableDefinitelyAssignedIn(field, other.getBody())))) ?
                 Hook.Result.TRUE : Hook.Result.FALSE;
     }
+    
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true, exactMatch = false)
+    private static Collection<PsiMethod> getOrCreateMethods(final Collection<PsiMethod> capture, final MoveInitializerToConstructorAction $this) = capture.stream().filterNot(LightElement.class::isInstance).toList();
     
     protected abstract AccessLevel accessLevel(final A annotation);
     

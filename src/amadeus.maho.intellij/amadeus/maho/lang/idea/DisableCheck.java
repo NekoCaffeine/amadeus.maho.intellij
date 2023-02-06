@@ -27,6 +27,7 @@ import com.intellij.util.IdempotenceChecker;
 import com.intellij.util.SlowOperations;
 import com.intellij.util.indexing.FileBasedIndexImpl;
 import com.intellij.util.indexing.ID;
+import com.intellij.util.ui.EDT;
 import com.intellij.vcs.log.data.index.IndexDiagnosticRunner;
 
 import amadeus.maho.lang.Privilege;
@@ -53,6 +54,9 @@ interface DisableCheck {
     
     @Hook(value = SlowOperations.class, isStatic = true, forceReturn = true)
     private static void assertSlowOperationsAreAllowed() { }
+    
+    @Hook(value = EDT.class, isStatic = true, forceReturn = true)
+    private static void assertIsEdt() { }
     
     @Hook(forceReturn = true)
     private static void assertTextLengthIntact(final LazyParseableElement $this, final CharSequence text, final TreeElement child) { }
