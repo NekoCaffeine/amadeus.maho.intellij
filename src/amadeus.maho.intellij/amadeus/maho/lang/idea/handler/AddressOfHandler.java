@@ -14,7 +14,7 @@ import com.intellij.codeInspection.dataFlow.java.inst.AssignInstruction;
 import com.intellij.codeInspection.dataFlow.lang.ir.DupInstruction;
 import com.intellij.codeInspection.dataFlow.lang.ir.PopInstruction;
 import com.intellij.lang.PsiBuilder;
-import com.intellij.lang.java.parser.ExpressionParser;
+import com.intellij.lang.java.parser.OldExpressionParser;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiJavaToken;
@@ -61,7 +61,7 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     }
     
     @Hook(at = @At(method = @At.MethodInsn(name = "contains", descriptor = @MethodDescriptor(value = boolean.class, parameters = IElementType.class))), before = false, capture = true)
-    private static boolean parseUnary(final boolean capture, final ExpressionParser $this, final PsiBuilder builder, final int mode) = capture || builder.getTokenType() == AND;
+    private static boolean parseUnary(final boolean capture, final OldExpressionParser $this, final PsiBuilder builder, final int mode) = capture || builder.getTokenType() == AND;
     
     @Hook
     private static Hook.Result getType(final PsiPrefixExpressionImpl $this) = Hook.Result.falseToVoid($this.getOperationSign().getTokenType() == AND, longType());
