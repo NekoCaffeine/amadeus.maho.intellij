@@ -43,7 +43,7 @@ import amadeus.maho.util.tuple.Tuple2;
 import static amadeus.maho.lang.idea.handler.AddressOfHandler.PRIORITY;
 import static amadeus.maho.util.bytecode.Bytecodes.NEW;
 import static com.intellij.psi.JavaTokenType.*;
-import static com.intellij.psi.PsiType.*;
+import static com.intellij.psi.PsiTypes.*;
 
 @TransformProvider
 @Syntax(priority = PRIORITY)
@@ -64,9 +64,9 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     private static boolean parseUnary(final boolean capture, final ExpressionParser $this, final PsiBuilder builder, final int mode) = capture || builder.getTokenType() == AND;
     
     @Hook
-    private static Hook.Result getType(final PsiPrefixExpressionImpl $this) = Hook.Result.falseToVoid($this.getOperationSign().getTokenType() == AND, LONG);
+    private static Hook.Result getType(final PsiPrefixExpressionImpl $this) = Hook.Result.falseToVoid($this.getOperationSign().getTokenType() == AND, longType());
     
-    private static final Set<String> addressOfApplicableType = Stream.of(BYTE, SHORT, INT, LONG, FLOAT, DOUBLE).map(type -> type.getCanonicalText(false)).collect(Collectors.toSet());
+    private static final Set<String> addressOfApplicableType = Stream.of(byteType(), shortType(), intType(), longType(), floatType(), doubleType()).map(type -> type.getCanonicalText(false)).collect(Collectors.toSet());
     
     @Hook(value = TypeConversionUtil.class, isStatic = true)
     private static Hook.Result isUnaryOperatorApplicable(final PsiJavaToken token, final PsiType type)

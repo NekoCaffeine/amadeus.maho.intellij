@@ -22,6 +22,7 @@ import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.PsiNameIdentifierOwner;
 import com.intellij.psi.PsiReferenceExpression;
 import com.intellij.psi.PsiType;
+import com.intellij.psi.PsiTypes;
 import com.intellij.psi.PsiVariable;
 import com.intellij.psi.impl.source.codeStyle.JavaCodeStyleManagerImpl;
 import com.intellij.psi.impl.source.tree.ChildRole;
@@ -95,7 +96,7 @@ public class GetterHandler extends BaseHandler<Getter> {
                 members.inject(methodTree);
             }
             if (annotation.lazy()) {
-                final LightField mark = { tree, String.format("$%s$mark", tree.getName()), PsiType.BOOLEAN, annotationTree };
+                final LightField mark = { tree, String.format("$%s$mark", tree.getName()), PsiTypes.booleanType(), annotationTree };
                 if (members.shouldInject(mark)) {
                     mark.setNavigationElement(tree);
                     mark.setContainingClass(context);
@@ -142,7 +143,7 @@ public class GetterHandler extends BaseHandler<Getter> {
             final @Nullable PsiClass owner = PsiTreeUtil.getContextOfType(tree, PsiClass.class);
             if (owner != null)
                 return Stream.concat(Stream.of(owner.findMethodsByName(field.getName(), false)), Stream.of(owner.findMethodsByName(((PsiField) tree).getName() + REFERENCE_GETTER, false)))
-                        .filter(method -> method.getParameterList().getParametersCount() == 0 && !PsiType.VOID.equals(method.getReturnType()))
+                        .filter(method -> method.getParameterList().getParametersCount() == 0 && !PsiTypes.voidType().equals(method.getReturnType()))
                         .anyMatch(method -> method.hasModifierProperty(PUBLIC) || method.hasModifierProperty(PROTECTED) || refData.localRefMap().get(tree).stream().anyMatch(reference -> reference.resolve() == method));
         }
         return false;

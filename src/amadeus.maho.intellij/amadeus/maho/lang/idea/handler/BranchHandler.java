@@ -23,7 +23,7 @@ import com.intellij.codeInspection.dataFlow.value.DfaValue;
 import com.intellij.codeInspection.dataFlow.value.DfaValueFactory;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.PsiBuilder;
-import com.intellij.lang.java.parser.ExpressionParser;
+import com.intellij.lang.java.parser.OldExpressionParser;
 import com.intellij.lang.java.parser.ReferenceParser;
 import com.intellij.psi.GenericsUtil;
 import com.intellij.psi.JavaPsiFacade;
@@ -36,6 +36,7 @@ import com.intellij.psi.PsiPolyadicExpression;
 import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiReferenceExpression;
 import com.intellij.psi.PsiType;
+import com.intellij.psi.PsiTypes;
 import com.intellij.psi.formatter.java.JavaSpacePropertyProcessor;
 import com.intellij.psi.impl.ConstantExpressionVisitor;
 import com.intellij.psi.impl.source.resolve.graphInference.InferenceSession;
@@ -77,8 +78,8 @@ import static com.intellij.psi.util.TypeConversionUtil.*;
 public class BranchHandler {
     
     @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
-    private static boolean parsePrimary(final boolean capture, final ExpressionParser $this, final PsiBuilder builder, final @Nullable ExpressionParser.BreakPoint breakPoint, final int breakOffset,
-            final int mode) = capture || builder.getTokenType() == SAFE_ACCESS;
+    private static boolean parsePrimary(final boolean capture, final OldExpressionParser $this, final PsiBuilder builder, final @Nullable OldExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode)
+            = capture || builder.getTokenType() == SAFE_ACCESS;
     
     @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
     private static boolean parseJavaCodeReference(final boolean capture, final ReferenceParser $this, final PsiBuilder builder, final boolean eatLastDot, final boolean parameterList, final boolean isImport, final boolean isStaticImport,
@@ -87,21 +88,21 @@ public class BranchHandler {
     private static final TokenSet NULL_OR_OPS = TokenSet.create(NULL_OR);
     
     @Proxy(NEW)
-    private static native ExpressionParser.ExprType newExprType(String name, int id);
+    private static native OldExpressionParser.ExprType newExprType(String name, int id);
     
-    @Proxy(value = INVOKESTATIC, targetClass = ExpressionParser.ExprType.class)
-    private static native ExpressionParser.ExprType[] values();
+    @Proxy(value = INVOKESTATIC, targetClass = OldExpressionParser.ExprType.class)
+    private static native OldExpressionParser.ExprType[] values();
     
-    private static final ExpressionParser.ExprType NULL_OR_TYPE = newExprType("NULL_OR", values().length);
+    private static final OldExpressionParser.ExprType NULL_OR_TYPE = newExprType("NULL_OR", values().length);
     
     static { EnumHelper.addEnum(NULL_OR_TYPE); }
     
     @Hook(at = @At(field = @At.FieldInsn(name = "UNARY")), capture = true, before = false)
-    private static ExpressionParser.ExprType parseExpression(final ExpressionParser.ExprType capture, final ExpressionParser $this, final PsiBuilder builder, final ExpressionParser.ExprType type, final int mode) = NULL_OR_TYPE;
+    private static OldExpressionParser.ExprType parseExpression(final OldExpressionParser.ExprType capture, final OldExpressionParser $this, final PsiBuilder builder, final OldExpressionParser.ExprType type, final int mode) = NULL_OR_TYPE;
     
     @Hook
-    private static Hook.Result parseExpression(final ExpressionParser $this, final PsiBuilder builder, final ExpressionParser.ExprType type, final int mode)
-            = type == NULL_OR_TYPE ? new Hook.Result((Privilege) $this.parseBinary(builder, ExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
+    private static Hook.Result parseExpression(final OldExpressionParser $this, final PsiBuilder builder, final OldExpressionParser.ExprType type, final int mode)
+            = type == NULL_OR_TYPE ? new Hook.Result((Privilege) $this.parseBinary(builder, OldExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
     
     @Hook
     private static Hook.Result visitPolyadicExpression(final JavaSpacePropertyProcessor $this, final PsiPolyadicExpression expression) {
@@ -243,11 +244,11 @@ public class BranchHandler {
                 value = character;
             else
                 return false;
-            if (PsiType.BYTE.equals(unboxedLType))
+            if (PsiTypes.byteType().equals(unboxedLType))
                 return -128 <= value && value <= 127;
-            else if (PsiType.SHORT.equals(unboxedLType))
+            else if (PsiTypes.shortType().equals(unboxedLType))
                 return -32768 <= value && value <= 32767;
-            else if (PsiType.CHAR.equals(unboxedLType))
+            else if (PsiTypes.charType().equals(unboxedLType))
                 return 0 <= value && value <= 0xFFFF;
         }
         return false;
@@ -305,7 +306,7 @@ public class BranchHandler {
         operands[0].accept($this);
         for (int i = 1; i < operands.length; i++) {
             operands[i].accept($this);
-            (Privilege) $this.addInstruction(new NullOrInstruction(i == operands.length - 1 ? new JavaExpressionAnchor(expression) : new JavaPolyadicPartAnchor(expression, i), expression.getType() ?? PsiType.NULL));
+            (Privilege) $this.addInstruction(new NullOrInstruction(i == operands.length - 1 ? new JavaExpressionAnchor(expression) : new JavaPolyadicPartAnchor(expression, i), expression.getType() ?? PsiTypes.nullType()));
         }
     }
     
@@ -323,7 +324,7 @@ public class BranchHandler {
     private static Hook.Result visitPolyadicExpression(final ConstantExpressionVisitor $this, final PsiPolyadicExpression expression) {
         final IElementType tokenType = expression.getOperationTokenType();
         if (tokenType == NULL_OR && !(expression.getType() instanceof PsiPrimitiveType)) {
-            final PsiExpression[] operands = expression.getOperands();
+            final PsiExpression operands[] = expression.getOperands();
             @Nullable Object value = (Privilege) $this.getStoredValue(operands[0]);
             for (int i = 1; i < operands.length; i++) {
                 final PsiExpression operand = operands[i];
@@ -331,7 +332,6 @@ public class BranchHandler {
             }
             if (value instanceof final String string)
                 value = ((Privilege) $this.myInterner).intern(string);
-            // noinspection DataFlowIssue
             (Privilege) ($this.myResult = value);
             return Hook.Result.NULL;
         }

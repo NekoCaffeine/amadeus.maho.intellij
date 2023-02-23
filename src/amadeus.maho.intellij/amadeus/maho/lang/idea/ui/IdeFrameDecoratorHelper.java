@@ -91,7 +91,7 @@ public interface IdeFrameDecoratorHelper {
     @Hook
     private static void addNotify(final Dialog $this) = decoration($this);
     
-    static JBEmptyBorder outerBorder() = { 2 };
+    static JBEmptyBorder outerBorder() = { 0 };
     
     private static void decoration(final Window window) {
         if (!window.isDisplayable() && shouldEnable()) {

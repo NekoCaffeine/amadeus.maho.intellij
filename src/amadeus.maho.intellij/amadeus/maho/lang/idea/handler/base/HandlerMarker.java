@@ -162,9 +162,11 @@ import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.bytecode.ASMHelper;
+import amadeus.maho.util.concurrent.ConcurrentWeakIdentityHashMap;
 import amadeus.maho.util.dynamic.InvokeContext;
 import amadeus.maho.util.function.Consumer4;
 import amadeus.maho.util.function.FunctionHelper;
+import amadeus.maho.util.runtime.ObjectHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
 import static amadeus.maho.util.bytecode.Bytecodes.*;
@@ -892,8 +894,32 @@ public class HandlerMarker {
             return capture;
         }
         
-        @Hook(value = JavaSharedImplUtil.class, isStatic = true)
-        private static Hook.Result getType(final PsiTypeElement typeElement, final PsiElement anchor, final @Nullable PsiAnnotation stopAt) = { wrapTypeIfNecessary(typeElement, anchor, stopAt, true) };
+        @Hook(value = JavaSharedImplUtil.class, isStatic = true, forceReturn = true)
+        private static PsiType getType(final PsiTypeElement typeElement, final PsiElement anchor, final @Nullable PsiAnnotation stopAt) {
+            @RequiredArgsConstructor
+            @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+            class Key {
+                
+                PsiElement anchor;
+                
+                @Nullable PsiAnnotation stopAt;
+                
+                @Override
+                public int hashCode() = ObjectHelper.hashCode(anchor, stopAt);
+                
+                @Override
+                public boolean equals(final Object obj) = obj instanceof Key key && anchor == key.anchor && stopAt == key.stopAt;
+                
+            }
+            final ConcurrentHashMap<Key, PsiType> cache = CachedValuesManager.getProjectPsiDependentCache(typeElement, FunctionHelper.abandon(ConcurrentHashMap::new));
+            final Key key = { anchor, stopAt };
+            final @Nullable PsiType type = cache[key];
+            if (type != null)
+                return type;
+            final PsiType result = wrapTypeIfNecessary(typeElement, anchor, stopAt, true);
+            cache[key] = result;
+            return result;
+        }
         
         public static PsiType wrapTypeIfNecessary(final PsiTypeElement typeElement, final PsiElement anchor, final @Nullable PsiAnnotation stopAt, final boolean wrap) {
             final PsiType p_type[] = { typeElement.getType() };
@@ -904,32 +930,37 @@ public class HandlerMarker {
         
         @Hook(value = PsiTypesUtil.class, isStatic = true)
         private static Hook.Result getExpectedTypeByParent(final PsiElement element) {
+            final @Nullable PsiType expectedTypeByParent = expectedTypeByParent(element);
+            if (expectedTypeByParent != null)
+                return { expectedTypeByParent };
+            return Hook.Result.VOID;
+        }
+        
+        private static @Nullable PsiType expectedTypeByParent(final PsiElement element) {
             if (PsiUtil.skipParenthesizedExprUp(element.getParent()) instanceof final PsiVariable variable && (Privilege) PsiUtil.checkSameExpression(element, variable.getInitializer())) {
                 final @Nullable PsiTypeElement typeElement = variable.getTypeElement();
                 if (typeElement != null) {
                     if (typeElement.isInferredType())
-                        return Hook.Result.NULL;
+                        return null;
                     final @Nullable PsiIdentifier identifier = variable.getNameIdentifier();
                     if (identifier == null)
-                        return Hook.Result.NULL;
-                    return { wrapTypeIfNecessary(typeElement, identifier, null, false) };
+                        return null;
+                    return wrapTypeIfNecessary(typeElement, identifier, null, false);
                 }
             }
-            return Hook.Result.VOID;
+            return null;
         }
         
         @Hook(value = HighlightUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "getType"), ordinal = 0), before = false, capture = true)
-        private static PsiType checkVariableInitializerType(final PsiType capture, final PsiVariable variable) {
-            final @Nullable PsiTypeElement typeElement = variable.getTypeElement();
-            final @Nullable PsiIdentifier identifier = variable.getNameIdentifier();
-            return typeElement != null && identifier != null ? wrapTypeIfNecessary(typeElement, identifier, null, false) : capture;
-        }
+        private static PsiType checkVariableInitializerType(final PsiType capture, final PsiVariable variable) = unwrapTypeOrNull(variable) ?? capture;
         
-        public static @Nullable PsiType unwrapType(final PsiVariable variable) {
+        public static @Nullable PsiType unwrapType(final PsiVariable variable) = unwrapTypeOrNull(variable) ?? variable.getType();
+        
+        public static @Nullable PsiType unwrapTypeOrNull(final PsiVariable variable) = CachedValuesManager.getProjectPsiDependentCache(variable, it -> {
             final @Nullable PsiTypeElement typeElement = variable.getTypeElement();
             final @Nullable PsiIdentifier identifier = variable.getNameIdentifier();
-            return typeElement != null && identifier != null ? wrapTypeIfNecessary(typeElement, identifier, null, false) : variable.getType();
-        }
+            return typeElement != null && identifier != null ? wrapTypeIfNecessary(typeElement, identifier, null, false) : null;
+        });
         
         @Override
         protected @Nullable PsiType inferType(final PsiTypeElement typeElement) = CachedValuesManager.getProjectPsiDependentCache(typeElement,

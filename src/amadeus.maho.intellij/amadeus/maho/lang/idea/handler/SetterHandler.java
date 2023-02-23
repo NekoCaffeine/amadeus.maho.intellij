@@ -17,6 +17,7 @@ import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.PsiNameIdentifierOwner;
 import com.intellij.psi.PsiType;
+import com.intellij.psi.PsiTypes;
 import com.intellij.psi.util.PsiTreeUtil;
 
 import amadeus.maho.lang.AccessLevel;
@@ -61,7 +62,7 @@ public class SetterHandler extends BaseHandler<Setter> {
         if (unwrapType != null)
             if (!tree.hasModifierProperty(PsiModifier.FINAL) || !unwrapType.equals(tree.getType())) {
                 final LightMethod methodTree = { tree, tree.getName(), tree, annotationTree };
-                methodTree.setMethodReturnType(PsiType.VOID);
+                methodTree.setMethodReturnType(PsiTypes.voidType());
                 methodTree.addParameter(tree.getName() + "$value", unwrapType, false);
                 if (members.shouldInject(methodTree)) {
                     methodTree.setNavigationElement(tree);
@@ -87,7 +88,7 @@ public class SetterHandler extends BaseHandler<Setter> {
             final LightMethod methodTree = { tree, tree.getName(), tree, annotationTree };
             final LightParameter parameter = { methodTree, "value", returnType, false };
             methodTree.addParameter(parameter);
-            methodTree.setMethodReturnType(PsiType.VOID);
+            methodTree.setMethodReturnType(PsiTypes.voidType());
             if (members.shouldInject(methodTree)) {
                 methodTree.setNavigationElement(tree);
                 methodTree.setContainingClass(context);
@@ -111,7 +112,7 @@ public class SetterHandler extends BaseHandler<Setter> {
                 if (unwrapType != null)
                     if (!field.hasModifierProperty(PsiModifier.FINAL) && !unwrapType.equals(field.getType())) {
                         final LightMethod methodTree = { field, field.getName(), field };
-                        methodTree.setMethodReturnType(PsiType.VOID);
+                        methodTree.setMethodReturnType(PsiTypes.voidType());
                         methodTree.addParameter(field.getName() + "$value", unwrapType, false);
                         targets += containingClass.findMethodBySignature(methodTree, false);
                     }
@@ -125,7 +126,7 @@ public class SetterHandler extends BaseHandler<Setter> {
                     final LightMethod methodTree = { method, method.getName(), method };
                     final LightParameter parameter = { methodTree, "value", returnType, false };
                     methodTree.addParameter(parameter);
-                    methodTree.setMethodReturnType(PsiType.VOID);
+                    methodTree.setMethodReturnType(PsiTypes.voidType());
                     targets += containingClass.findMethodBySignature(methodTree, false);
                 }
             }
@@ -139,7 +140,7 @@ public class SetterHandler extends BaseHandler<Setter> {
             final @Nullable PsiClass owner = PsiTreeUtil.getContextOfType(tree, PsiClass.class);
             if (owner != null)
                 return Stream.of(owner.findMethodsByName(field.getName(), false))
-                        .filter(method -> method.getParameterList().getParametersCount() == 1 && PsiType.VOID.equals(method.getReturnType()))
+                        .filter(method -> method.getParameterList().getParametersCount() == 1 && PsiTypes.voidType().equals(method.getReturnType()))
                         .filter(LightMethod.class::isInstance)
                         .anyMatch(method -> method.hasModifierProperty(PsiModifier.PUBLIC) || method.hasModifierProperty(PsiModifier.PROTECTED) || refData.localRefMap().get(tree).stream().anyMatch(reference -> reference.resolve() == method));
         }

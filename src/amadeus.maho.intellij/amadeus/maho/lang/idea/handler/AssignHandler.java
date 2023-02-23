@@ -67,6 +67,7 @@ import com.intellij.psi.PsiReturnStatement;
 import com.intellij.psi.PsiStatement;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeElement;
+import com.intellij.psi.PsiTypes;
 import com.intellij.psi.PsiVariable;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
 import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
@@ -464,7 +465,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             if (eq != null) {
                 final PsiTypeElement typeElement = ((PsiMethodImpl) parent).getReturnTypeElement();
                 final @Nullable PsiType returnType = ((PsiMethodImpl) parent).getReturnType();
-                if (typeElement == null || returnType == null || PsiType.VOID.equals(returnType) || SelfHandler.isSelfReference(typeElement.getText()))
+                if (typeElement == null || returnType == null || PsiTypes.voidType().equals(returnType) || SelfHandler.isSelfReference(typeElement.getText()))
                     return Hook.Result.NULL;
             }
         }

@@ -15,7 +15,7 @@ import com.intellij.psi.PsiReturnStatement;
 import com.intellij.psi.PsiSwitchBlock;
 import com.intellij.psi.PsiSwitchExpression;
 import com.intellij.psi.PsiSwitchLabeledRuleStatement;
-import com.intellij.psi.PsiType;
+import com.intellij.psi.PsiTypes;
 import com.intellij.psi.PsiWhiteSpace;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
 import com.intellij.psi.formatter.java.AbstractJavaBlock;
@@ -40,15 +40,15 @@ public class SwitchHandler {
     @Hook(value = HighlightUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "equals")), before = false, capture = true, branchReversal = true)
     private static boolean checkSwitchExpressionReturnTypeCompatible_$VoidCheck(final boolean capture, final PsiSwitchExpression expression, final HighlightInfoHolder holder)
             = capture || expression.getParent() instanceof PsiExpressionStatement ||
-              expression.getParent() instanceof PsiReturnStatement returnStatement && PsiType.VOID.equals(PsiTreeUtil.getParentOfType(returnStatement, PsiMethod.class)?.getReturnType() ?? null);
+              expression.getParent() instanceof PsiReturnStatement returnStatement && PsiTypes.voidType().equals(PsiTreeUtil.getParentOfType(returnStatement, PsiMethod.class)?.getReturnType() ?? null);
     
     @Hook(value = HighlightUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "areTypesAssignmentCompatible")), before = false, capture = true, branchReversal = true)
     private static boolean checkSwitchExpressionReturnTypeCompatible_$CompatibleCheck(final boolean capture, final PsiSwitchExpression expression, final HighlightInfoHolder holder)
-            = capture || PsiType.VOID.equals(expression.getType());
+            = capture || PsiTypes.voidType().equals(expression.getType());
     
     @Hook(value = HighlightUtil.class, isStatic = true)
     private static Hook.Result checkSwitchExpressionHasResult(final PsiSwitchExpression expression, final HighlightInfoHolder holder)
-            = Hook.Result.falseToVoid(PsiType.VOID.equals(expression.getType()) || expression.getParent() instanceof PsiReturnStatement statement && SelfHandler.isSelfReturn(statement));
+            = Hook.Result.falseToVoid(PsiTypes.voidType().equals(expression.getType()) || expression.getParent() instanceof PsiReturnStatement statement && SelfHandler.isSelfReturn(statement));
     
     @Hook
     private static Hook.Result visitParenthesizedExpression(final UnnecessaryParenthesesInspection.UnnecessaryParenthesesVisitor $this, final PsiParenthesizedExpression expression)

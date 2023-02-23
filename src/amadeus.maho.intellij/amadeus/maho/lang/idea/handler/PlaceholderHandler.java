@@ -16,12 +16,13 @@ import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementFactory;
-import com.intellij.psi.PsiType;
+import com.intellij.psi.PsiTypes;
 import com.intellij.psi.search.GlobalSearchScope;
 
 import amadeus.maho.lang.BinaryMapping;
 import amadeus.maho.lang.EqualsAndHashCode;
 import amadeus.maho.lang.Getter;
+import amadeus.maho.lang.SneakyThrows;
 import amadeus.maho.lang.ToString;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
@@ -62,6 +63,7 @@ public abstract class PlaceholderHandler<A extends Annotation> extends BaseHandl
     @Handler(value = BinaryMapping.class, priority = PRIORITY)
     public static class BinaryMappingHandler extends PlaceholderHandler<BinaryMapping> {
         
+        @SneakyThrows
         protected static final Method
                 serialization   = LookupHelper.methodV2(BinaryMapper::serialization),
                 deserialization = LookupHelper.methodV2(BinaryMapper::deserialization),
@@ -81,7 +83,7 @@ public abstract class PlaceholderHandler<A extends Annotation> extends BaseHandl
                 return;
             super.processClass(tree, annotation, annotationTree, members, context);
             if (annotation.eofMark()) {
-                final LightField mark = { tree, "eofMark", PsiType.BOOLEAN, annotationTree };
+                final LightField mark = { tree, "eofMark", PsiTypes.booleanType(), annotationTree };
                 if (members.shouldInject(mark)) {
                     mark.getModifierList().addAnnotation(Getter.class.getCanonicalName());
                     mark.setNavigationElement(tree);

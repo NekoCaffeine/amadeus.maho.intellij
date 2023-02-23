@@ -36,6 +36,7 @@ import com.intellij.lang.folding.CustomFoldingBuilder;
 import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
 import com.intellij.lang.parameterInfo.ParameterInfoUtils;
 import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
@@ -97,6 +98,7 @@ import amadeus.maho.util.dynamic.CallerContext;
 import amadeus.maho.util.runtime.ArrayHelper;
 
 import com.siyeh.ig.BaseInspectionVisitor;
+import org.cef.SystemBootstrap;
 
 import static org.objectweb.asm.Opcodes.*;
 
@@ -284,6 +286,15 @@ interface Fix {
             final ParameterInfoHandlerWithTabActionSupport findArgumentListHelper, final boolean allowOuter) {
         lbraceOffset = -1;
         return { };
+    }
+    
+    @Hook(value = SystemBootstrap.class, isStatic = true)
+    private static void loadLibrary(final String libName) {
+        try {
+            System.loadLibrary(libName);
+        } catch (final UnsatisfiedLinkError e) {
+            System.load(Path.of(PathManager.getHomePath()) / "jbr" / "bin" / System.mapLibraryName(libName) | "/");
+        }
     }
     
 }
