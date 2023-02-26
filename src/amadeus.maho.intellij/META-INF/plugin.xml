@@ -1,4 +1,5 @@
 <idea-plugin>
+    <version>${version}</version>
     <id>amadeus.maho</id>
     <name>Maho</name>
     <vendor email="nekocaffeine@qq.com" url="https://github.com/NekoCaffeine">NekoCaffeine</vendor>
