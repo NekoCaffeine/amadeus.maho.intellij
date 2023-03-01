@@ -120,7 +120,7 @@ interface Fix {
     private static Hook.Result openViaShellApi(final String message) = Hook.Result.NULL;
     
     @Hook
-    private static Hook.Result addOccurrence(final HighlightUsagesHandlerBase $this, final @Nullable PsiElement element) = Hook.Result.falseToVoid(element != null, null);
+    private static Hook.Result addOccurrence(final HighlightUsagesHandlerBase $this, final @Nullable PsiElement element) = Hook.Result.falseToVoid(element == null, null);
     
     // Remove useless checks
     @Hook

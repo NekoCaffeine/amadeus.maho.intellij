@@ -30,7 +30,7 @@ import static amadeus.maho.lang.idea.debugger.JDIHelper.*;
 public interface BreakpointReached {
     
     @Hook
-    private static void breakpointReached(final XDebugSessionImpl $this, final XBreakpoint<?> breakpoint, final @Nullable String evaluatedLogExpression, final XSuspendContext context, final boolean doProcessing) {
+    private static Hook.Result breakpointReached(final XDebugSessionImpl $this, final XBreakpoint<?> breakpoint, final @Nullable String evaluatedLogExpression, final XSuspendContext context, final boolean doProcessing) {
         if (context.getActiveExecutionStack().getTopFrame() instanceof JavaStackFrame stackFrame) {
             final @Nullable Method method = stackFrame.getDescriptor().getMethod();
             if (method != null && method.name().equals("send") && method.declaringType().name().equals(JDWP.MessageQueue.class.getName())) {
@@ -42,11 +42,13 @@ public interface BreakpointReached {
                                 final Handler<JDWP.IDECommand> handler = (Handler<JDWP.IDECommand>) CommandHandler.Marker.handlers()[(Class<? extends JDWP.IDECommand>) clazz];
                                 handler.handle((JDWP.IDECommand) projection(stackFrame.getStackFrameProxy().threadProxy().getThreadReference(), reference), $this);
                                 $this.resume();
+                                return Hook.Result.FALSE;
                             }
                         }
                 } catch (final EvaluateException | ClassNotFoundException e) { DebugHelper.breakpoint(); }
             }
         }
+        return Hook.Result.VOID;
     }
     
     @SneakyThrows
