@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -71,6 +72,7 @@ import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiIdentifier;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
+import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiLanguageInjectionHost;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
@@ -162,10 +164,8 @@ import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.bytecode.ASMHelper;
-import amadeus.maho.util.concurrent.ConcurrentWeakIdentityHashMap;
 import amadeus.maho.util.dynamic.InvokeContext;
 import amadeus.maho.util.function.Consumer4;
-import amadeus.maho.util.function.FunctionHelper;
 import amadeus.maho.util.runtime.ObjectHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
@@ -193,9 +193,11 @@ public class HandlerMarker {
         
         public ReferenceSearcher() = super(true);
         
+        public static Collection<PsiNameIdentifierOwner> relatedTargets(final PsiElement element) = CachedValuesManager.getProjectPsiDependentCache(element, _ -> new ConcurrentLinkedQueue<>());
+        
         @Override
         public void processQuery(final ReferencesSearch.SearchParameters parameters, final Processor<? super PsiReference> consumer)
-                = search(parameters.getElementToSearch(), parameters.getEffectiveSearchScope(), parameters.getOptimizer(), consumer);
+                = search(parameters.getElementToSearch(), parameters.getScopeDeterminedByUser(), parameters.getOptimizer(), consumer);
         
         private static void search(final PsiElement elementToSearch, final SearchScope effectiveSearchScope, final SearchRequestCollector optimizer, final Processor<? super PsiReference> consumer) {
             if (elementToSearch instanceof final PsiModifierListOwner owner && owner instanceof final PsiNamedElement namedElement) {
@@ -203,6 +205,7 @@ public class HandlerMarker {
                 if (name != null) {
                     final HashSet<PsiNameIdentifierOwner> targets = { };
                     EntryPoint.process(owner, (handler, target, annotation, annotationTree) -> handler.collectRelatedTarget(owner, annotation, annotationTree, targets));
+                    targets *= relatedTargets(owner);
                     targets -= null;
                     targets.forEach(target -> {
                         if (target.getNameIdentifier() != null)
@@ -254,11 +257,17 @@ public class HandlerMarker {
     @TransformProvider
     public interface UsageTypeProvider {
         
-        UsageType associationMethod = { () -> "Association method" };
+        UsageType
+                associationMethod   = { () -> "Association method" },
+                operatorOverloading = { () -> "Operator Overloading" };
         
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
         private static @Nullable UsageType getUsageType(final @Nullable UsageType capture, final JavaUsageTypeProvider $this, final PsiElement element, final UsageTarget targets[])
-                = capture ?? element instanceof PsiMethod ? associationMethod : null;
+                = capture ?? switch (element) {
+            case PsiMethod method   -> associationMethod;
+            case PsiJavaToken token -> operatorOverloading;
+            default                 -> null;
+        };
         
     }
     
@@ -911,7 +920,7 @@ public class HandlerMarker {
                 public boolean equals(final Object obj) = obj instanceof Key key && anchor == key.anchor && stopAt == key.stopAt;
                 
             }
-            final ConcurrentHashMap<Key, PsiType> cache = CachedValuesManager.getProjectPsiDependentCache(typeElement, FunctionHelper.abandon(ConcurrentHashMap::new));
+            final ConcurrentHashMap<Key, PsiType> cache = CachedValuesManager.getProjectPsiDependentCache(typeElement, _ -> new ConcurrentHashMap<>());
             final Key key = { anchor, stopAt };
             final @Nullable PsiType type = cache[key];
             if (type != null)
@@ -1014,8 +1023,7 @@ public class HandlerMarker {
         }
         
         public static @Nullable <A extends Annotation> Map.Entry<BaseHandler<A>, List<Tuple2<A, PsiAnnotation>>> getAnnotationsByTypeWithOuter(final PsiModifierListOwner tree, final BaseHandler<A> baseHandler) {
-            final var cache = CachedValuesManager.<PsiModifierListOwner, Map<BaseHandler<A>, Map.Entry<BaseHandler<A>, List<Tuple2<A, PsiAnnotation>>>>>
-                    getProjectPsiDependentCache(tree, FunctionHelper.abandon(ConcurrentHashMap::new));
+            final var cache = CachedValuesManager.<PsiModifierListOwner, Map<BaseHandler<A>, Map.Entry<BaseHandler<A>, List<Tuple2<A, PsiAnnotation>>>>>getProjectPsiDependentCache(tree, _ -> new ConcurrentHashMap<>());
             @Nullable Map.Entry<BaseHandler<A>, List<Tuple2<A, PsiAnnotation>>> result = cache[baseHandler];
             if (result != null)
                 return result;
@@ -1053,7 +1061,7 @@ public class HandlerMarker {
         public static <A extends Annotation> List<Tuple2<A, PsiAnnotation>> getAnnotationsByType(final PsiModifierListOwner tree, final Class<A> annotationType) {
             if (tree.getAnnotations().length == 0 && (!(tree instanceof PsiExtensibleClass) || !annotationType.isAnnotationPresent(Inherited.class)))
                 return List.of();
-            final var cache = CachedValuesManager.<PsiModifierListOwner, Map<Class<A>, List<Tuple2<A, PsiAnnotation>>>>getProjectPsiDependentCache(tree, FunctionHelper.abandon(ConcurrentHashMap::new));
+            final var cache = CachedValuesManager.<PsiModifierListOwner, Map<Class<A>, List<Tuple2<A, PsiAnnotation>>>>getProjectPsiDependentCache(tree, _ -> new ConcurrentHashMap<>());
             @Nullable List<Tuple2<A, PsiAnnotation>> result = cache[annotationType]; // avoid computeIfAbsent deadlock
             if (result == null)
                 cache[annotationType] = result = accessSourceASTContextLocal.get() ^ () -> {
@@ -1079,10 +1087,10 @@ public class HandlerMarker {
         }
         
         private static <A extends Annotation> boolean checkAnnotationType(final Class<A> annotationType, final PsiAnnotation annotation) {
-            if (annotationType.getCanonicalName().equals(annotation.getQualifiedName()))
+            if (annotation.isValid() && annotationType.getCanonicalName().equals(annotation.getQualifiedName()))
                 return true;
             final @Nullable PsiJavaCodeReferenceElement reference = annotation.getNameReferenceElement();
-            if (reference != null) {
+            if (reference != null && reference.isValid()) {
                 final JavaResolveResult result = reference.advancedResolve(true);
                 final @Nullable PsiElement element = result.getElement();
                 if (element instanceof final PsiClass psiClass)

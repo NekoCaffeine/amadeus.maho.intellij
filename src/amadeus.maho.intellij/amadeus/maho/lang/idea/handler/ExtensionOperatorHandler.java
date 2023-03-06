@@ -24,7 +24,7 @@ public class ExtensionOperatorHandler extends BaseHandler<Extension.Operator> {
     
     @Override
     public void processMethod(final PsiMethod tree, final Extension.Operator annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
-        final LightMethod methodTree = { context, tree, PsiSubstitutor.EMPTY, annotationTree };
+        final LightMethod methodTree = { context, tree, PsiSubstitutor.EMPTY, annotationTree, tree };
         methodTree.name(operatorSymbol2operatorName.getOrDefault(annotation.value(), annotation.value()));
         if (members.shouldInject(methodTree)) {
             Stream.of(PsiModifier.ABSTRACT, PsiModifier.NATIVE, PsiModifier.SYNCHRONIZED).forEach(methodTree.getModifierList().modifiers()::remove);

@@ -73,7 +73,8 @@ public interface IdeFrameDecoratorHelper {
     private static Hook.Result getCustomWindowDecoration() = Hook.Result.falseToVoid(shouldEnable(), WithoutJBRWindowDecoration.instance());
     
     // #IC-223.6160.11 2022.3 EAP
-    @Hook(at = @At(method = @At.MethodInsn(name = "dispose"), offset = -2), jump = @At(method = @At.MethodInsn(name = "setUndecorated"), offset = 1), exactMatch = false)
+    @Hook(at = @At(method = @At.MethodInsn(name = "dispose"), offset = -2), jump = @At(method = @At.MethodInsn(name = "setUndecorated"), offset = 1),
+            lambdaRedirect = @At(method = @At.MethodInsn(name = "invokeLater"), offset = -1), exactMatch = false)
     private static Hook.Result toggleFullScreen(final IdeFrameDecorator.WinMainFrameDecorator $this) = shouldEnable() ? new Hook.Result().jump() : Hook.Result.VOID;
     
     @Hook(value = IdeFrameDecorator.class, isStatic = true)

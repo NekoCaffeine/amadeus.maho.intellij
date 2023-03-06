@@ -76,6 +76,7 @@ import com.intellij.util.ArrayUtil;
 import com.intellij.util.Processor;
 
 import amadeus.maho.lang.AccessLevel;
+import amadeus.maho.lang.Extension;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.idea.IDEAContext;
@@ -83,6 +84,7 @@ import amadeus.maho.lang.idea.light.LightElementReference;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.TransformProvider;
+import amadeus.maho.util.runtime.DebugHelper;
 
 import com.siyeh.ig.controlflow.SimplifiableBooleanExpressionInspection;
 import com.siyeh.ig.psiutils.ExpressionUtils;
@@ -403,8 +405,8 @@ public class OperatorOverloadingHandler {
     private static void processQuery(final MethodUsagesSearcher $this, final MethodReferencesSearch.SearchParameters parameters, final Processor<PsiReference> consumer) = IDEAContext.runReadActionIgnoreDumbMode(() -> {
         final PsiMethod target = parameters.getMethod();
         final @Nullable String symbol = operatorName2operatorSymbol[target.getName()];
-        if (symbol != null)
-            lookupExpression(consumer, parameters.getProject(), parameters.getMethod(), parameters.getEffectiveSearchScope());
+        if (symbol != null || target.hasAnnotation(Extension.Operator.class.getCanonicalName()))
+            lookupExpression(consumer, parameters.getProject(), parameters.getMethod(), parameters.getScopeDeterminedByUser());
     });
     
     public static void lookupExpression(final Processor<PsiReference> consumer, final Project project, final PsiMethod method, final SearchScope searchScope) {
@@ -412,6 +414,8 @@ public class OperatorOverloadingHandler {
             JavaShortClassNameIndex.getInstance().getAllKeys(project).forEach(name -> JavaShortClassNameIndex.getInstance().get(name, project, globalSearchScope).forEach(psiClass -> lookupExpression(consumer, method, psiClass)));
         else if (searchScope instanceof final LocalSearchScope localSearchScope)
             Stream.of(localSearchScope.getScope()).forEach(element -> lookupExpression(consumer, method, element));
+        else
+            DebugHelper.breakpoint();
     }
     
     public static void lookupExpression(final Processor<PsiReference> consumer, final PsiMethod method, final PsiElement element) = PsiTreeUtil.findChildrenOfType(element, PsiExpression.class).stream()
