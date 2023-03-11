@@ -33,6 +33,8 @@ public interface Build {
         // install location, usually if you installed IntelliJ using Toolbox, you can find that path inside
         String intellijPath = "missing";
         
+        String intellijVersion = "?";
+        
         String appendArgs = "";
         
     }
@@ -66,7 +68,12 @@ public interface Build {
     static Path build(final boolean aot = true) {
         workspace.clean(module).flushMetadata();
         Javac.compile(workspace, module, useModulePath::contains, args -> Javac.addReadsAllUnnamed(args, module));
-        final Map<String, Jar.Result> pack = Jar.pack(workspace, module);
+        final Map<String, Jar.Result> pack = Jar.pack(workspace, module, Jar.manifest(), (a, b) -> {
+            if (a.getFileName().toString().equals("plugin.xml"))
+                Files.readString(a).replace("${version}", "%s-%s".formatted(workspace.config().load(new Module.Metadata(), module.name()).version, config.intellijVersion)) >> b;
+            else
+                a >> b;
+        });
         final Path modulesDir = workspace.output(Jar.MODULES_DIR, module), targetDir = aot ? ~workspace.output("aot-" + Jar.MODULES_DIR, module) : modulesDir;
         if (aot)
             AOTTransformer.transform(modulesDir, targetDir);
