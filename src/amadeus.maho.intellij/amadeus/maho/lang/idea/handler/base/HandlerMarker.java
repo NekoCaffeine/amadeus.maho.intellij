@@ -113,6 +113,7 @@ import com.intellij.psi.scope.NameHint;
 import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.scope.processor.MethodResolverProcessor;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.search.PsiSearchHelper;
 import com.intellij.psi.search.SearchRequestCollector;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.psi.search.searches.MethodReferencesSearch;
@@ -199,7 +200,7 @@ public class HandlerMarker {
         public void processQuery(final ReferencesSearch.SearchParameters parameters, final Processor<? super PsiReference> consumer)
                 = search(parameters.getElementToSearch(), parameters.getScopeDeterminedByUser(), parameters.getOptimizer(), consumer);
         
-        private static void search(final PsiElement elementToSearch, final SearchScope effectiveSearchScope, final SearchRequestCollector optimizer, final Processor<? super PsiReference> consumer) {
+        private static void search(final PsiElement elementToSearch, final SearchScope scope, final SearchRequestCollector optimizer, final Processor<? super PsiReference> consumer) {
             if (elementToSearch instanceof final PsiModifierListOwner owner && owner instanceof final PsiNamedElement namedElement) {
                 final @Nullable String name = namedElement.getName();
                 if (name != null) {
@@ -216,13 +217,14 @@ public class HandlerMarker {
                                     consumer.process(new PsiMemberReference<>(impl, impl, name));
                             });
                     });
-                    targets.forEach(target -> ReferencesSearch.searchOptimized(target, effectiveSearchScope, false, optimizer, reference -> consumer.process(new PsiReferenceWrapper(reference) {
-                        
-                        @Override
-                        public PsiElement handleElementRename(final String newElementName) throws IncorrectOperationException
-                                = super.handleElementRename(reference.resolve() instanceof final PsiNamedElement named ? remapName(newElementName, named, name) : newElementName);
-                        
-                    })));
+                    targets.forEach(target -> ReferencesSearch.searchOptimized(target, scope.intersectWith(PsiSearchHelper.getInstance(target.getProject()).getUseScope(target)), false, optimizer,
+                            reference -> consumer.process(new PsiReferenceWrapper(reference) {
+                                
+                                @Override
+                                public PsiElement handleElementRename(final String newElementName) throws IncorrectOperationException
+                                        = super.handleElementRename(reference.resolve() instanceof final PsiNamedElement named ? remapName(newElementName, named, name) : newElementName);
+                                
+                            })));
                 }
             }
         }
