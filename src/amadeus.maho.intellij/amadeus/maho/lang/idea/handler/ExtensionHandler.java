@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -230,10 +231,16 @@ public class ExtensionHandler extends BaseSyntaxHandler {
             return List.of();
         final List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>> tuples = CachedValuesManager.getManager(project).getCachedValue(project, () -> CachedValueProvider.Result.create(
                         new ConcurrentHashMap<GlobalSearchScope, List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>>>(), PsiModificationTracker.getInstance(project)))
-                .computeIfAbsent(resolveScope, scope -> extensionSet(scope).stream()
-                        .map(ExtensionHandler::providerData)
-                        .flatMap(Collection::stream)
-                        .collect(Collectors.toList()));
+                .computeIfAbsent(resolveScope, scope -> {
+                    final AtomicInteger guard = HandlerMarker.EntryPoint.collectGuard.get();
+                    try {
+                        guard.getAndIncrement();
+                        return extensionSet(scope).stream()
+                                .map(ExtensionHandler::providerData)
+                                .flatMap(Collection::stream)
+                                .collect(Collectors.toList());
+                    } finally { guard.getAndDecrement(); }
+                });
         return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<String, Collection<ExtensionMethod>>>())
                 .computeIfAbsent(resolveScope, $ -> new ConcurrentHashMap<>()).computeIfAbsent(type.getCanonicalText(), it -> supers.stream().flatMap(node -> {
                     final PsiType contextType = psiClass == node ? type : new PsiImmediateClassType(node, TypeConversionUtil.getSuperClassSubstitutor(node, psiClass, substitutor));

@@ -753,7 +753,7 @@ public class HandlerMarker {
             return astNode;
         }
         
-        private static final ThreadLocal<AtomicInteger> loadTreeGuard = ThreadLocal.withInitial(AtomicInteger::new);
+        public static final ThreadLocal<AtomicInteger> collectGuard = ThreadLocal.withInitial(AtomicInteger::new), loadTreeGuard = ThreadLocal.withInitial(AtomicInteger::new);
         
         @Hook(at = @At(method = @At.MethodInsn(name = "performPsiModification")), before = false)
         private static void ensureParsed(final LazyParseableElement $this) {
@@ -789,7 +789,7 @@ public class HandlerMarker {
         private static void loadTreeElement_$Exit(final PsiFileImpl $this) = loadTreeGuard.get().getAndDecrement();
         
         private static void transform(final ElementBase element) {
-            if ((!(element instanceof PsiElement psiElement) || psiElement.isPhysical()) && element.getUserData(transformedKey) == null) {
+            if ((!(element instanceof PsiElement psiElement) || psiElement.isPhysical()) && collectGuard.get().get() == 0 && element.getUserData(transformedKey) == null) {
                 final LinkedList<Object> objects = reentrant.get();
                 final AtomicInteger count = loadTreeGuard.get();
                 if (!objects.contains(element)) {
