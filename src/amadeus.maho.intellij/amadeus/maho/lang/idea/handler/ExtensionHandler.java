@@ -233,8 +233,8 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                         new ConcurrentHashMap<GlobalSearchScope, List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>>>(), PsiModificationTracker.getInstance(project)))
                 .computeIfAbsent(resolveScope, scope -> {
                     final AtomicInteger guard = HandlerMarker.EntryPoint.collectGuard.get();
+                    guard.getAndIncrement();
                     try {
-                        guard.getAndIncrement();
                         return extensionSet(scope).stream()
                                 .map(ExtensionHandler::providerData)
                                 .flatMap(Collection::stream)
