@@ -314,8 +314,8 @@ public class OperatorOverloadingHandler {
     };
     
     public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null ? null :
-            // CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
-            MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
+            CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
+            // MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType)
     
     private static @Nullable PsiMethod resolveMethod(final @Nullable PsiMethodCallExpression expression)
             = expression != null && expression.resolveMethodGenerics() instanceof final MethodCandidateInfo info &&
@@ -554,7 +554,7 @@ public class OperatorOverloadingHandler {
                 if (lambdaExpression != null) {
                     final LinkedList<PsiElement> stack = inferFunctionInterfaceTypeStackLocal.get();
                     final @Nullable PsiType functionalInterfaceType;
-                    if (stack.stream().filter(element -> element == parameter).count() < 2) {
+                    if (stack.stream().filter(element -> element != parameter).count() < 2) {
                         stack << parameter;
                         try {
                             functionalInterfaceType = LambdaUtil.getFunctionalInterfaceType(lambdaExpression, true);
