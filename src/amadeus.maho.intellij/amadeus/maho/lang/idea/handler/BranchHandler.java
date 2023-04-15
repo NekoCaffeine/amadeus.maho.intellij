@@ -31,6 +31,7 @@ import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiConstantEvaluationHelper;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
+import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiPolyadicExpression;
 import com.intellij.psi.PsiPrimitiveType;
@@ -106,17 +107,33 @@ public class BranchHandler {
     
     @Hook
     private static Hook.Result visitPolyadicExpression(final JavaSpacePropertyProcessor $this, final PsiPolyadicExpression expression) {
-        if (expression.getOperationTokenType() == NULL_OR) {
+        if (expression instanceof CompositeElement element && element.findChildByRoleAsPsiElement(ChildRole.OPERATION_SIGN) instanceof PsiJavaToken token && token.getTokenType() == NULL_OR) {
             createSpaceInCode($this, true);
             return Hook.Result.NULL;
         }
         return Hook.Result.VOID;
     }
     
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+    private static @Nullable ASTNode findChildByRole(final @Nullable ASTNode capture, final PsiPolyadicExpressionImpl $this, final int role)
+            = capture == null && role == ChildRole.OPERATION_SIGN ? $this.findChildByType(NULL_OR_OPS) : capture;
+    
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+    private static int getChildRole(final int capture, final PsiPolyadicExpressionImpl $this, final ASTNode child)
+            = capture == ChildRoleBase.NONE && NULL_OR_OPS.contains(child.getElementType()) ? ChildRole.OPERATION_SIGN : capture;
+    
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+    private static @Nullable ASTNode findChildByRole(final @Nullable ASTNode capture, final PsiBinaryExpressionImpl $this, final int role)
+            = capture == null && role == ChildRole.OPERATION_SIGN ? $this.findChildByType(NULL_OR_OPS) : capture;
+    
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+    private static int getChildRole(final int capture, final PsiBinaryExpressionImpl $this, final ASTNode child)
+            = capture == ChildRoleBase.NONE && NULL_OR_OPS.contains(child.getElementType()) ? ChildRole.OPERATION_SIGN : capture;
+    
     public static boolean isSafeAccess(final @Nullable PsiExpression expression) = switch (expression) {
-        case final PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof final CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
-        case final PsiReferenceExpression referenceExpression -> referenceExpression instanceof final CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
-        case null, default                                    -> false;
+        case PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof final CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
+        case PsiReferenceExpression referenceExpression -> referenceExpression instanceof final CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
+        case null, default                              -> false;
     };
     
     @Hook
@@ -137,14 +154,6 @@ public class BranchHandler {
     private static Hook.Result getPrecedenceForOperator(final IElementType operator)
             = Hook.Result.falseToVoid(operator == NULL_OR, PsiPrecedenceUtil.TYPE_CAST_PRECEDENCE);
     
-    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static @Nullable ASTNode findChildByRole(final @Nullable ASTNode capture, final PsiBinaryExpressionImpl $this, final int role)
-            = role == ChildRole.OPERATION_SIGN && capture == null ? $this.findChildByType(NULL_OR) : capture;
-    
-    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static int getChildRole(final int capture, final PsiBinaryExpressionImpl $this, final ASTNode child)
-            = child.getElementType() == NULL_OR && capture == ChildRoleBase.NONE ? ChildRole.OPERATION_SIGN : capture;
-    
     @Hook(value = PsiBinaryExpressionImpl.class, isStatic = true)
     private static Hook.Result doGetType(final PsiBinaryExpressionImpl expression)
             = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getLOperand(), expression.getROperand())) : Hook.Result.VOID;
@@ -153,10 +162,10 @@ public class BranchHandler {
     private static Hook.Result doGetType(final PsiPolyadicExpressionImpl expression)
             = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getOperands())) : Hook.Result.VOID;
     
-    private static @Nullable PsiType condType(final PsiExpression owner, final Function<PsiExpression, PsiType> typeEvaluator = expression -> expression?.getType() ?? null, final PsiExpression... expressions) {
+    private static @Nullable PsiType condType(final PsiExpression owner, final Function<PsiExpression, PsiType> typeEvaluator = expression -> expression?.getType()??null, final PsiExpression... expressions) {
         if (expressions.length == 0)
             return null;
-        final PsiType types[] = Stream.of(expressions).map(expression -> expression?.getType() ?? null).toArray(PsiType::createArray);
+        final PsiType types[] = Stream.of(expressions).map(expression -> expression?.getType()??null).toArray(PsiType::createArray);
         if (Stream.of(types).distinct().count() == 1)
             return types[0];
         final PsiConstantEvaluationHelper evaluationHelper = JavaPsiFacade.getInstance(owner.getProject()).getConstantEvaluationHelper();
@@ -276,17 +285,17 @@ public class BranchHandler {
         
         @Override
         public DfaValue eval(final DfaValueFactory factory, final DfaMemoryState state, final DfaValue... arguments) = switch (state.getDfType(arguments[0])) {
-            case final DfReferenceType referenceType  -> switch (referenceType.getNullability()) {
+            case DfReferenceType referenceType  -> switch (referenceType.getNullability()) {
                 case NULL     -> arguments[1];
                 case NOT_NULL -> arguments[0];
                 case NULLABLE -> state.getDfType(arguments[1]) instanceof final DfReferenceType otherType && otherType.getNullability() != DfaNullability.NULL ?
                         factory.fromDfType(typedObject(targetType, DfaNullability.toNullability(otherType.getNullability()))) : factory.fromDfType(typedObject(targetType, Nullability.NULLABLE));
                 default       -> factory.fromDfType(typedObject(targetType, Nullability.UNKNOWN));
             };
-            case final DfConstantType<?> constantType -> constantType.getValue() != null ? arguments[0] : arguments[1];
-            case final DfAntiConstantType<?> ignored  -> arguments[0];
-            case final DfStreamStateType ignored      -> arguments[0];
-            default                                   -> factory.fromDfType(typedObject(targetType, Nullability.UNKNOWN));
+            case DfConstantType<?> constantType -> constantType.getValue() != null ? arguments[0] : arguments[1];
+            case DfAntiConstantType<?> ignored  -> arguments[0];
+            case DfStreamStateType ignored      -> arguments[0];
+            default                             -> factory.fromDfType(typedObject(targetType, Nullability.UNKNOWN));
         };
         
         public String toString() = "NULL_OR";
@@ -306,7 +315,7 @@ public class BranchHandler {
         operands[0].accept($this);
         for (int i = 1; i < operands.length; i++) {
             operands[i].accept($this);
-            (Privilege) $this.addInstruction(new NullOrInstruction(i == operands.length - 1 ? new JavaExpressionAnchor(expression) : new JavaPolyadicPartAnchor(expression, i), expression.getType() ?? PsiTypes.nullType()));
+            (Privilege) $this.addInstruction(new NullOrInstruction(i == operands.length - 1 ? new JavaExpressionAnchor(expression) : new JavaPolyadicPartAnchor(expression, i), expression.getType()??PsiTypes.nullType()));
         }
     }
     
@@ -328,7 +337,7 @@ public class BranchHandler {
             @Nullable Object value = (Privilege) $this.getStoredValue(operands[0]);
             for (int i = 1; i < operands.length; i++) {
                 final PsiExpression operand = operands[i];
-                value = value ?? (Privilege) $this.getStoredValue(operand);
+                value = value??(Privilege) $this.getStoredValue(operand);
             }
             if (value instanceof final String string)
                 value = ((Privilege) $this.myInterner).intern(string);

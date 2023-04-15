@@ -87,6 +87,8 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.runtime.DebugHelper;
 
 import com.siyeh.ig.controlflow.SimplifiableBooleanExpressionInspection;
+import com.siyeh.ig.numeric.UnaryPlusInspection;
+import com.siyeh.ig.numeric.UnnecessaryUnaryMinusInspection;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 
 import static amadeus.maho.lang.idea.IDEAContext.OperatorData.*;
@@ -122,7 +124,7 @@ public class OperatorOverloadingHandler {
         if (callExpression.getArgumentList().isEmpty() && callExpression.getMethodExpression().resolve() instanceof final PsiMethod method) {
             final @Nullable PsiClass containingClass = method.getContainingClass();
             return containingClass != null && Stream.of(containingClass.findMethodsByName(method.getName(), true))
-                    .anyMatch(it -> it.getParameterList().getParametersCount() == 1 && it.getParameterList().getParameter(0)?.getType()?.equals(method.getReturnType()) ?? false &&
+                    .anyMatch(it -> it.getParameterList().getParametersCount() == 1 && it.getParameterList().getParameter(0)?.getType()?.equals(method.getReturnType())??false &&
                                     JavaResolveUtil.isAccessible(it, containingClass, it.getModifierList(), it, null, null));
         }
         return false;
@@ -195,7 +197,7 @@ public class OperatorOverloadingHandler {
     private static Hook.Result visitArrayAccessExpression(final EvaluatorBuilderImpl.Builder $this, final PsiArrayAccessExpression expression) = evaluator($this, expression);
     
     public static Hook.Result evaluator(final PsiElementVisitor visitor, final PsiExpression expr) {
-        final @Nullable PsiMethodCallExpression expression = expr(expr)?.expression ?? null;
+        final @Nullable PsiMethodCallExpression expression = expr(expr)?.expression??null;
         if (expression != null) {
             expression.accept(visitor);
             return Hook.Result.NULL;
@@ -223,7 +225,7 @@ public class OperatorOverloadingHandler {
     @Hook
     private static Hook.Result getType(final PsiArrayAccessExpressionImpl $this) = typeResult($this);
     
-    public static Hook.Result typeResult(final PsiExpression expr) = Hook.Result.nullToVoid(expr(expr)?.returnType ?? null);
+    public static Hook.Result typeResult(final PsiExpression expr) = Hook.Result.nullToVoid(expr(expr)?.returnType??null);
     
     private static final Set<IElementType> cannotOverload = Set.of(ANDAND, OROR);
     
@@ -305,17 +307,17 @@ public class OperatorOverloadingHandler {
     }
     
     public static @Nullable OverloadInfo resolveExprType(final PsiElement element) = switch (element) {
-        case final PsiUnaryExpression unary           -> calculateUnaryType(unary);
-        case final PsiBinaryExpression binary         -> calculateBinaryType(binary);
-        case final PsiPolyadicExpression polyadic     -> calculatePolyadicType(polyadic);
-        case final PsiAssignmentExpression assignment -> calculateAssignmentType(assignment);
-        case final PsiArrayAccessExpression access    -> calculateAccessType(access);
-        default                                       -> null;
+        case PsiUnaryExpression unary           -> calculateUnaryType(unary);
+        case PsiBinaryExpression binary         -> calculateBinaryType(binary);
+        case PsiPolyadicExpression polyadic     -> calculatePolyadicType(polyadic);
+        case PsiAssignmentExpression assignment -> calculateAssignmentType(assignment);
+        case PsiArrayAccessExpression access    -> calculateAccessType(access);
+        default                                 -> null;
     };
     
     public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null ? null :
             CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
-            // MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType)
+    // MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType)
     
     private static @Nullable PsiMethod resolveMethod(final @Nullable PsiMethodCallExpression expression)
             = expression != null && expression.resolveMethodGenerics() instanceof final MethodCandidateInfo info &&
@@ -428,12 +430,12 @@ public class OperatorOverloadingHandler {
             .forEach(consumer::process);
     
     public static @Nullable PsiExpression[] expressions(final PsiElement element) = switch (element) {
-        case final PsiUnaryExpression unary           -> new PsiExpression[]{ unary.getOperand() };
-        case final PsiBinaryExpression binary         -> new PsiExpression[]{ binary.getLOperand(), binary.getROperand() };
-        case final PsiPolyadicExpression polyadic     -> polyadic.getOperands();
-        case final PsiAssignmentExpression assignment -> new PsiExpression[]{ assignment.getLExpression(), assignment.getRExpression() };
-        case final PsiArrayAccessExpression access    -> new PsiExpression[]{ access.getArrayExpression(), access.getIndexExpression() };
-        default                                       -> null;
+        case PsiUnaryExpression unary           -> new PsiExpression[]{ unary.getOperand() };
+        case PsiBinaryExpression binary         -> new PsiExpression[]{ binary.getLOperand(), binary.getROperand() };
+        case PsiPolyadicExpression polyadic     -> polyadic.getOperands();
+        case PsiAssignmentExpression assignment -> new PsiExpression[]{ assignment.getLExpression(), assignment.getRExpression() };
+        case PsiArrayAccessExpression access    -> new PsiExpression[]{ access.getArrayExpression(), access.getIndexExpression() };
+        default                                 -> null;
     };
     
     public static int lambdaIdx(final PsiExpression expressions[], final PsiElement element) {
@@ -506,7 +508,7 @@ public class OperatorOverloadingHandler {
         final @Nullable OverloadInfo data = expr(expression);
         if (data == null)
             return Hook.Result.VOID;
-        (data.lower?.expression ?? data.expression).accept($this);
+        (data.lower?.expression??data.expression).accept($this);
         return Hook.Result.NULL;
     }
     
@@ -578,5 +580,11 @@ public class OperatorOverloadingHandler {
         }
         return new PsiLambdaParameterType(parameter);
     }
+    
+    @Hook
+    private static Hook.Result visitPrefixExpression(final UnaryPlusInspection.UnaryPlusVisitor $this, final PsiPrefixExpression expression) = Hook.Result.falseToVoid(expr(expression) != null, null);
+    
+    @Hook
+    private static Hook.Result visitPrefixExpression(final UnnecessaryUnaryMinusInspection.UnnecessaryUnaryMinusVisitor $this, final PsiPrefixExpression expression) = Hook.Result.falseToVoid(expr(expression) != null, null);
     
 }

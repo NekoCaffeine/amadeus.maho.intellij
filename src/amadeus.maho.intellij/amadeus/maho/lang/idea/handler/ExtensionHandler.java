@@ -138,7 +138,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         private static Hook.Result visitMethodCallExpression(final EvaluatorBuilderImpl.Builder $this, @Hook.Reference PsiMethodCallExpression expression) {
             if (expression.resolveMethod() instanceof ExtensionMethod extensionMethod && extensionMethod.sourceMethod().getContainingClass() instanceof PsiExtensibleClass containing) {
                 final PsiMethod sourceMethod = extensionMethod.sourceMethod();
-                final String args = Stream.concat(Stream.of(expression.getMethodExpression().getQualifierExpression()?.getText() ?? "this"),
+                final String args = Stream.concat(Stream.of(expression.getMethodExpression().getQualifierExpression()?.getText()??"this"),
                         Stream.of(expression.getArgumentList().getExpressions()).map(PsiElement::getText)).collect(Collectors.joining(", "));
                 expression = (PsiMethodCallExpression) JavaPsiFacade.getElementFactory(expression.getProject())
                         .createExpressionFromText("%s.%s(%s)".formatted(containing.getQualifiedName(), sourceMethod.getName(), args), expression);
@@ -242,7 +242,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                     } finally { guard.getAndDecrement(); }
                 });
         return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<String, Collection<ExtensionMethod>>>())
-                .computeIfAbsent(resolveScope, $ -> new ConcurrentHashMap<>()).computeIfAbsent(type.getCanonicalText(), it -> supers.stream().flatMap(node -> {
+                .computeIfAbsent(resolveScope, _ -> new ConcurrentHashMap<>()).computeIfAbsent(type.getCanonicalText(), it -> supers.stream().flatMap(node -> {
                     final PsiType contextType = psiClass == node ? type : new PsiImmediateClassType(node, TypeConversionUtil.getSuperClassSubstitutor(node, psiClass, substitutor));
                     return tuples.stream()
                             .filter(tuple -> tuple.v1.test(contextType))
@@ -343,7 +343,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                     final ConcurrentHashMap<PsiClass, Map<PsiType, ExtensionMethod>> cache = { };
                     result.add(Tuple.tuple(
                             injectType -> TypeConversionUtil.isAssignable(resolveHelper.inferTypeArguments(typeParameters, leftTypes, new PsiType[]{ injectType }, languageLevel).substitute(type), injectType),
-                            (injectNode, injectType) -> cache.computeIfAbsent(injectNode, $ -> new ConcurrentHashMap<>()).computeIfAbsent(injectType, $ -> function.apply(injectNode, injectType))));
+                            (injectNode, injectType) -> cache.computeIfAbsent(injectNode, _ -> new ConcurrentHashMap<>()).computeIfAbsent(injectType, _ -> function.apply(injectNode, injectType))));
                 });
         return result;
     }

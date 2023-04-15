@@ -17,7 +17,6 @@ import com.intellij.debugger.engine.evaluation.EvaluationContext;
 import com.intellij.debugger.engine.evaluation.EvaluationContextImpl;
 import com.intellij.debugger.impl.DebuggerUtilsEx;
 import com.intellij.debugger.jdi.MethodBytecodeUtil;
-import com.intellij.debugger.settings.NodeRendererSettings;
 import com.intellij.debugger.ui.impl.watch.ValueDescriptorImpl;
 import com.intellij.debugger.ui.tree.ValueDescriptor;
 import com.intellij.debugger.ui.tree.render.CompoundRendererProvider;
@@ -44,7 +43,10 @@ public class LambdaRenderer extends CompoundRendererProvider {
         public String getUniqueId() = "LambdaAutoToString";
         
         @Override
-        public boolean isOnDemand(final EvaluationContext context, final ValueDescriptor descriptor) = NodeRendererSettings.getInstance().getToStringRenderer().isOnDemand(context, descriptor);
+        public boolean isOnDemand(final EvaluationContext context, final ValueDescriptor descriptor) = false;
+        
+        @Override
+        public boolean isShowValue(final ValueDescriptor valueDescriptor, final EvaluationContext evaluationContext) = true;
         
         @Override
         public String calcLabel(final ValueDescriptor descriptor, final EvaluationContext context, final DescriptorLabelListener listener) {

@@ -230,7 +230,7 @@ interface Fix {
     @Hook(at = @At(var = @At.VarInsn(opcode = ASTORE, var = 4)), capture = true)
     private static Hook.Result inferTypeArguments(final Computable<PsiSubstitutor> capture, final MethodCandidateInfo $this, final ParameterTypeInferencePolicy policy, final PsiExpression arguments[], final boolean includeConstraint) {
         final PsiElement myArgumentList = (Privilege) $this.myArgumentList;
-        return { !includeConstraint ? myArgumentList == null ? PsiSubstitutor.EMPTY : MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(myArgumentList, false, capture) ?? capture.get() : capture.get() };
+        return { !includeConstraint ? myArgumentList == null ? PsiSubstitutor.EMPTY : MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(myArgumentList, false, capture)??capture.get() : capture.get() };
     }
     
     @Hook(forceReturn = true)
@@ -288,7 +288,7 @@ interface Fix {
         return { };
     }
     
-    @Hook(value = SystemBootstrap.class, isStatic = true)
+    @Hook(value = SystemBootstrap.class, isStatic = true, forceReturn = true)
     private static void loadLibrary(final String libName) {
         try {
             System.loadLibrary(libName);

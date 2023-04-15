@@ -367,14 +367,14 @@ public class AssignHandler extends BaseSyntaxHandler {
     
     // There is also room for optimization, by limiting the traversal depth and skipping nested expressions
     @Override
-    public void transformASTNode(final ASTNode root, final boolean loadingTreeElement) = ASTTraverser.forEach(root, !loadingTreeElement, PsiArrayInitializerExpressionImpl.class, AssignHandler::transformArrayInitializerExpression);
+    public void transformASTNode(final ASTNode root, final boolean loadingTreeElement) = ASTTraverser.forEach(root, true, PsiArrayInitializerExpressionImpl.class, AssignHandler::transformArrayInitializerExpression);
     
     private static void transformArrayInitializerExpression(final PsiArrayInitializerExpressionImpl expression) {
         if (type(expression) instanceof final PsiArrayInitializerBackNewExpression backNewExpression) {
             // expression.putUserData(HandlerMarker.EntryPoint.transformedKey, backNewExpression);
             replaceMarkChild(myParent(expression), expression, backNewExpression);
             final PsiExpressionListImpl argumentList = (PsiExpressionListImpl) backNewExpression.getArgumentList();
-            for (TreeElement arg = (TreeElement) argumentList?.getFirstChild()?.getNode() ?? null; arg != null; arg = arg.getTreeNext())
+            for (TreeElement arg = (TreeElement) argumentList?.getFirstChild()?.getNode()??null; arg != null; arg = arg.getTreeNext())
                 myParent(arg, argumentList);
         }
     }
@@ -556,12 +556,12 @@ public class AssignHandler extends BaseSyntaxHandler {
             if (isAvailable(project, file, editor, startElement, endElement)) {
                 final PsiMethodImpl method = (PsiMethodImpl) startElement;
                 final @Nullable PsiCodeBlock body = method.getBody();
-                final @Nullable PsiJavaToken lBrace = body?.getLBrace() ?? null;
+                final @Nullable PsiJavaToken lBrace = body?.getLBrace()??null;
                 if (lBrace != null) {
                     final @Nullable PsiExpression expression = switch (PsiTreeUtil.skipWhitespacesAndCommentsForward(lBrace)) {
-                        case final PsiReturnStatement returnStatement         -> returnStatement.getReturnValue();
-                        case final PsiExpressionStatement expressionStatement -> expressionStatement.getExpression();
-                        case null, default                                    -> null;
+                        case PsiReturnStatement returnStatement         -> returnStatement.getReturnValue();
+                        case PsiExpressionStatement expressionStatement -> expressionStatement.getExpression();
+                        case null, default                              -> null;
                     };
                     if (expression != null) {
                         final PsiExpression copy = (PsiExpression) expression.copy();
@@ -646,7 +646,7 @@ public class AssignHandler extends BaseSyntaxHandler {
                         return type.equals(method.getReturnType());
                 } else {
                     final @Nullable PsiVariable variable = parent instanceof PsiLocalVariable || parent instanceof PsiField ? (PsiVariable) parent : DefaultValueHandler.defaultVariable(expression);
-                    if (variable != null && !(variable?.getTypeElement()?.isInferredType() ?? false))
+                    if (variable != null && !(variable?.getTypeElement()?.isInferredType()??false))
                         return type.equals(variable.getType());
                 }
             }
