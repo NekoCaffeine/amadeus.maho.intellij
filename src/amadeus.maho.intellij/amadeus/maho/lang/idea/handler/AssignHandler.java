@@ -287,7 +287,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     @Hook
     private static Hook.Result getReference(final LeafPsiElement $this)
             = Hook.Result.nullToVoid($this instanceof final PsiJavaToken token && token.getParent() != null && token.getParent().getParent() instanceof final PsiArrayInitializerBackNewExpression expression ?
-            CachedValuesManager.getProjectPsiDependentCache(expression, it -> new LightElementReference(it, incompleteCode -> (JavaResolveResult[]) it.getConstructorFakeReference().multiResolve(incompleteCode), it)) : null);
+            new LightElementReference(expression, incompleteCode -> (JavaResolveResult[]) expression.getConstructorFakeReference().multiResolve(incompleteCode), expression) : null);
     
     @Hook(value = PsiScopesUtil.class, isStatic = true)
     private static Hook.Result processDummyConstructor(final MethodsProcessor processor, final PsiClass aClass) {

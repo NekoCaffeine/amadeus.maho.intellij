@@ -63,6 +63,9 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
         protected AccessLevel accessLevel(final NoArgsConstructor annotation) = annotation.value();
         
         @Override
+        protected boolean varargs(final NoArgsConstructor annotation) = annotation.varargs();
+        
+        @Override
         protected Stream<PsiField> fields(final List<PsiField> fields) = Stream.empty();
         
     }
@@ -74,10 +77,13 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
         protected AccessLevel accessLevel(final AllArgsConstructor annotation) = annotation.value();
         
         @Override
+        protected boolean varargs(final AllArgsConstructor annotation) = annotation.varargs();
+        
+        @Override
         protected Stream<PsiField> fields(final List<PsiField> fields) = fields.stream()
                 .filter(field -> !field.hasModifierProperty(PsiModifier.STATIC))
                 .filter(field -> !field.hasModifierProperty(PsiModifier.FINAL) || field.getInitializer() == null || isDefaultField(field))
-                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy() ?? false))
+                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy()??false))
                 .filter(BaseHandler::nonGenerating);
         
     }
@@ -89,10 +95,13 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
         protected AccessLevel accessLevel(final RequiredArgsConstructor annotation) = annotation.value();
         
         @Override
+        protected boolean varargs(final RequiredArgsConstructor annotation) = annotation.varargs();
+        
+        @Override
         protected Stream<PsiField> fields(final List<PsiField> fields) = fields.stream()
                 .filter(field -> !field.hasModifierProperty(PsiModifier.STATIC))
                 .filter(field -> field.hasModifierProperty(PsiModifier.FINAL) && field.getInitializer() == null || isDefaultField(field))
-                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy() ?? false))
+                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy()??false))
                 .filter(BaseHandler::nonGenerating);
         
     }
@@ -133,7 +142,9 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true, exactMatch = false)
     private static Collection<PsiMethod> getOrCreateMethods(final Collection<PsiMethod> capture, final MoveInitializerToConstructorAction $this) = capture.stream().filterNot(LightElement.class::isInstance).toList();
     
-    protected abstract AccessLevel accessLevel(final A annotation);
+    protected abstract AccessLevel accessLevel(A annotation);
+    
+    protected abstract boolean varargs(A annotation);
     
     protected Stream<PsiField> fields(final ExtensibleMembers members) = fields(members.list(ExtensibleMembers.FIELDS));
     
@@ -165,9 +176,10 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
                     final Class<? extends Annotation> annotationType = handler().value();
                     methodTree.fieldInitialized(annotationType != NoArgsConstructor.class);
                     final Function<String, String> simplify = simplify(name);
+                    final boolean varargs = varargs(annotation);
                     Stream.of(constructor.getParameterList().getParameters())
                             .peek(parameter -> simplify.apply(parameter.getName()))
-                            .map(parameter -> new LightParameter(parameter, parameter.getName(), substitutor.substitute(parameter.getType()), parameter.isVarArgs())
+                            .map(parameter -> new LightParameter(parameter, parameter.getName(), substitutor.substitute(parameter.getType()), varargs || parameter.isVarArgs())
                                     .let(result -> followAnnotation(parameter.getModifierList(), result.getModifierList())))
                             .forEach(methodTree::addParameter);
                     fields(members).forEach(field -> methodTree.addParameter(new LightDefaultParameter(methodTree, simplify.apply(field.getName()), field.getType(), false, isDefaultField(field) ? field.getInitializer() : null)));

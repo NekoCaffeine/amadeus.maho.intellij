@@ -4,8 +4,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiCodeBlock;
@@ -31,7 +33,10 @@ import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.Setter;
 import amadeus.maho.lang.idea.handler.DefaultValueHandler;
 import amadeus.maho.lang.inspection.Nullable;
+import amadeus.maho.transform.mark.Hook;
+import amadeus.maho.transform.mark.base.TransformProvider;
 
+@TransformProvider
 @Setter
 @Getter
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -99,14 +104,14 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     public LightReferenceList getThrowsList() = throwsList;
     
     @Override
-    public boolean isValid() = getContainingClass()?.isValid() ?? true;
+    public boolean isValid() = getContainingClass()?.isValid()??true;
     
     @Override
     public @Nullable PsiFile getContainingFile() {
         if (!isValid())
             return null;
         try {
-            return getContainingClass()?.getContainingFile() ?? null;
+            return getContainingClass()?.getContainingFile()??null;
         } catch (final PsiInvalidElementAccessException e) { return null; }
     }
     
@@ -183,5 +188,9 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     
     @Override
     public int hashCode() = 1;
+    
+    @Hook
+    private static Hook.Result registerChangeMethodSignatureFromUsageIntention(final PsiExpression expressions[], final HighlightInfo.Builder builder, final TextRange fixRange,
+            final JavaResolveResult candidate, final PsiElement context) = Hook.Result.falseToVoid(!(candidate.getElement() instanceof LightElement), null);
     
 }
