@@ -5,7 +5,6 @@ import com.intellij.codeInsight.javadoc.JavaDocInfoGenerator;
 import com.intellij.ide.actions.searcheverywhere.WaitForContributorsListenerWrapper;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.ui.popup.AbstractPopup;
-import com.intellij.util.io.UnInterruptibleFileChannelHandle;
 import com.intellij.workspaceModel.ide.impl.jps.serialization.JpsGlobalModelSynchronizerImpl;
 
 import amadeus.maho.transform.mark.Hook;
@@ -35,9 +34,6 @@ public interface DisableLogger {
     
     @Redirect(targetClass = AnalysisScope.class, selector = "createFilesSet", slice = @Slice(@At(method = @At.MethodInsn(name = "info"))))
     private static void info_$AnalysisScope(final Logger logger, final String msg) { }
-    
-    @Redirect(targetClass = UnInterruptibleFileChannelHandle.class, selector = "executeOperation", slice = @Slice(@At(method = @At.MethodInsn(name = "warn"))))
-    private static void warn_$UnInterruptibleFileChannelHandle(final Logger logger, final String msg) { }
     
     @Redirect(target = "com.jediterm.terminal.model.TerminalTextBuffer", selector = "getLine", slice = @Slice(@At(method = @At.MethodInsn(name = "error"))))
     private static void error_$TerminalTextBuffer(final @InvisibleType("org.slf4j.Logger") Object logger, final String msg) { }

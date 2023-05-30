@@ -25,6 +25,7 @@ import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiModifier;
+import com.intellij.psi.PsiParameter;
 import com.intellij.psi.PsiReferenceExpression;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiVariable;
@@ -83,7 +84,7 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
         protected Stream<PsiField> fields(final List<PsiField> fields) = fields.stream()
                 .filter(field -> !field.hasModifierProperty(PsiModifier.STATIC))
                 .filter(field -> !field.hasModifierProperty(PsiModifier.FINAL) || field.getInitializer() == null || isDefaultField(field))
-                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy()??false))
+                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy() ?? false))
                 .filter(BaseHandler::nonGenerating);
         
     }
@@ -101,7 +102,7 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
         protected Stream<PsiField> fields(final List<PsiField> fields) = fields.stream()
                 .filter(field -> !field.hasModifierProperty(PsiModifier.STATIC))
                 .filter(field -> field.hasModifierProperty(PsiModifier.FINAL) && field.getInitializer() == null || isDefaultField(field))
-                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy()??false))
+                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy() ?? false))
                 .filter(BaseHandler::nonGenerating);
         
     }
@@ -177,12 +178,16 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
                     methodTree.fieldInitialized(annotationType != NoArgsConstructor.class);
                     final Function<String, String> simplify = simplify(name);
                     final boolean varargs = varargs(annotation);
-                    Stream.of(constructor.getParameterList().getParameters())
+                    final List<PsiParameter> parameters = List.of(constructor.getParameterList().getParameters());
+                    final List<PsiField> fields = fields(members).toList();
+                    final @Nullable PsiVariable lastArg = varargs ? !fields.isEmpty() ? fields[-1] : !parameters.isEmpty() ? parameters[-1] : null : null;
+                    parameters.stream()
                             .peek(parameter -> simplify.apply(parameter.getName()))
-                            .map(parameter -> new LightParameter(parameter, parameter.getName(), substitutor.substitute(parameter.getType()), varargs || parameter.isVarArgs())
+                            .map(parameter -> new LightParameter(parameter, parameter.getName(), substitutor.substitute(parameter.getType()), varargs && parameter == lastArg)
                                     .let(result -> followAnnotation(parameter.getModifierList(), result.getModifierList())))
                             .forEach(methodTree::addParameter);
-                    fields(members).forEach(field -> methodTree.addParameter(new LightDefaultParameter(methodTree, simplify.apply(field.getName()), field.getType(), false, isDefaultField(field) ? field.getInitializer() : null)));
+                    fields.forEach(field -> methodTree.addParameter(
+                            new LightDefaultParameter(methodTree, simplify.apply(field.getName()), field.getType(), varargs && field == lastArg, isDefaultField(field) ? field.getInitializer() : null)));
                     if (members.shouldInject(methodTree)) {
                         methodTree.setNavigationElement(annotationTree);
                         methodTree.setContainingClass(context);

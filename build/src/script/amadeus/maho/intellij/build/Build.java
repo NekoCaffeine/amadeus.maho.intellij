@@ -50,7 +50,8 @@ public interface Build {
     Set<String> plugins = Set.of("java");
     
     // avoid analyzing unnecessary libraries, thereby improving compilation speed
-    List<String> shouldInCompile = Stream.of("app", "platform-api", "platform-impl", "util", "util-8", "util_rt", "spellchecker", "java-api", "java-impl").map(name -> name + Jar.SUFFIX).collect(Collectors.toList());
+    List<String> shouldInCompile = Stream.of("app", "app-client", "platform-api", "platform-impl", "platform-loader", "lib", "lib-client", "util", "util-8", "util_rt", "spellchecker", "java-api", "java-impl")
+            .map(name -> name + Jar.SUFFIX).collect(Collectors.toList());
     
     static Set<Module.Dependency> dependencies() = IDEA.DevKit.attachLocalInstance(Path.of(config.intellijPath), plugins, path -> shouldInCompile.contains(path.getFileName().toString())) += Module.DependencySet.maho();
     

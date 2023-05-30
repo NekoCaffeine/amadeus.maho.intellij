@@ -1,6 +1,5 @@
 package amadeus.maho.lang.idea;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -9,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Stream;
 
 import com.intellij.codeInsight.AnnotationTargetUtil;
 import com.intellij.codeInsight.AutoPopupControllerImpl;
@@ -25,7 +23,6 @@ import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.redundantCast.RedundantCastInspection;
 import com.intellij.concurrency.JobLauncher;
 import com.intellij.configurationStore.schemeManager.SchemeManagerBase;
-import com.intellij.diagnostic.IdeaFreezeReporter;
 import com.intellij.find.FindModel;
 import com.intellij.find.impl.FindInProjectUtil;
 import com.intellij.ide.actions.CopyTBXReferenceProvider;
@@ -230,7 +227,7 @@ interface Fix {
     @Hook(at = @At(var = @At.VarInsn(opcode = ASTORE, var = 4)), capture = true)
     private static Hook.Result inferTypeArguments(final Computable<PsiSubstitutor> capture, final MethodCandidateInfo $this, final ParameterTypeInferencePolicy policy, final PsiExpression arguments[], final boolean includeConstraint) {
         final PsiElement myArgumentList = (Privilege) $this.myArgumentList;
-        return { !includeConstraint ? myArgumentList == null ? PsiSubstitutor.EMPTY : MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(myArgumentList, false, capture)??capture.get() : capture.get() };
+        return { !includeConstraint ? myArgumentList == null ? PsiSubstitutor.EMPTY : MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(myArgumentList, false, capture) ?? capture.get() : capture.get() };
     }
     
     @Hook(forceReturn = true)
@@ -242,12 +239,6 @@ interface Fix {
     
     @Hook(value = ControlFlowUtil.class, isStatic = true, at = @At(type = @At.TypeInsn(opcode = INSTANCEOF, type = PsiLambdaExpression.class)), capture = true)
     private static Hook.Result findCodeFragment(final PsiElement capture, final PsiElement element) = Hook.Result.falseToVoid(capture instanceof PsiRecordHeader, capture);
-    
-    @Hook(at = @At(method = @At.MethodInsn(name = "is")), before = false, capture = true)
-    private static boolean uiFreezeRecorded(final boolean capture, final IdeaFreezeReporter $this, final long durationMs, final @Nullable File reportDir) = capture && ((Privilege) $this.myDumpTask).getThreadInfos().stream().noneMatch(
-            infos -> Stream.of(infos).filter(info -> info.getThreadName().startsWith("AWT-EventQueue")).anyMatch(info -> info.getStackTrace().length > 0 && checkStackFrame(info.getStackTrace()[0])));
-    
-    private static boolean checkStackFrame(final StackTraceElement element) = element.getClassName().equals("sun.java2d.windows.GDIBlitLoops");
     
     // fixed find in files jrt path
     @Hook(value = FindInProjectUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))

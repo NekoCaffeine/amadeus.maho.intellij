@@ -15,7 +15,7 @@ import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.wm.impl.IdeFrameDecorator;
 import com.intellij.openapi.wm.impl.customFrameDecorations.header.CustomHeader;
 import com.intellij.ui.AppIcon;
-import com.intellij.ui.AppUIUtil;
+import com.intellij.ui.AppUIUtilKt;
 import com.intellij.ui.Splash;
 import com.intellij.ui.WindowMoveListener;
 import com.intellij.ui.WindowResizeListener;
@@ -96,7 +96,7 @@ public interface IdeFrameDecoratorHelper {
     
     private static void decoration(final Window window) {
         if (!window.isDisplayable() && shouldEnable()) {
-            AppUIUtil.updateWindowIcon(window);
+            AppUIUtilKt.updateAppWindowIcon(window);
             if (window instanceof final RootPaneContainer container) {
                 switch (window) {
                     case Frame frame   -> frame.setUndecorated(true);

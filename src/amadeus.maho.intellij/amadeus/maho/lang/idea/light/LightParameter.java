@@ -3,7 +3,9 @@ package amadeus.maho.lang.idea.light;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.JavaPsiFacade;
+import com.intellij.psi.PsiArrayType;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiEllipsisType;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiInvalidElementAccessException;
 import com.intellij.psi.PsiType;
@@ -22,11 +24,11 @@ public class LightParameter extends com.intellij.psi.impl.light.LightParameter i
     LightModifierList modifierList = { this };
     
     public LightParameter(final PsiElement context, final String name, final String type, final boolean isVarArgs)
-            = super(name, JavaPsiFacade.getElementFactory(context.getProject()).createTypeFromText(type, context), context, JavaLanguage.INSTANCE, isVarArgs);
+            = super(name, mapEllipsisType(JavaPsiFacade.getElementFactory(context.getProject()).createTypeFromText(type, context), isVarArgs), context, JavaLanguage.INSTANCE, isVarArgs);
     
-    public LightParameter(final PsiElement context, final String name, final PsiType type, final boolean isVarArgs) = super(name, type, context, JavaLanguage.INSTANCE, isVarArgs);
+    public LightParameter(final PsiElement context, final String name, final PsiType type, final boolean isVarArgs) = super(name, mapEllipsisType(type, isVarArgs), context, JavaLanguage.INSTANCE, isVarArgs);
     
-    public LightParameter(final PsiField context) = this(context, context.getName(), context.getType(), false);
+    public LightParameter(final PsiField context, final boolean isVarArgs) = this(context, context.getName(), mapEllipsisType(context.getType(), isVarArgs), isVarArgs);
     
     @Override
     public LightModifierList getModifierList() = modifierList;
@@ -58,5 +60,7 @@ public class LightParameter extends com.intellij.psi.impl.light.LightParameter i
     
     @Override
     public int hashCode() = ObjectHelper.hashCode(getName(), getType());
+    
+    public static PsiType mapEllipsisType(final PsiType type, final boolean isVarArgs) = isVarArgs && type instanceof PsiArrayType arrayType ? new PsiEllipsisType(arrayType.getComponentType(), arrayType.getAnnotations()) : type;
     
 }

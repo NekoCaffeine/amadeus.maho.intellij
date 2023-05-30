@@ -120,6 +120,7 @@ import com.intellij.psi.search.SearchScope;
 import com.intellij.psi.search.searches.MethodReferencesSearch;
 import com.intellij.psi.search.searches.OverridingMethodsSearch;
 import com.intellij.psi.search.searches.ReferencesSearch;
+import com.intellij.psi.stubs.LightStubBuilder;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiTypesUtil;
@@ -186,7 +187,7 @@ public class HandlerMarker {
             String name;
             
             @Override
-            protected TextRange calculateDefaultRangeInElement() = getElement().getNameIdentifier()?.getTextRangeInParent()??super.calculateDefaultRangeInElement();
+            protected TextRange calculateDefaultRangeInElement() = getElement().getNameIdentifier()?.getTextRangeInParent() ?? super.calculateDefaultRangeInElement();
             
             @Override
             public PsiElement handleElementRename(final String newElementName) throws IncorrectOperationException = getElement().setName(remapName(newElementName, getElement(), name));
@@ -266,7 +267,7 @@ public class HandlerMarker {
         
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
         private static @Nullable UsageType getUsageType(final @Nullable UsageType capture, final JavaUsageTypeProvider $this, final PsiElement element, final UsageTarget targets[])
-                = capture??switch (element) {
+                = capture ?? switch (element) {
             case PsiMethod method   -> associationMethod;
             case PsiJavaToken token -> operatorOverloading;
             default                 -> null;
@@ -327,7 +328,7 @@ public class HandlerMarker {
                 for (final Pair<PsiElement, TextRange> stringUsage : stringUsages)
                     if (checkRangeContainsOffset(offset, stringUsage.second, stringUsage.first))
                         return stringUsage.first;
-                return nameIdentifier?.getContainingFile()?.findElementAt(offset)??null;
+                return nameIdentifier?.getContainingFile()?.findElementAt(offset) ?? null;
             }
             
             protected boolean checkRangeContainsOffset(final int offset, final TextRange textRange, final PsiElement element) = checkRangeContainsOffset(offset, textRange, element, element.getTextRange().getStartOffset());
@@ -566,7 +567,7 @@ public class HandlerMarker {
             final Project project = element.getProject();
             final Document document = PsiDocumentManager.getInstance(project).getDocument(file);
             final @Nullable TextRange dirtyScope = document == null ? null : DaemonCodeAnalyzerEx.getInstanceEx(project).getFileStatusMap().getFileDirtyScope(document, file, com.intellij.codeHighlighting.Pass.UPDATE_ALL);
-            return { get(file, dirtyScope??file.getTextRange()) };
+            return { get(file, dirtyScope ?? file.getTextRange()) };
         }
         
         @Override
@@ -619,7 +620,7 @@ public class HandlerMarker {
             if (lastDot == -1)
                 return null;
             final String outerName = qualifiedName.substring(0, lastDot), innerName = qualifiedName.substring(lastDot + 1);
-            return innerName.isEmpty() || outerName.isEmpty() ? null : facade.findClass(outerName, scope)?.findInnerClassByName(innerName, false)??null;
+            return innerName.isEmpty() || outerName.isEmpty() ? null : facade.findClass(outerName, scope)?.findInnerClassByName(innerName, false) ?? null;
         }
         
         @Override
@@ -756,6 +757,12 @@ public class HandlerMarker {
         
         public static final ThreadLocal<AtomicInteger> collectGuard = ThreadLocal.withInitial(AtomicInteger::new), loadTreeGuard = ThreadLocal.withInitial(AtomicInteger::new);
         
+        @Hook(exactMatch = false)
+        private static void buildStubTree_$Enter(final LightStubBuilder $this) = collectGuard.get().getAndIncrement();
+        
+        @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.FINALLY)), exactMatch = false)
+        private static void buildStubTree_$Exit(final LightStubBuilder $this) = collectGuard.get().getAndDecrement();
+        
         // @Hook(at = @At(method = @At.MethodInsn(name = "performPsiModification")), before = false)
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
         private static void ensureParsed(final LazyParseableElement $this) {
@@ -858,7 +865,7 @@ public class HandlerMarker {
         
         @Hook
         private static Hook.Result findFieldByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
-                = checkBases ? Hook.Result.VOID : new Hook.Result(members($this).map(ExtensibleMembers.FIELDS)[name]?.stream()?.findFirst()?.orElse(null)??null);
+                = checkBases ? Hook.Result.VOID : new Hook.Result(members($this).map(ExtensibleMembers.FIELDS)[name]?.stream()?.findFirst()?.orElse(null) ?? null);
         
         @Hook
         private static Hook.Result findMethodsByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
@@ -866,7 +873,7 @@ public class HandlerMarker {
         
         @Hook
         private static Hook.Result findInnerClassByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
-                = checkBases ? Hook.Result.VOID : new Hook.Result(members($this).map(ExtensibleMembers.INNER_CLASSES)[name]?.stream()?.findFirst()?.orElse(null)??null);
+                = checkBases ? Hook.Result.VOID : new Hook.Result(members($this).map(ExtensibleMembers.INNER_CLASSES)[name]?.stream()?.findFirst()?.orElse(null) ?? null);
         
         @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true, metadata = @TransformMetadata(order = -1))
         private static boolean processDeclarationsInClass(
@@ -971,9 +978,9 @@ public class HandlerMarker {
         }
         
         @Hook(value = HighlightUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "getType"), ordinal = 0), before = false, capture = true)
-        private static PsiType checkVariableInitializerType(final PsiType capture, final PsiVariable variable) = unwrapTypeOrNull(variable)??capture;
+        private static PsiType checkVariableInitializerType(final PsiType capture, final PsiVariable variable) = unwrapTypeOrNull(variable) ?? capture;
         
-        public static @Nullable PsiType unwrapType(final PsiVariable variable) = unwrapTypeOrNull(variable)??variable.getType();
+        public static @Nullable PsiType unwrapType(final PsiVariable variable) = unwrapTypeOrNull(variable) ?? variable.getType();
         
         public static @Nullable PsiType unwrapTypeOrNull(final PsiVariable variable) = CachedValuesManager.getProjectPsiDependentCache(variable, it -> {
             final @Nullable PsiTypeElement typeElement = variable.getTypeElement();
@@ -1028,7 +1035,7 @@ public class HandlerMarker {
         public static <A extends Annotation> List<Tuple2<A, PsiAnnotation>> getAnnotationsByTypeWithOuter(final PsiModifierListOwner tree, final Class<A> annotationType) {
             for (final BaseHandler<Annotation> baseHandler : Handler.Marker.baseHandlers())
                 if (baseHandler.handler().value() == annotationType)
-                    return getAnnotationsByTypeWithOuter(tree, (BaseHandler<A>) baseHandler)?.getValue()??List.<Tuple2<A, PsiAnnotation>>of();
+                    return getAnnotationsByTypeWithOuter(tree, (BaseHandler<A>) baseHandler)?.getValue() ?? List.<Tuple2<A, PsiAnnotation>>of();
             return getAnnotationsByType(tree, annotationType);
         }
         
