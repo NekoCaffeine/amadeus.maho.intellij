@@ -180,14 +180,14 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
                     final boolean varargs = varargs(annotation);
                     final List<PsiParameter> parameters = List.of(constructor.getParameterList().getParameters());
                     final List<PsiField> fields = fields(members).toList();
-                    final @Nullable PsiVariable lastArg = varargs ? !fields.isEmpty() ? fields[-1] : !parameters.isEmpty() ? parameters[-1] : null : null;
+                    final @Nullable PsiVariable lastArg = !fields.isEmpty() ? fields[-1] : !parameters.isEmpty() ? parameters[-1] : null;
                     parameters.stream()
                             .peek(parameter -> simplify.apply(parameter.getName()))
-                            .map(parameter -> new LightParameter(parameter, parameter.getName(), substitutor.substitute(parameter.getType()), varargs && parameter == lastArg)
+                            .map(parameter -> new LightParameter(parameter, parameter.getName(), substitutor.substitute(parameter.getType()), parameter == lastArg && (varargs || parameter.isVarArgs()))
                                     .let(result -> followAnnotation(parameter.getModifierList(), result.getModifierList())))
                             .forEach(methodTree::addParameter);
                     fields.forEach(field -> methodTree.addParameter(
-                            new LightDefaultParameter(methodTree, simplify.apply(field.getName()), field.getType(), varargs && field == lastArg, isDefaultField(field) ? field.getInitializer() : null)));
+                            new LightDefaultParameter(methodTree, simplify.apply(field.getName()), field.getType(), field == lastArg && varargs, isDefaultField(field) ? field.getInitializer() : null)));
                     if (members.shouldInject(methodTree)) {
                         methodTree.setNavigationElement(annotationTree);
                         methodTree.setContainingClass(context);

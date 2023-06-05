@@ -1,5 +1,6 @@
 package amadeus.maho.lang.idea;
 
+import java.util.function.Supplier;
 import javax.swing.JComponent;
 
 import com.intellij.codeInsight.daemon.impl.analysis.AnnotationsHighlightUtil;
@@ -7,6 +8,7 @@ import com.intellij.debugger.impl.InvokeThread;
 import com.intellij.diagnostic.LoadingState;
 import com.intellij.ide.SystemHealthMonitorKt;
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
+import com.intellij.openapi.actionSystem.impl.ActionUpdater;
 import com.intellij.openapi.application.TransactionGuardImpl;
 import com.intellij.openapi.application.impl.ApplicationImpl;
 import com.intellij.openapi.diagnostic.Logger;
@@ -107,5 +109,8 @@ interface DisableCheck {
     
     @Hook(forceReturn = true)
     private static void inconsistencyDetected(final StubProcessingHelperBase $this, final ObjectStubTree stubTree, final PsiFileWithStubSupport support) = (Privilege) $this.onInternalError(support.getVirtualFile());
+    
+    @Hook(forceReturn = true)
+    private static <T> T computeOnEdt(final ActionUpdater $this, final Object action, final String operationName, final Supplier<? extends T> call, final boolean noRulesInEDT) = (Privilege) $this.computeOnEdt(call);
     
 }

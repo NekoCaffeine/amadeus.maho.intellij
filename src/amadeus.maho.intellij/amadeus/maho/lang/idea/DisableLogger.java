@@ -5,6 +5,7 @@ import com.intellij.codeInsight.javadoc.JavaDocInfoGenerator;
 import com.intellij.ide.actions.searcheverywhere.WaitForContributorsListenerWrapper;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.ui.popup.AbstractPopup;
+import com.intellij.util.xmlb.BeanBinding;
 import com.intellij.workspaceModel.ide.impl.jps.serialization.JpsGlobalModelSynchronizerImpl;
 
 import amadeus.maho.transform.mark.Hook;
@@ -37,5 +38,11 @@ public interface DisableLogger {
     
     @Redirect(target = "com.jediterm.terminal.model.TerminalTextBuffer", selector = "getLine", slice = @Slice(@At(method = @At.MethodInsn(name = "error"))))
     private static void error_$TerminalTextBuffer(final @InvisibleType("org.slf4j.Logger") Object logger, final String msg) { }
+    
+    @Redirect(target = "com.intellij.featureStatistics.fusCollectors.WSLInstallationsCollector", selector = "getMetrics", slice = @Slice(@At(method = @At.MethodInsn(name = "warn"))))
+    private static void warn_$TerminalTextBuffer(final Logger logger, final String msg) { }
+    
+    @Hook(value = BeanBinding.class, isStatic = true, forceReturn = true)
+    private static boolean isAssertBindings(final Class<?> owner) = true;
     
 }
