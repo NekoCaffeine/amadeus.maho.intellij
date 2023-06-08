@@ -5,7 +5,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -138,7 +137,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         private static Hook.Result visitMethodCallExpression(final EvaluatorBuilderImpl.Builder $this, @Hook.Reference PsiMethodCallExpression expression) {
             if (expression.resolveMethod() instanceof ExtensionMethod extensionMethod && extensionMethod.sourceMethod().getContainingClass() instanceof PsiExtensibleClass containing) {
                 final PsiMethod sourceMethod = extensionMethod.sourceMethod();
-                final String args = Stream.concat(Stream.of(expression.getMethodExpression().getQualifierExpression()?.getText()??"this"),
+                final String args = Stream.concat(Stream.of(expression.getMethodExpression().getQualifierExpression()?.getText() ?? "this"),
                         Stream.of(expression.getArgumentList().getExpressions()).map(PsiElement::getText)).collect(Collectors.joining(", "));
                 expression = (PsiMethodCallExpression) JavaPsiFacade.getElementFactory(expression.getProject())
                         .createExpressionFromText("%s.%s(%s)".formatted(containing.getQualifiedName(), sourceMethod.getName(), args), expression);
@@ -215,8 +214,8 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                 final PsiType finalType = type;
                 final PsiSubstitutor finalSubstitutor = substitutor;
                 return IDEAContext.computeReadActionIgnoreDumbMode(() -> {
-                    final Stream<ExtensionMethod> stream = memberCache(resolveScope, psiClass, finalType, supers, finalSubstitutor).stream();
-                    return (name == null ? stream : stream.filter(method -> name.equals(method.getName())))
+                    final Collection<ExtensionMethod> cache = memberCache(resolveScope, psiClass, finalType, supers, finalSubstitutor);
+                    return (name == null ? cache.stream() : cache.stream().filter(method -> name.equals(method.getName())))
                             .filter(method -> checkMethod(collect, providerRecord, method))
                             .allMatch(method -> processor.execute(method, state));
                 });
@@ -332,7 +331,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                                 .forEach(lightMethod::addException);
                         Stream.of(methodNode.getTypeParameters())
                                 .filter(targetTypeParameter -> !dropTypeParameters.contains(targetTypeParameter))
-                                .forEach(((LightTypeParameterListBuilder) Objects.requireNonNull(lightMethod.getTypeParameterList()))::addParameter);
+                                .forEach(((LightTypeParameterListBuilder) lightMethod.getTypeParameterList())::addParameter);
                         lightMethod.setNavigationElement(methodNode);
                         lightMethod.setContainingClass(injectNode);
                         if (injectNode.isInterface())
