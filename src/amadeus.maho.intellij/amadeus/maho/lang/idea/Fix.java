@@ -15,6 +15,7 @@ import com.intellij.codeInsight.completion.CompletionPhase;
 import com.intellij.codeInsight.completion.CompletionType;
 import com.intellij.codeInsight.completion.actions.BaseCodeCompletionAction;
 import com.intellij.codeInsight.daemon.impl.LibrarySourceNotificationProvider;
+import com.intellij.codeInsight.daemon.impl.analysis.GenericsHighlightUtil;
 import com.intellij.codeInsight.folding.impl.JavaFoldingBuilderBase;
 import com.intellij.codeInsight.generation.GenerateEqualsHandler;
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerBase;
@@ -109,7 +110,7 @@ interface Fix {
     private static Hook.Result doOpen(final Path dir, final Path toSelect) { // fucking slow, EDT
         if (!(SystemInfo.isWindows && JnaLoader.isLoaded()) || Thread.currentThread() instanceof OpenThread)
             return Hook.Result.VOID;
-        new OpenThread(() -> (Privilege) RevealFileAction.doOpen(dir, toSelect)).start();
+        new OpenThread(() -> (Privilege) RevealFileAction.doOpen(dir, toSelect)).start(); // FIXME IDEA-BUG
         return Hook.Result.NULL;
     }
     
@@ -270,6 +271,12 @@ interface Fix {
     private static int getNonPhysicalCopy(final int capture, final Map<TextRange, PsiFile> fragmentCache, final JavaFunctionalExpressionIndex.IndexEntry entry, final PsiFunctionalExpression expression) {
         final PsiMember member = PsiTreeUtil.getStubOrPsiParentOfType(expression, PsiMember.class);
         return member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? capture + field.getTypeElement().getText().length() + 1 : capture;
+    }
+    
+    @Hook(value = GenericsHighlightUtil.class, isStatic = true)
+    private static Hook.Result hasUnrelatedDefaults(@Hook.Reference List<? extends PsiClass> defaults) {
+        defaults = defaults.stream().distinct().toList();
+        return { };
     }
     
     @Hook(value = ParameterInfoUtils.class, isStatic = true)
