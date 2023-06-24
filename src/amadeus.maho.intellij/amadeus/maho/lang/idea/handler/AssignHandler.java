@@ -374,7 +374,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             // expression.putUserData(HandlerMarker.EntryPoint.transformedKey, backNewExpression);
             replaceMarkChild(myParent(expression), expression, backNewExpression);
             final PsiExpressionListImpl argumentList = (PsiExpressionListImpl) backNewExpression.getArgumentList();
-            for (TreeElement arg = (TreeElement) argumentList?.getFirstChild()?.getNode()??null; arg != null; arg = arg.getTreeNext())
+            for (TreeElement arg = (TreeElement) argumentList?.getFirstChild()?.getNode() ?? null; arg != null; arg = arg.getTreeNext())
                 myParent(arg, argumentList);
         }
     }
@@ -556,7 +556,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             if (isAvailable(project, file, editor, startElement, endElement)) {
                 final PsiMethodImpl method = (PsiMethodImpl) startElement;
                 final @Nullable PsiCodeBlock body = method.getBody();
-                final @Nullable PsiJavaToken lBrace = body?.getLBrace()??null;
+                final @Nullable PsiJavaToken lBrace = body?.getLBrace() ?? null;
                 if (lBrace != null) {
                     final @Nullable PsiExpression expression = switch (PsiTreeUtil.skipWhitespacesAndCommentsForward(lBrace)) {
                         case PsiReturnStatement returnStatement         -> returnStatement.getReturnValue();
@@ -646,7 +646,7 @@ public class AssignHandler extends BaseSyntaxHandler {
                         return type.equals(method.getReturnType());
                 } else {
                     final @Nullable PsiVariable variable = parent instanceof PsiLocalVariable || parent instanceof PsiField ? (PsiVariable) parent : DefaultValueHandler.defaultVariable(expression);
-                    if (variable != null && !(variable?.getTypeElement()?.isInferredType()??false))
+                    if (variable != null && !(variable?.getTypeElement()?.isInferredType() ?? false))
                         return type.equals(variable.getType());
                 }
             }
