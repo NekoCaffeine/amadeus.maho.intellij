@@ -25,26 +25,26 @@ import static amadeus.maho.util.math.MathHelper.max;
 import static org.objectweb.asm.Opcodes.*;
 
 public enum HookResultInjector implements Injector {
-    
+
     @Getter
     instance;
-    
+
     @Override
     public @Nullable byte[] transform(final @Nullable Module module, final @Nullable ClassLoader loader, final @Nullable String className,
-            final @Nullable Class<?> classBeingRedefined, final @Nullable ProtectionDomain protectionDomain, final @Nullable byte[] bytecode) {
-        if (classBeingRedefined != null && classBeingRedefined.getName().equals(target())) {
+                                      final @Nullable Class<?> classBeingRedefined, final @Nullable ProtectionDomain protectionDomain, final @Nullable byte[] bytecode) {
+        if (className != null && className.equals(className()) || classBeingRedefined != null && classBeingRedefined.getName().equals(target())) {
             Maho.debug("HookResultInjector -> com.intellij.ide.plugins.cl.PluginClassLoader");
-            final ClassReader reader = { bytecode };
-            final ClassNode node = { };
+            final ClassReader reader = { bytecode};
+            final ClassNode node = {};
             reader.accept(node, 0);
             for (final MethodNode methodNode : node.methods)
                 if (methodNode.name.equals("tryLoadingClass") && methodNode.desc.equals("(Ljava/lang/String;Z)Ljava/lang/Class;")) {
                     Maho.debug("HookResultInjector -> com.intellij.ide.plugins.cl.PluginClassLoader::tryLoadingClass");
-                    final InsnList instructions = { };
+                    final InsnList instructions = {};
                     instructions.add(new LdcInsnNode("amadeus.maho.transform.mark.Hook$Result"));
                     instructions.add(new VarInsnNode(ALOAD, 1));
                     instructions.add(new MethodInsnNode(INVOKEVIRTUAL, "java/lang/Object", "equals", "(Ljava/lang/Object;)Z"));
-                    final LabelNode label = { };
+                    final LabelNode label = {};
                     instructions.add(new JumpInsnNode(IFEQ, label));
                     instructions.add(new VarInsnNode(ALOAD, 0));
                     instructions.add(new FieldInsnNode(GETFIELD, "com/intellij/ide/plugins/cl/PluginClassLoader", "coreLoader", "Ljava/lang/ClassLoader;"));
@@ -56,14 +56,17 @@ public enum HookResultInjector implements Injector {
                     methodNode.instructions.insert(instructions);
                     methodNode.maxStack = max(methodNode.maxStack, 1);
                 }
-            final ClassWriter writer = { 0 };
+            final ClassWriter writer = { 0};
             node.accept(writer);
             return writer.toByteArray();
         }
         return null;
     }
-    
+
+    @Override
+    public String className() = "com/intellij/ide/plugins/cl/PluginClassLoader";
+
     @Override
     public String target() = "com.intellij.ide.plugins.cl.PluginClassLoader";
-    
+
 }

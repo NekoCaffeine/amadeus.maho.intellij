@@ -140,7 +140,7 @@ public class BranchHandler {
     public static <T extends PsiElement> Hook.Result ifMyProblem(final NullabilityProblemKind<T> $this, final NullabilityProblemKind.NullabilityProblem<?> problem, final Consumer<? super T> consumer) {
         if ($this == callNPE || $this == fieldAccessNPE) {
             final NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
-            if (myProblem != null && isSafeAccess((PsiExpression) ($this == fieldAccessNPE ? myProblem.getAnchor().getParent() : myProblem.getAnchor())))
+            if (myProblem != null && ($this == fieldAccessNPE ? myProblem.getAnchor().getParent() : myProblem.getAnchor()) instanceof PsiExpression expression && isSafeAccess(expression))
                 return Hook.Result.NULL;
         }
         return Hook.Result.VOID;

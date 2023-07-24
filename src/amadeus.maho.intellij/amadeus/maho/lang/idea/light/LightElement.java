@@ -30,15 +30,11 @@ public interface LightElement extends ModificationTracker, SyntheticElement {
     
     default @Nullable String mark() = null;
     
-    default @Nullable String location() {
-        final @Nullable String mark = mark();
-        return mark != null ? mark : equivalents().stream()
-                .filter(PsiAnnotation.class::isInstance)
-                .map(PsiAnnotation.class::cast)
-                .findFirst()
-                .map(PsiAnnotation::getText)
-                .orElse(null);
-    }
+    default @Nullable String location() = mark() ?? equivalents().stream()
+            .cast(PsiAnnotation.class)
+            .findFirst()
+            .map(PsiAnnotation::getText)
+            .orElse(null);
     
     static boolean equivalentTo(final LightElement light, final PsiElement element) = light.equivalents().stream().anyMatch(it -> it.isEquivalentTo(element));
     
@@ -46,7 +42,7 @@ public interface LightElement extends ModificationTracker, SyntheticElement {
     private static @Nullable PsiMethod getMapToOverrideImplement(final PsiMethod capture, final PsiClass aClass, final boolean toImplement, final boolean skipImplemented) = capture instanceof LightElement ? null : capture;
     
     @Hook(value = OverrideImplementUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "removeIf")), capture = true)
-    private static @Nullable Predicate<PsiMethod> overrideOrImplementMethod(final Predicate<PsiMethod> capture, final PsiClass aClass, final PsiMethod method, final PsiSubstitutor substitutor,
+    private static Predicate<PsiMethod> overrideOrImplementMethod(final Predicate<PsiMethod> capture, final PsiClass aClass, final PsiMethod method, final PsiSubstitutor substitutor,
             final boolean toCopyJavaDoc, final boolean insertOverrideIfPossible) = it -> {
         final PsiMethod find = aClass.findMethodBySignature(it, false);
         return find != null && !(find instanceof LightElement);

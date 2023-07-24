@@ -55,7 +55,8 @@ public class CodePathPerceptionRenderer extends CompoundRendererProvider {
         
         @Override
         public void action() {
-            if (isEvaluated) return;
+            if (isEvaluated)
+                return;
             try {
                 final ObjectReference reference = (ObjectReference) value();
                 // noinspection SpellCheckingInspection

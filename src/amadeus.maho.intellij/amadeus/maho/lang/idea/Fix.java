@@ -34,9 +34,12 @@ import com.intellij.lang.folding.CustomFoldingBuilder;
 import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
 import com.intellij.lang.parameterInfo.ParameterInfoUtils;
 import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
+import com.intellij.openapi.options.ex.ConfigurableWrapper;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicatorProvider;
@@ -77,6 +80,7 @@ import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.scope.conflictResolvers.JavaMethodsConflictResolver;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.ui.IconDeferrerImpl;
 import com.intellij.util.Processor;
 import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndexEx;
@@ -85,6 +89,7 @@ import com.intellij.util.indexing.UnindexedFilesUpdater;
 import amadeus.maho.lang.NoArgsConstructor;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.SneakyThrows;
+import amadeus.maho.lang.inspection.Fixed;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.Redirect;
@@ -110,12 +115,22 @@ interface Fix {
     private static Hook.Result doOpen(final Path dir, final Path toSelect) { // fucking slow, EDT
         if (!(SystemInfo.isWindows && JnaLoader.isLoaded()) || Thread.currentThread() instanceof OpenThread)
             return Hook.Result.VOID;
-        new OpenThread(() -> (Privilege) RevealFileAction.doOpen(dir, toSelect)).start(); // FIXME IDEA-BUG
+        new OpenThread(() -> (Privilege) RevealFileAction.doOpen(dir, toSelect)).start();
         return Hook.Result.NULL;
     }
     
     @Redirect(targetClass = RevealFileAction.class, slice = @Slice(@At(method = @At.MethodInsn(name = "error"))))
     private static Hook.Result openViaShellApi(final String message) = Hook.Result.NULL;
+    
+    @Fixed(domain = "JetBrains", shortName = "IDEA-255878", url = "https://youtrack.jetbrains.com/issue/IDEA-255878/UI-thread-deadlock-application-freeze-upon-com.intellij.ui.IconDeferrerImpl.clearCache")
+    @Hook
+    private static Hook.Result clearCache(final IconDeferrerImpl $this) {
+        final Application application = ApplicationManager.getApplication();
+        if (application.isDispatchThread())
+            return Hook.Result.VOID;
+        application.invokeLaterOnWriteThread($this::clearCache);
+        return Hook.Result.NULL;
+    }
     
     @Hook
     private static Hook.Result addOccurrence(final HighlightUsagesHandlerBase $this, final @Nullable PsiElement element) = Hook.Result.falseToVoid(element == null, null);
@@ -131,8 +146,7 @@ interface Fix {
     
     private static ProgressIndicator getOrCreateIndicator() {
         @Nullable ProgressIndicator progress = ProgressIndicatorProvider.getGlobalProgressIndicator();
-        if (progress == null)
-            progress = new EmptyProgressIndicator();
+        if (progress == null) progress = new EmptyProgressIndicator();
         progress.setIndeterminate(false);
         return progress;
     }
@@ -146,13 +160,7 @@ interface Fix {
             resultMap[name] = nameIndex.get(name, project, scope);
             return true;
         });
-        return {
-                names.stream()
-                        .map(resultMap::get)
-                        .allMatch(collection -> collection.stream()
-                        .peek(it -> ProgressIndicatorProvider.checkCanceled())
-                        .allMatch(processor::process))
-        };
+        return { names.stream().map(resultMap::get).allMatch(collection -> collection.stream().peek(it -> ProgressIndicatorProvider.checkCanceled()).allMatch(processor::process)) };
     }
     
     @Hook(value = ClsParsingUtil.class, isStatic = true)
@@ -166,8 +174,7 @@ interface Fix {
     
     // Fix the color scheme selected by users being overwritten by the default color scheme of the current theme due to inconsistent initialization order
     @Hook
-    private static Hook.Result setCurrent(final SchemeManagerBase $this, final Object scheme, final boolean notify, final boolean processChangeSynchronously)
-    = Hook.Result.falseToVoid(scheme instanceof EditorColorsScheme && CallerContext.Stack.walker().walk(stream -> stream.anyMatch(frame -> frame.getMethodName().equals("initScheme"))) && setCurrentCounter.getAndIncrement() == 0);
+    private static Hook.Result setCurrent(final SchemeManagerBase $this, final Object scheme, final boolean notify, final boolean processChangeSynchronously) = Hook.Result.falseToVoid(scheme instanceof EditorColorsScheme && CallerContext.Stack.walker().walk(stream -> stream.anyMatch(frame -> frame.getMethodName().equals("initScheme"))) && setCurrentCounter.getAndIncrement() == 0);
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static boolean isDumbAware(final boolean capture, final CustomFoldingBuilder $this) = capture || !($this instanceof JavaFoldingBuilderBase);
@@ -181,9 +188,8 @@ interface Fix {
     
     // <T> @A T, '@A' not applicable to type use
     @Hook(value = AnnotationTargetUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static PsiAnnotation.TargetType[] getTargetsForLocation(final PsiAnnotation.TargetType capture[], final @Nullable PsiAnnotationOwner owner)
-    = owner instanceof final PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement && PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof final PsiMethod method &&
-      method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod)) ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
+    private static PsiAnnotation.TargetType[] getTargetsForLocation(final PsiAnnotation.TargetType capture[], final @Nullable PsiAnnotationOwner owner) =
+    owner instanceof final PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement && PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof final PsiMethod method && method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod)) ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
     
     // This eliminates the need to wait for input to stop for a period of time before the auto-complete candidate prompt appears
     @Hook(metadata = @TransformMetadata(disable = "disable.fast.code.completion"))
@@ -196,8 +202,7 @@ interface Fix {
     
     // Fixed the problem of stupidly disabling the completion when the input is too fast in synchronous completion
     @Hook(at = @At(method = @At.MethodInsn(name = "isPhase")), capture = true, metadata = @TransformMetadata(disable = "disable.fast.code.completion"))
-    private static Class<? extends CompletionPhase>[] scheduleAutoPopup(final Class<? extends CompletionPhase>[] capture, final AutoPopupControllerImpl $this, final Editor editor, final CompletionType completionType,
-            final @Nullable Condition<? super PsiFile> condition) = ArrayHelper.add(capture, CompletionPhase.ItemsCalculated.class);
+    private static Class<? extends CompletionPhase>[] scheduleAutoPopup(final Class<? extends CompletionPhase>[] capture, final AutoPopupControllerImpl $this, final Editor editor, final CompletionType completionType, final @Nullable Condition<? super PsiFile> condition) = ArrayHelper.add(capture, CompletionPhase.ItemsCalculated.class);
     
     // Some annotations(e.g. @Mutable) will generate initialization expression
     @Hook(forceReturn = true)
@@ -235,8 +240,7 @@ interface Fix {
     private static @Nullable CandidateInfo resolveConflict(final JavaMethodsConflictResolver $this, final List<CandidateInfo> conflicts) = (Privilege) $this.guardedOverloadResolution(conflicts);
     
     @Hook
-    private static Hook.Result createDescription(final RedundantCastInspection $this, final PsiTypeCastExpression cast, final InspectionManager manager, final boolean onTheFly)
-            = Hook.Result.falseToVoid(cast.getOperand() instanceof PsiSwitchExpression, null);
+    private static Hook.Result createDescription(final RedundantCastInspection $this, final PsiTypeCastExpression cast, final InspectionManager manager, final boolean onTheFly) = Hook.Result.falseToVoid(cast.getOperand() instanceof PsiSwitchExpression, null);
     
     @Hook(value = ControlFlowUtil.class, isStatic = true, at = @At(type = @At.TypeInsn(opcode = INSTANCEOF, type = PsiLambdaExpression.class)), capture = true)
     private static Hook.Result findCodeFragment(final PsiElement capture, final PsiElement element) = Hook.Result.falseToVoid(capture instanceof PsiRecordHeader, capture);
@@ -251,8 +255,7 @@ interface Fix {
                 final Path directory = Path.of(directoryName.substring(0, index));
                 if (Files.isDirectory(directory)) {
                     final Path src = directory / "lib" / "src.zip";
-                    if (Files.isRegularFile(src))
-                        model.setDirectoryName(src + directoryName.substring(index));
+                    if (Files.isRegularFile(src)) model.setDirectoryName(src + directoryName.substring(index));
                 }
             }
         }
@@ -260,12 +263,10 @@ interface Fix {
     
     // FUCK com.siyeh.ig
     @Hook
-    private static Hook.Result registerError(final BaseInspectionVisitor $this, final PsiElement location, final ProblemHighlightType highlightType, final Object... infos)
-    = Hook.Result.falseToVoid(location.getTextLength() == 0, null);
+    private static Hook.Result registerError(final BaseInspectionVisitor $this, final PsiElement location, final ProblemHighlightType highlightType, final Object... infos) = Hook.Result.falseToVoid(location.getTextLength() == 0, null);
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "subSequence")), before = false, capture = true)
-    private static CharSequence createMemberCopyFromText(final CharSequence capture, final PsiMember member, final TextRange range)
-            = member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
+    private static CharSequence createMemberCopyFromText(final CharSequence capture, final PsiMember member, final TextRange range) = member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "findPsiByAST")), capture = true)
     private static int getNonPhysicalCopy(final int capture, final Map<TextRange, PsiFile> fragmentCache, final JavaFunctionalExpressionIndex.IndexEntry entry, final PsiFunctionalExpression expression) {
@@ -280,11 +281,13 @@ interface Fix {
     }
     
     @Hook(value = ParameterInfoUtils.class, isStatic = true)
-    private static <E extends PsiElement> Hook.Result findArgumentList(final PsiFile file, final int offset, @Hook.Reference int lbraceOffset,
-            final ParameterInfoHandlerWithTabActionSupport findArgumentListHelper, final boolean allowOuter) {
+    private static <E extends PsiElement> Hook.Result findArgumentList(final PsiFile file, final int offset, @Hook.Reference int lbraceOffset, final ParameterInfoHandlerWithTabActionSupport findArgumentListHelper, final boolean allowOuter) {
         lbraceOffset = -1;
         return { };
     }
+    
+    @Hook
+    private static void getDisplayName(final ConfigurableWrapper $this) = $this.getConfigurable();
     
     @Hook(value = SystemBootstrap.class, isStatic = true, forceReturn = true)
     private static void loadLibrary(final String libName) {

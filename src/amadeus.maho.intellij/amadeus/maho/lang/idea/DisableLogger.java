@@ -1,9 +1,12 @@
 package amadeus.maho.lang.idea;
 
+import java.util.function.Supplier;
+
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInsight.javadoc.JavaDocInfoGenerator;
 import com.intellij.ide.actions.searcheverywhere.WaitForContributorsListenerWrapper;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.ui.popup.AbstractPopup;
 import com.intellij.util.xmlb.BeanBinding;
 import com.intellij.workspaceModel.ide.impl.jps.serialization.JpsGlobalModelSynchronizerImpl;
@@ -44,5 +47,11 @@ public interface DisableLogger {
     
     @Hook(value = BeanBinding.class, isStatic = true, forceReturn = true)
     private static boolean isAssertBindings(final Class<?> owner) = true;
+    
+    @Hook
+    private static Hook.Result log(final System.Logger $this, final System.Logger.Level level, final String msg, final Throwable thrown) = Hook.Result.falseToVoid(thrown instanceof ProcessCanceledException);
+    
+    @Hook
+    private static Hook.Result log(final System.Logger $this, final System.Logger.Level level, final Supplier<String> msgSupplier, final Throwable thrown) = Hook.Result.falseToVoid(thrown instanceof ProcessCanceledException);
     
 }
