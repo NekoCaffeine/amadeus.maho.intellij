@@ -16,6 +16,7 @@ import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.SneakyThrows;
 import amadeus.maho.transform.AOTTransformer;
 import amadeus.maho.util.build.Distributive;
+import amadeus.maho.util.build.HotSwap;
 import amadeus.maho.util.build.IDEA;
 import amadeus.maho.util.build.Jar;
 import amadeus.maho.util.build.Javac;
@@ -37,12 +38,14 @@ public interface Build {
         
         String appendArgs = "";
         
+        public self replaceVersion() = intellijPath = intellijPath.replace("${version}", intellijVersion);
+        
     }
     
     Workspace workspace = Workspace.here();
     
     IntellijConfig config = workspace.config().load(new IntellijConfig()).let(it -> {
-        if (!Files.isDirectory(Path.of(it.intellijPath)))
+        if (!Files.isDirectory(Path.of(it.replaceVersion().intellijPath)))
             throw new IllegalArgumentException("IntellijConfig.default.cfg # invalid intellijPath: " + it.intellijPath);
     });
     
@@ -86,6 +89,8 @@ public interface Build {
             pack.values().forEach(result -> (aot ? targetDir / (modulesDir % result.modules()).toString() : result.modules()) >> lib);
         });
     }
+    
+    static void hotswap() = Javac.compile(workspace, module, useModulePath::contains, args -> Javac.addReadsAllUnnamed(args, module));
     
     static void push() {
         build() | root -> libPath(root) >> --~libPath(run.path() / "plugins");
@@ -132,10 +137,10 @@ public interface Build {
     
     static Process run() = workspace.run(run, -1, runArgs, true, runDir, _ -> false);
     
-    static Process debug() = workspace.run(run, debugPort, runArgs, true, runDir, _ -> false);
+    static Process debug() = workspace.run(run, debugPort, HotSwap.addWatchProperty(runArgs, workspace, module), true, runDir, _ -> false);
     
     static Process runHost() = switch (Platform.getOSType()) {
-        case Platform.WINDOWS -> (Path.of(config.intellijPath) / "bin").run(List.of("idea"));
+        case Platform.WINDOWS -> workspace.run(Path.of(config.intellijPath) / "bin", List.of("idea"));
         default               -> throw new IllegalStateException("Unexpected OS Type: " + Platform.getOSType());
     };
     

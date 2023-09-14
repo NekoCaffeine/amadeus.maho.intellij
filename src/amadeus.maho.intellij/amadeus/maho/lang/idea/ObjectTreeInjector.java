@@ -25,7 +25,7 @@ public class ObjectTreeInjector { // FWIW ObjectTree performance increase was 10
             final long objectFieldOffset = unsafe.objectFieldOffset(disposedObjects);
             synchronized ((Privilege) tree.getTreeLock()) {
                 final Map<Disposable, Object> myDisposedObjects = (Map<Disposable, Object>) unsafe.getReference(tree, objectFieldOffset);
-                final ConcurrentHashMap<ConcurrentWeakIdentityHashMap.Key<Disposable>, Object> concurrentHashMap = { 1 << 20, 0.5F };
+                final ConcurrentHashMap<ConcurrentWeakIdentityHashMap.Key<Disposable>, Object> concurrentHashMap = { 1 << 16, 0.5F };
                 final ConcurrentWeakIdentityHashMap.Managed<Disposable, Object> concurrentWeakIdentityHashMap = { concurrentHashMap };
                 concurrentWeakIdentityHashMap.putAll(myDisposedObjects);
                 LargeMemoryPatcher.collector.manage(concurrentWeakIdentityHashMap);

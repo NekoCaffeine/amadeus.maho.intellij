@@ -4,10 +4,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.intellij.codeInsight.AnnotationTargetUtil;
 import com.intellij.codeInsight.AutoPopupControllerImpl;
@@ -16,6 +19,7 @@ import com.intellij.codeInsight.completion.CompletionType;
 import com.intellij.codeInsight.completion.actions.BaseCodeCompletionAction;
 import com.intellij.codeInsight.daemon.impl.LibrarySourceNotificationProvider;
 import com.intellij.codeInsight.daemon.impl.analysis.GenericsHighlightUtil;
+import com.intellij.codeInsight.daemon.impl.analysis.SwitchBlockHighlightingModel;
 import com.intellij.codeInsight.folding.impl.JavaFoldingBuilderBase;
 import com.intellij.codeInsight.generation.GenerateEqualsHandler;
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerBase;
@@ -53,6 +57,7 @@ import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiAnnotationOwner;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiFile;
@@ -61,10 +66,12 @@ import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiRecordHeader;
+import com.intellij.psi.PsiReferenceList;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiSwitchExpression;
 import com.intellij.psi.PsiTypeCastExpression;
 import com.intellij.psi.PsiTypeElement;
+import com.intellij.psi.SyntaxTraverser;
 import com.intellij.psi.controlFlow.ControlFlowUtil;
 import com.intellij.psi.impl.PsiShortNamesCacheImpl;
 import com.intellij.psi.impl.compiled.ClsParsingUtil;
@@ -75,10 +82,12 @@ import com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.intellij.psi.impl.source.PsiFieldImpl;
 import com.intellij.psi.impl.source.resolve.ParameterTypeInferencePolicy;
+import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.scope.conflictResolvers.JavaMethodsConflictResolver;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.IconDeferrerImpl;
 import com.intellij.util.Processor;
@@ -135,6 +144,23 @@ interface Fix {
     @Hook
     private static Hook.Result addOccurrence(final HighlightUsagesHandlerBase $this, final @Nullable PsiElement element) = Hook.Result.falseToVoid(element == null, null);
     
+    @Hook(value = SwitchBlockHighlightingModel.PatternsInSwitchBlockHighlightingModel.class, isStatic = true, forceReturn = true)
+    private static Collection<PsiClass> getPermittedClasses(final PsiClass psiClass) = CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> {
+        final @Nullable PsiReferenceList permitsList = it.getPermitsList();
+        if (permitsList == null)
+            return SyntaxTraverser.psiTraverser(it.getContainingFile())
+                    .expandTypes(type -> type != JavaElementType.TYPE_PARAMETER_LIST)
+                    .traverse()
+                    .toStream()
+                    .cast(PsiClass.class)
+                    .filter(cls -> cls.isInheritor(it, false))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+        return Stream.of(permitsList.getReferencedTypes())
+                .map(PsiClassType::resolve)
+                .nonnull()
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    });
+    
     // Remove useless checks
     @Hook
     private static Hook.Result getClassesByName(final PsiShortNamesCacheImpl $this, final String name, final GlobalSearchScope scope) {
@@ -174,7 +200,8 @@ interface Fix {
     
     // Fix the color scheme selected by users being overwritten by the default color scheme of the current theme due to inconsistent initialization order
     @Hook
-    private static Hook.Result setCurrent(final SchemeManagerBase $this, final Object scheme, final boolean notify, final boolean processChangeSynchronously) = Hook.Result.falseToVoid(scheme instanceof EditorColorsScheme && CallerContext.Stack.walker().walk(stream -> stream.anyMatch(frame -> frame.getMethodName().equals("initScheme"))) && setCurrentCounter.getAndIncrement() == 0);
+    private static Hook.Result setCurrent(final SchemeManagerBase $this, final Object scheme, final boolean notify, final boolean processChangeSynchronously)
+    = Hook.Result.falseToVoid(scheme instanceof EditorColorsScheme && CallerContext.Stack.walker().walk(stream -> stream.anyMatch(frame -> frame.getMethodName().equals("initScheme"))) && setCurrentCounter.getAndIncrement() == 0);
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static boolean isDumbAware(final boolean capture, final CustomFoldingBuilder $this) = capture || !($this instanceof JavaFoldingBuilderBase);
@@ -188,8 +215,11 @@ interface Fix {
     
     // <T> @A T, '@A' not applicable to type use
     @Hook(value = AnnotationTargetUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static PsiAnnotation.TargetType[] getTargetsForLocation(final PsiAnnotation.TargetType capture[], final @Nullable PsiAnnotationOwner owner) =
-    owner instanceof final PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement && PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof final PsiMethod method && method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod)) ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
+    private static PsiAnnotation.TargetType[] getTargetsForLocation(final PsiAnnotation.TargetType capture[], final @Nullable PsiAnnotationOwner owner)
+    = owner instanceof final PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement &&
+      PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof final PsiMethod method &&
+      method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod))
+            ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
     
     // This eliminates the need to wait for input to stop for a period of time before the auto-complete candidate prompt appears
     @Hook(metadata = @TransformMetadata(disable = "disable.fast.code.completion"))
@@ -202,7 +232,8 @@ interface Fix {
     
     // Fixed the problem of stupidly disabling the completion when the input is too fast in synchronous completion
     @Hook(at = @At(method = @At.MethodInsn(name = "isPhase")), capture = true, metadata = @TransformMetadata(disable = "disable.fast.code.completion"))
-    private static Class<? extends CompletionPhase>[] scheduleAutoPopup(final Class<? extends CompletionPhase>[] capture, final AutoPopupControllerImpl $this, final Editor editor, final CompletionType completionType, final @Nullable Condition<? super PsiFile> condition) = ArrayHelper.add(capture, CompletionPhase.ItemsCalculated.class);
+    private static Class<? extends CompletionPhase>[] scheduleAutoPopup(final Class<? extends CompletionPhase>[] capture, final AutoPopupControllerImpl $this, final Editor editor, final CompletionType completionType,
+            final @Nullable Condition<? super PsiFile> condition) = ArrayHelper.add(capture, CompletionPhase.ItemsCalculated.class);
     
     // Some annotations(e.g. @Mutable) will generate initialization expression
     @Hook(forceReturn = true)
@@ -240,7 +271,8 @@ interface Fix {
     private static @Nullable CandidateInfo resolveConflict(final JavaMethodsConflictResolver $this, final List<CandidateInfo> conflicts) = (Privilege) $this.guardedOverloadResolution(conflicts);
     
     @Hook
-    private static Hook.Result createDescription(final RedundantCastInspection $this, final PsiTypeCastExpression cast, final InspectionManager manager, final boolean onTheFly) = Hook.Result.falseToVoid(cast.getOperand() instanceof PsiSwitchExpression, null);
+    private static Hook.Result createDescription(final RedundantCastInspection $this, final PsiTypeCastExpression cast, final InspectionManager manager, final boolean onTheFly)
+            = Hook.Result.falseToVoid(cast.getOperand() instanceof PsiSwitchExpression, null);
     
     @Hook(value = ControlFlowUtil.class, isStatic = true, at = @At(type = @At.TypeInsn(opcode = INSTANCEOF, type = PsiLambdaExpression.class)), capture = true)
     private static Hook.Result findCodeFragment(final PsiElement capture, final PsiElement element) = Hook.Result.falseToVoid(capture instanceof PsiRecordHeader, capture);
@@ -266,7 +298,8 @@ interface Fix {
     private static Hook.Result registerError(final BaseInspectionVisitor $this, final PsiElement location, final ProblemHighlightType highlightType, final Object... infos) = Hook.Result.falseToVoid(location.getTextLength() == 0, null);
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "subSequence")), before = false, capture = true)
-    private static CharSequence createMemberCopyFromText(final CharSequence capture, final PsiMember member, final TextRange range) = member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
+    private static CharSequence createMemberCopyFromText(final CharSequence capture, final PsiMember member, final TextRange range)
+            = member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "findPsiByAST")), capture = true)
     private static int getNonPhysicalCopy(final int capture, final Map<TextRange, PsiFile> fragmentCache, final JavaFunctionalExpressionIndex.IndexEntry entry, final PsiFunctionalExpression expression) {
