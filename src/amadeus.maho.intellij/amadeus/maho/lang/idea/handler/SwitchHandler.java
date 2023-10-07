@@ -1,6 +1,8 @@
 package amadeus.maho.lang.idea.handler;
 
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightInfoHolder;
+import java.util.function.Consumer;
+
+import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.formatting.Spacing;
 import com.intellij.lang.ASTNode;
@@ -24,6 +26,7 @@ import com.intellij.psi.impl.source.tree.ChildRole;
 import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 
+import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
@@ -31,23 +34,22 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 
 import com.siyeh.ig.style.UnnecessaryParenthesesInspection;
 
-import static amadeus.maho.lang.idea.IDEAContext.*;
 import static com.intellij.psi.JavaTokenType.ARROW;
 
 @TransformProvider
 public class SwitchHandler {
     
     @Hook(value = HighlightUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "equals")), before = false, capture = true, branchReversal = true)
-    private static boolean checkSwitchExpressionReturnTypeCompatible_$VoidCheck(final boolean capture, final PsiSwitchExpression expression, final HighlightInfoHolder holder)
+    private static boolean checkSwitchExpressionReturnTypeCompatible_$VoidCheck(final boolean capture, final PsiSwitchExpression expression, final Consumer<? super HighlightInfo.Builder> errorSink)
             = capture || expression.getParent() instanceof PsiExpressionStatement ||
               expression.getParent() instanceof PsiReturnStatement returnStatement && PsiTypes.voidType().equals(PsiTreeUtil.getParentOfType(returnStatement, PsiMethod.class)?.getReturnType() ?? null);
     
     @Hook(value = HighlightUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "areTypesAssignmentCompatible")), before = false, capture = true, branchReversal = true)
-    private static boolean checkSwitchExpressionReturnTypeCompatible_$CompatibleCheck(final boolean capture, final PsiSwitchExpression expression, final HighlightInfoHolder holder)
+    private static boolean checkSwitchExpressionReturnTypeCompatible_$CompatibleCheck(final boolean capture, final PsiSwitchExpression expression, final Consumer<? super HighlightInfo.Builder> errorSink)
             = capture || PsiTypes.voidType().equals(expression.getType());
     
     @Hook(value = HighlightUtil.class, isStatic = true)
-    private static Hook.Result checkSwitchExpressionHasResult(final PsiSwitchExpression expression, final HighlightInfoHolder holder)
+    private static Hook.Result checkSwitchExpressionHasResult(final PsiSwitchExpression expression, final Consumer<? super HighlightInfo.Builder> errorSink)
             = Hook.Result.falseToVoid(PsiTypes.voidType().equals(expression.getType()) || expression.getParent() instanceof PsiReturnStatement statement && SelfHandler.isSelfReturn(statement));
     
     @Hook
@@ -95,9 +97,9 @@ public class SwitchHandler {
     */
     @Hook
     private static Hook.Result visitExpressionList(final JavaSpacePropertyProcessor $this, final PsiExpressionList list) {
-        if (list.getParent() instanceof PsiSwitchLabeledRuleStatement && myRole1($this) == ChildRole.COMMA) {
-            final CommonCodeStyleSettings mySettings = mySettings($this);
-            myResult($this, Spacing.createSpacing(0, 0, 1, mySettings.KEEP_LINE_BREAKS, mySettings.KEEP_BLANK_LINES_IN_CODE));
+        if (list.getParent() instanceof PsiSwitchLabeledRuleStatement && (Privilege) $this.myRole1 == ChildRole.COMMA) {
+            final CommonCodeStyleSettings mySettings = (Privilege) $this.mySettings;
+            (Privilege) ($this.myResult = Spacing.createSpacing(0, 0, 1, mySettings.KEEP_LINE_BREAKS, mySettings.KEEP_BLANK_LINES_IN_CODE));
             return Hook.Result.NULL;
         }
         return Hook.Result.VOID;
@@ -120,15 +122,15 @@ public class SwitchHandler {
     */
     @Hook
     private static Hook.Result visitSwitchLabeledRuleStatement(final JavaSpacePropertyProcessor $this, final PsiSwitchLabeledRuleStatement statement) {
-        if (myType2($this) == ARROW) {
-            final PsiElement arrow = myChild2($this).getPsi();
+        if ((Privilege) $this.myType2 == ARROW) {
+            final PsiElement arrow = ((Privilege) $this.myChild2).getPsi();
             @Nullable PsiElement parent = statement.getParent();
             if (parent != null) {
                 parent = parent.getParent();
                 if (parent instanceof PsiSwitchBlock switchBlock) {
                     final int space = maxOffset(switchBlock) - lineOffset(arrow.getPrevSibling(), switchBlock) + 1;
-                    final CommonCodeStyleSettings mySettings = mySettings($this);
-                    myResult($this, Spacing.createSpacing(space, space, 0, mySettings.KEEP_LINE_BREAKS, mySettings.KEEP_BLANK_LINES_IN_CODE));
+                    final CommonCodeStyleSettings mySettings = (Privilege) $this.mySettings;
+                    (Privilege) ($this.myResult = Spacing.createSpacing(space, space, 0, mySettings.KEEP_LINE_BREAKS, mySettings.KEEP_BLANK_LINES_IN_CODE));
                 }
             }
             return Hook.Result.NULL;

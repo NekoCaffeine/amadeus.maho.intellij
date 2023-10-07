@@ -25,7 +25,7 @@ import com.intellij.lang.ParserDefinition;
 import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.PsiBuilderFactory;
 import com.intellij.lang.java.JavaLanguage;
-import com.intellij.lang.java.parser.DeclarationParser;
+import com.intellij.lang.java.parser.BasicDeclarationParser;
 import com.intellij.lang.java.parser.JavaParser;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.command.undo.UndoUtil;
@@ -74,7 +74,6 @@ import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
 import com.intellij.psi.formatter.java.AbstractJavaBlock;
 import com.intellij.psi.formatter.java.ArrayInitializerBlocksBuilder;
 import com.intellij.psi.formatter.java.BlockContainingJavaBlock;
-import com.intellij.psi.formatter.java.BlockFactory;
 import com.intellij.psi.formatter.java.JavaSpacePropertyProcessor;
 import com.intellij.psi.impl.BlockSupportImpl;
 import com.intellij.psi.impl.source.DummyHolderFactory;
@@ -103,7 +102,6 @@ import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.CharTable;
-import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.JavaPsiConstructorUtil;
 
 import amadeus.maho.lang.AccessLevel;
@@ -120,11 +118,9 @@ import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.idea.util.ASTTraverser;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
-import amadeus.maho.transform.mark.Proxy;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
 import static amadeus.maho.lang.idea.handler.AssignHandler.PRIORITY;
-import static amadeus.maho.util.bytecode.Bytecodes.GETFIELD;
 import static com.intellij.codeInspection.ProblemHighlightType.*;
 import static com.intellij.lang.java.parser.JavaParserUtil.*;
 import static com.intellij.psi.JavaTokenType.EQ;
@@ -201,19 +197,19 @@ public class AssignHandler extends BaseSyntaxHandler {
             public void setKindWhenDummy(final Kind kind) { }
             
             @Override
-            public void delete() throws IncorrectOperationException { throw new IncorrectOperationException(); }
+            public void delete() { }
             
             @Override
             public void deleteChildInternal(final ASTNode child) { }
             
             @Override
-            public void deleteChildRange(final PsiElement first, final PsiElement last) throws IncorrectOperationException { throw new IncorrectOperationException(); }
+            public void deleteChildRange(final PsiElement first, final PsiElement last) { }
             
             @Override
-            public void checkDelete() throws IncorrectOperationException { throw new IncorrectOperationException(); }
+            public void checkDelete() { }
             
             @Override
-            public PsiElement bindToElement(final PsiElement element) throws IncorrectOperationException { throw new IncorrectOperationException(); }
+            public PsiElement bindToElement(final PsiElement element) = this;
             
             @Override
             public String getClassNameText() = PsiNameHelper.getQualifiedClassName(getCanonicalText(), false);
@@ -311,8 +307,8 @@ public class AssignHandler extends BaseSyntaxHandler {
     
     @Hook
     private static Hook.Result visitMethod(final JavaSpacePropertyProcessor $this, final PsiMethod method) {
-        if (myType1($this) == EQ || myType2($this) == EQ) {
-            createSpaceInCode($this, mySettings($this).SPACE_AROUND_ASSIGNMENT_OPERATORS);
+        if ((Privilege) $this.myType1 == EQ || (Privilege) $this.myType2 == EQ) {
+            (Privilege) $this.createSpaceInCode(((Privilege) $this.mySettings).SPACE_AROUND_ASSIGNMENT_OPERATORS);
             return Hook.Result.NULL;
         }
         return Hook.Result.VOID;
@@ -320,35 +316,32 @@ public class AssignHandler extends BaseSyntaxHandler {
     
     @Hook
     private static Hook.Result visitExpressionList(final JavaSpacePropertyProcessor $this, final PsiExpressionList list) {
-        final int myRole1 = myRole1($this), myRole2 = myRole2($this);
-        final CommonCodeStyleSettings mySettings = mySettings($this);
+        final int myRole1 = (Privilege) $this.myRole1, myRole2 = (Privilege) $this.myRole2;
+        final CommonCodeStyleSettings mySettings = (Privilege) $this.mySettings;
         if (myRole1 == ChildRole.LBRACE && myRole2 == ChildRole.RBRACE) {
-            createSpaceInCode($this, mySettings.SPACE_WITHIN_EMPTY_ARRAY_INITIALIZER_BRACES);
+            (Privilege) $this.createSpaceInCode(mySettings.SPACE_WITHIN_EMPTY_ARRAY_INITIALIZER_BRACES);
         } else if (myRole2 == ChildRole.RBRACE) {
             final boolean space = myRole1 == ChildRole.COMMA || mySettings.SPACE_WITHIN_ARRAY_INITIALIZER_BRACES;
             if (mySettings.CALL_PARAMETERS_RPAREN_ON_NEXT_LINE && list.getExpressionCount() > 1)
-                createSpaceWithLinefeedIfListWrapped($this, list, space);
+                (Privilege) $this.createSpaceWithLinefeedIfListWrapped(list, space);
             else
-                createSpaceInCode($this, space);
+                (Privilege) $this.createSpaceInCode(space);
         } else if (myRole1 == ChildRole.LBRACE) {
             final boolean space = true;
             if (mySettings.CALL_PARAMETERS_LPAREN_ON_NEXT_LINE && list.getExpressionCount() > 1)
-                createSpaceWithLinefeedIfListWrapped($this, list, space);
+                (Privilege) $this.createSpaceWithLinefeedIfListWrapped(list, space);
             else
-                createSpaceInCode($this, space);
+                (Privilege) $this.createSpaceInCode(space);
         } else
             return Hook.Result.VOID;
         return Hook.Result.NULL;
     }
     
-    @Proxy(GETFIELD)
-    private static native BlockFactory myBlockFactory(AbstractJavaBlock $this);
-    
     @Hook
     private static Hook.Result processChild(final AbstractJavaBlock $this, final List<Block> result, final ASTNode child, final AlignmentStrategy alignmentStrategy, final Wrap defaultWrap, final Indent childIndent, final int childOffset) {
         final ASTNode node = $this.getNode();
         if (child.getElementType() == JavaTokenType.LBRACE && node instanceof final PsiArrayInitializerBackNewExpression.ExpressionList parent) {
-            result.addAll(new ArrayInitializerBlocksBuilder(node, myBlockFactory($this)).buildBlocks());
+            result.addAll(new ArrayInitializerBlocksBuilder(node, (Privilege) $this.myBlockFactory).buildBlocks());
             return { parent.getLastChild() };
         }
         return Hook.Result.VOID;
@@ -504,12 +497,12 @@ public class AssignHandler extends BaseSyntaxHandler {
     }
     
     @Hook
-    private static Hook.Result parseMethodBody(final DeclarationParser $this, final PsiBuilder builder, final PsiBuilder.Marker declaration, final boolean anno) {
+    private static Hook.Result parseMethodBody(final BasicDeclarationParser $this, final PsiBuilder builder, final PsiBuilder.Marker declaration, final boolean anno) {
         final IElementType tokenType = builder.getTokenType();
         if (tokenType == EQ) {
             builder.advanceLexer();
             final PsiBuilder.Marker block = builder.mark(), statement = builder.mark();
-            final @Nullable PsiBuilder.Marker expression = myParser($this).getExpressionParser().parse(builder);
+            final @Nullable PsiBuilder.Marker expression = ((Privilege) $this.myParser).getExpressionParser().parse(builder);
             if (expression == null)
                 error(builder, JavaErrorBundle.message("expected.expression"));
             done(statement, JavaElementType.RETURN_STATEMENT);

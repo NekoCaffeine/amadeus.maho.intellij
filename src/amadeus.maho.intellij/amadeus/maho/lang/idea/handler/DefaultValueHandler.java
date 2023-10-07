@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -13,7 +14,6 @@ import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightClassUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightControlFlowUtil;
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightInfoHolder;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightVisitorImpl;
 import com.intellij.lang.PsiBuilder;
@@ -146,8 +146,8 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
     // Use the assigned setting when formatting the equals of the default value
     @Hook
     private static Hook.Result visitParameterList(final JavaSpacePropertyProcessor $this, final PsiParameterList list) {
-        if (myType1($this) == EQ || myType2($this) == EQ) {
-            createSpaceInCode($this, mySettings($this).SPACE_AROUND_ASSIGNMENT_OPERATORS);
+        if ((Privilege) $this.myType1 == EQ || (Privilege) $this.myType2 == EQ) {
+            (Privilege) $this.createSpaceInCode(((Privilege) $this.mySettings).SPACE_AROUND_ASSIGNMENT_OPERATORS);
             return Hook.Result.NULL;
         }
         return Hook.Result.VOID;
@@ -155,8 +155,8 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
     
     @Hook
     private static Hook.Result visitRecordHeader(final JavaSpacePropertyProcessor $this, final PsiRecordHeader header) {
-        if (myType1($this) == EQ || myType2($this) == EQ) {
-            createSpaceInCode($this, mySettings($this).SPACE_AROUND_ASSIGNMENT_OPERATORS);
+        if ((Privilege) $this.myType1 == EQ || (Privilege) $this.myType2 == EQ) {
+            (Privilege) $this.createSpaceInCode(((Privilege) $this.mySettings).SPACE_AROUND_ASSIGNMENT_OPERATORS);
             return Hook.Result.NULL;
         }
         return Hook.Result.VOID;
@@ -167,7 +167,7 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
     private static PsiBuilder.Marker parseParameterOrRecordComponent(final PsiBuilder.Marker capture, final DeclarationParser $this, final PsiBuilder builder, final boolean ellipsis, final boolean disjunctiveType,
             final boolean varType, final boolean isParameter) {
         if (PsiBuilderUtil.expect(builder, EQ)) {
-            final PsiBuilder.Marker marker = myParser($this).getExpressionParser().parse(builder);
+            final PsiBuilder.Marker marker = ((Privilege) $this.myParser).getExpressionParser().parse(builder);
             if (marker != null)
                 return marker;
             JavaParserUtil.error(builder, JavaErrorBundle.message("expected.expression"));
@@ -261,17 +261,17 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
             .distinct()
             .toArray(PsiMethod.ARRAY_FACTORY::create);
     
-    private static void checkVariableDefaultValue(final PsiVariable variable, final HighlightInfoHolder holder) {
-        checkVariableDefaultValueType(variable).map(HighlightInfo.Builder::create).forEach(holder::add);
-        checkVariableDefaultValueNotInitialized(variable).map(HighlightInfo.Builder::create).forEach(holder::add);
+    private static void checkVariableDefaultValue(final PsiVariable variable, final Consumer<? super HighlightInfo.Builder> errorSink) {
+        checkVariableDefaultValueType(variable).forEach(errorSink);
+        checkVariableDefaultValueNotInitialized(variable).forEach(errorSink);
     }
     
     // Type check the default values
     @Hook
-    private static void visitParameter(final HighlightVisitorImpl $this, final PsiParameter parameter) = checkVariableDefaultValue(parameter, myHolder($this));
+    private static void visitParameter(final HighlightVisitorImpl $this, final PsiParameter parameter) = checkVariableDefaultValue(parameter, (Privilege) $this.myErrorSink);
     
     @Hook
-    private static void visitRecordComponent(final HighlightVisitorImpl $this, final PsiRecordComponent recordComponent) = checkVariableDefaultValue(recordComponent, myHolder($this));
+    private static void visitRecordComponent(final HighlightVisitorImpl $this, final PsiRecordComponent recordComponent) = checkVariableDefaultValue(recordComponent, (Privilege) $this.myErrorSink);
     
     public static @Nullable PsiVariable recordComponentForParameter(final PsiParameter parameter) {
         final @Nullable PsiMethod context = PsiTreeUtil.getContextOfType(parameter, PsiMethod.class);

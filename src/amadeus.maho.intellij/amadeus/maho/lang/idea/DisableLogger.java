@@ -1,16 +1,19 @@
 package amadeus.maho.lang.idea;
 
-import java.util.function.Supplier;
+import java.util.ResourceBundle;
 
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInsight.javadoc.JavaDocInfoGenerator;
 import com.intellij.ide.actions.searcheverywhere.WaitForContributorsListenerWrapper;
+import com.intellij.ide.ui.UIThemeBeanKt;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.ui.popup.AbstractPopup;
 import com.intellij.util.xmlb.BeanBinding;
 import com.intellij.workspaceModel.ide.impl.jps.serialization.JpsGlobalModelSynchronizerImpl;
 
+import amadeus.maho.lang.AccessLevel;
+import amadeus.maho.lang.FieldDefaults;
+import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.Redirect;
 import amadeus.maho.transform.mark.base.At;
@@ -20,6 +23,33 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 
 @TransformProvider
 public interface DisableLogger {
+    
+    @RequiredArgsConstructor
+    @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+    class FakeLogger implements System.Logger {
+        
+        System.Logger logger;
+        
+        @Override
+        public String getName() = logger.getName();
+        
+        @Override
+        public boolean isLoggable(final Level level) = false;
+        
+        @Override
+        public void log(final Level level, final ResourceBundle bundle, final String msg, final Throwable thrown) { }
+        
+        @Override
+        public void log(final Level level, final ResourceBundle bundle, final String format, final Object... params) { }
+        
+    }
+    
+    @Hook(value = System.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+    private static System.Logger getLogger(final System.Logger capture, final String name) {
+        if (name.startsWith("com.github.benmanes."))
+            return new FakeLogger(capture);
+        return capture;
+    }
     
     @Redirect(targetClass = JpsGlobalModelSynchronizerImpl.class, selector = At.Lookup.WILDCARD, slice = @Slice(@At(method = @At.MethodInsn(name = "info"))))
     private static void info_$JpsGlobalModelSynchronizerImpl(final Logger logger, final String msg) { }
@@ -48,10 +78,7 @@ public interface DisableLogger {
     @Hook(value = BeanBinding.class, isStatic = true, forceReturn = true)
     private static boolean isAssertBindings(final Class<?> owner) = true;
     
-    @Hook
-    private static Hook.Result log(final System.Logger $this, final System.Logger.Level level, final String msg, final Throwable thrown) = Hook.Result.falseToVoid(thrown instanceof ProcessCanceledException);
-    
-    @Hook
-    private static Hook.Result log(final System.Logger $this, final System.Logger.Level level, final Supplier<String> msgSupplier, final Throwable thrown) = Hook.Result.falseToVoid(thrown instanceof ProcessCanceledException);
+    @Redirect(targetClass = UIThemeBeanKt.class, selector = "readTheme", slice = @Slice(@At(method = @At.MethodInsn(name = "warn"))))
+    private static void warn_$UIThemeBeanKt(final Logger logger, final String msg) { }
     
 }

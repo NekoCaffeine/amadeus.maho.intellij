@@ -19,21 +19,14 @@ import java.util.stream.Stream;
 import com.intellij.codeInsight.daemon.JavaErrorBundle;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType;
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightInfoHolder;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightVisitorImpl;
-import com.intellij.formatting.Spacing;
-import com.intellij.lang.ASTNode;
 import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.java.lexer._JavaLexer;
-import com.intellij.lang.java.parser.DeclarationParser;
-import com.intellij.lang.java.parser.JavaParser;
-import com.intellij.lang.java.parser.StatementParser;
+import com.intellij.lang.java.parser.BasicStatementParser;
 import com.intellij.lexer.FlexLexer;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.util.Getter;
 import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.Bottom;
@@ -49,7 +42,6 @@ import com.intellij.psi.PsiDisjunctionType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementFactory;
 import com.intellij.psi.PsiEllipsisType;
-import com.intellij.psi.PsiExpressionList;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiIdentifier;
 import com.intellij.psi.PsiIntersectionType;
@@ -69,12 +61,9 @@ import com.intellij.psi.PsiTypeVariable;
 import com.intellij.psi.PsiTypeVisitor;
 import com.intellij.psi.PsiTypeVisitorEx;
 import com.intellij.psi.PsiWildcardType;
-import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
-import com.intellij.psi.formatter.java.JavaSpacePropertyProcessor;
 import com.intellij.psi.impl.source.PsiExtensibleClass;
 import com.intellij.psi.impl.source.PsiImmediateClassType;
 import com.intellij.psi.impl.source.tree.CompositeElement;
-import com.intellij.psi.impl.source.tree.LazyParseableElement;
 import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
@@ -102,7 +91,6 @@ import amadeus.maho.transform.mark.base.InvisibleType;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.control.LinkedIterator;
 
-import static amadeus.maho.util.bytecode.Bytecodes.INVOKEVIRTUAL;
 import static com.intellij.psi.JavaTokenType.*;
 import static com.intellij.psi.PsiModifier.*;
 import static org.objectweb.asm.Opcodes.*;
@@ -165,7 +153,7 @@ public class IDEAContext {
             return zzInput;
         }
         
-        @Hook(value = StatementParser.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "contains")), capture = true)
+        @Hook(value = BasicStatementParser.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "contains")), capture = true)
         private static Hook.Result isStmtYieldToken(final IElementType capture, final PsiBuilder builder, final IElementType tokenType) = Hook.Result.falseToVoid(YIELD_EXPR_INDICATOR_TOKENS.contains(capture), false);
         
     }
@@ -380,18 +368,6 @@ public class IDEAContext {
         return Hook.Result.NULL;
     }
     
-    @Proxy(PUTFIELD)
-    public static native void myParsed(LazyParseableElement $this, boolean value);
-    
-    @Proxy(PUTFIELD)
-    public static native void myText(LazyParseableElement $this, Getter<String> value);
-    
-    @Proxy(GETFIELD)
-    public static native JavaParser myParser(DeclarationParser $this);
-    
-    @Proxy(GETFIELD)
-    public static native HighlightInfoHolder myHolder(HighlightVisitorImpl $this);
-    
     @Proxy(GETFIELD)
     public static native TreeElement firstChild(CompositeElement $this);
     
@@ -421,36 +397,6 @@ public class IDEAContext {
     
     @Proxy(PUTFIELD)
     public static native void myParent(TreeElement $this, @Nullable CompositeElement value);
-    
-    @Proxy(GETFIELD)
-    public static native ASTNode myChild1(JavaSpacePropertyProcessor $this);
-    
-    @Proxy(GETFIELD)
-    public static native ASTNode myChild2(JavaSpacePropertyProcessor $this);
-    
-    @Proxy(GETFIELD)
-    public static native int myRole1(JavaSpacePropertyProcessor $this);
-    
-    @Proxy(GETFIELD)
-    public static native int myRole2(JavaSpacePropertyProcessor $this);
-    
-    @Proxy(GETFIELD)
-    public static native IElementType myType1(JavaSpacePropertyProcessor $this);
-    
-    @Proxy(GETFIELD)
-    public static native IElementType myType2(JavaSpacePropertyProcessor $this);
-    
-    @Proxy(GETFIELD)
-    public static native CommonCodeStyleSettings mySettings(JavaSpacePropertyProcessor $this);
-    
-    @Proxy(INVOKEVIRTUAL)
-    public static native void createSpaceInCode(JavaSpacePropertyProcessor $this, boolean space);
-    
-    @Proxy(INVOKEVIRTUAL)
-    public static native void createSpaceWithLinefeedIfListWrapped(JavaSpacePropertyProcessor $this, PsiExpressionList list, boolean space);
-    
-    @Proxy(PUTFIELD)
-    public static native void myResult(JavaSpacePropertyProcessor $this, Spacing value);
     
     public static void markTree(final @Nullable TreeElement prev, final @Nullable TreeElement next) {
         if (prev != null)

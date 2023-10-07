@@ -30,6 +30,7 @@ import com.intellij.psi.PsiExpressionStatement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFunctionalExpression;
 import com.intellij.psi.PsiIntersectionType;
+import com.intellij.psi.PsiInvalidElementAccessException;
 import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiLambdaParameterType;
@@ -405,7 +406,10 @@ public class OperatorOverloadingHandler {
     private static void processQuery(final MethodUsagesSearcher $this, final MethodReferencesSearch.SearchParameters parameters, final Processor<PsiReference> consumer) = IDEAContext.runReadActionIgnoreDumbMode(() -> {
         final PsiMethod target = parameters.getMethod();
         final @Nullable String symbol = operatorName2operatorSymbol[target.getName()];
-        if (symbol != null || target.hasAnnotation(Extension.Operator.class.getCanonicalName())) lookupExpression(consumer, parameters.getProject(), parameters.getMethod(), parameters.getScopeDeterminedByUser());
+        if (symbol != null || target.hasAnnotation(Extension.Operator.class.getCanonicalName()))
+            try {
+                lookupExpression(consumer, parameters.getProject(), parameters.getMethod(), parameters.getScopeDeterminedByUser());
+            } catch (final PsiInvalidElementAccessException ignored) { }
     });
     
     public static void lookupExpression(final Processor<PsiReference> consumer, final Project project, final PsiMethod method, final SearchScope searchScope) {

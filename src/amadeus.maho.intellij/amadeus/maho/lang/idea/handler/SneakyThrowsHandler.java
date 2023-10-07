@@ -2,8 +2,9 @@ package amadeus.maho.lang.idea.handler;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Consumer;
 
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightInfoHolder;
+import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
@@ -30,7 +31,7 @@ public class SneakyThrowsHandler {
     public static Hook.Result checkSimpleCatchParameter(final PsiParameter parameter, final Collection<? extends PsiClassType> thrownTypes, final PsiClassType caughtType) = Hook.Result.NULL;
     
     @Hook(value = HighlightUtil.class, isStatic = true)
-    public static Hook.Result checkMultiCatchParameter(final PsiParameter parameter, final Collection<? extends PsiClassType> thrownTypes, final HighlightInfoHolder holder) = Hook.Result.NULL;
+    public static Hook.Result checkMultiCatchParameter(final PsiParameter parameter, final Collection<? extends PsiClassType> thrownTypes, final Consumer<? super HighlightInfo.Builder> errorSink) = Hook.Result.NULL;
     
     public static boolean isHandled(PsiElement element) {
         while (element != null && !(element instanceof PsiFile)) {

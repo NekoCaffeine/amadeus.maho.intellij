@@ -23,8 +23,8 @@ import com.intellij.codeInspection.dataFlow.value.DfaValue;
 import com.intellij.codeInspection.dataFlow.value.DfaValueFactory;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.PsiBuilder;
-import com.intellij.lang.java.parser.OldExpressionParser;
-import com.intellij.lang.java.parser.ReferenceParser;
+import com.intellij.lang.java.parser.BasicOldExpressionParser;
+import com.intellij.lang.java.parser.BasicReferenceParser;
 import com.intellij.psi.GenericsUtil;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClassType;
@@ -69,7 +69,6 @@ import amadeus.maho.util.dynamic.EnumHelper;
 import com.siyeh.ig.migration.UnnecessaryUnboxingInspection;
 
 import static amadeus.maho.lang.idea.IDEAContext.AdditionalOperators.*;
-import static amadeus.maho.lang.idea.IDEAContext.createSpaceInCode;
 import static amadeus.maho.util.bytecode.Bytecodes.*;
 import static com.intellij.codeInspection.dataFlow.NullabilityProblemKind.*;
 import static com.intellij.codeInspection.dataFlow.types.DfTypes.typedObject;
@@ -79,36 +78,37 @@ import static com.intellij.psi.util.TypeConversionUtil.*;
 public class BranchHandler {
     
     @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
-    private static boolean parsePrimary(final boolean capture, final OldExpressionParser $this, final PsiBuilder builder, final @Nullable OldExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode)
-            = capture || builder.getTokenType() == SAFE_ACCESS;
+    private static boolean parsePrimary(final boolean capture, final BasicOldExpressionParser $this, final PsiBuilder builder,
+            final @Nullable BasicOldExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode) = capture || builder.getTokenType() == SAFE_ACCESS;
     
     @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
-    private static boolean parseJavaCodeReference(final boolean capture, final ReferenceParser $this, final PsiBuilder builder, final boolean eatLastDot, final boolean parameterList, final boolean isImport, final boolean isStaticImport,
-            final boolean isNew, final boolean diamonds, final ReferenceParser.TypeInfo typeInfo) = capture || builder.getTokenType() == SAFE_ACCESS;
+    private static boolean parseJavaCodeReference(final boolean capture, final BasicReferenceParser $this, final PsiBuilder builder, final boolean eatLastDot, final boolean parameterList,
+            final boolean isImport, final boolean isStaticImport, final boolean isNew, final boolean diamonds, final BasicReferenceParser.TypeInfo typeInfo) = capture || builder.getTokenType() == SAFE_ACCESS;
     
     private static final TokenSet NULL_OR_OPS = TokenSet.create(NULL_OR);
     
     @Proxy(NEW)
-    private static native OldExpressionParser.ExprType newExprType(String name, int id);
+    private static native BasicOldExpressionParser.ExprType newExprType(String name, int id);
     
-    @Proxy(value = INVOKESTATIC, targetClass = OldExpressionParser.ExprType.class)
-    private static native OldExpressionParser.ExprType[] values();
+    @Proxy(value = INVOKESTATIC, targetClass = BasicOldExpressionParser.ExprType.class)
+    private static native BasicOldExpressionParser.ExprType[] values();
     
-    private static final OldExpressionParser.ExprType NULL_OR_TYPE = newExprType("NULL_OR", values().length);
+    private static final BasicOldExpressionParser.ExprType NULL_OR_TYPE = newExprType("NULL_OR", values().length);
     
     static { EnumHelper.addEnum(NULL_OR_TYPE); }
     
     @Hook(at = @At(field = @At.FieldInsn(name = "UNARY")), capture = true, before = false)
-    private static OldExpressionParser.ExprType parseExpression(final OldExpressionParser.ExprType capture, final OldExpressionParser $this, final PsiBuilder builder, final OldExpressionParser.ExprType type, final int mode) = NULL_OR_TYPE;
+    private static BasicOldExpressionParser.ExprType parseExpression(final BasicOldExpressionParser.ExprType capture, final BasicOldExpressionParser $this,
+            final PsiBuilder builder, final BasicOldExpressionParser.ExprType type, final int mode) = NULL_OR_TYPE;
     
     @Hook
-    private static Hook.Result parseExpression(final OldExpressionParser $this, final PsiBuilder builder, final OldExpressionParser.ExprType type, final int mode)
-            = type == NULL_OR_TYPE ? new Hook.Result((Privilege) $this.parseBinary(builder, OldExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
+    private static Hook.Result parseExpression(final BasicOldExpressionParser $this, final PsiBuilder builder, final BasicOldExpressionParser.ExprType type, final int mode)
+            = type == NULL_OR_TYPE ? new Hook.Result((Privilege) $this.parseBinary(builder, BasicOldExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
     
     @Hook
     private static Hook.Result visitPolyadicExpression(final JavaSpacePropertyProcessor $this, final PsiPolyadicExpression expression) {
         if (expression instanceof CompositeElement element && element.findChildByRoleAsPsiElement(ChildRole.OPERATION_SIGN) instanceof PsiJavaToken token && token.getTokenType() == NULL_OR) {
-            createSpaceInCode($this, true);
+            (Privilege) $this.createSpaceInCode(true);
             return Hook.Result.NULL;
         }
         return Hook.Result.VOID;

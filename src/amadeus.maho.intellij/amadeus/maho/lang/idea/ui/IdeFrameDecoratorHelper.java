@@ -36,7 +36,7 @@ import com.jetbrains.JBR;
 public interface IdeFrameDecoratorHelper {
     
     // JBR support, module: jetbrains.api, location: lib/app.jar
-    enum WithoutJBRWindowDecoration implements CustomWindowDecoration {
+    @SuppressWarnings("deprecation") enum WithoutJBRWindowDecoration implements CustomWindowDecoration {
         
         @Getter
         instance;
@@ -72,16 +72,16 @@ public interface IdeFrameDecoratorHelper {
     @Hook(value = JBR.class, isStatic = true)
     private static Hook.Result getCustomWindowDecoration() = Hook.Result.falseToVoid(shouldEnable(), WithoutJBRWindowDecoration.instance());
     
-    // #IC-223.6160.11 2022.3 EAP
-    @Hook(at = @At(method = @At.MethodInsn(name = "dispose"), offset = -2), jump = @At(method = @At.MethodInsn(name = "setUndecorated"), offset = 1),
-            lambdaRedirect = @At(method = @At.MethodInsn(name = "invokeLater"), offset = -1), exactMatch = false)
-    private static Hook.Result toggleFullScreen(final IdeFrameDecorator.WinMainFrameDecorator $this) = shouldEnable() ? new Hook.Result().jump() : Hook.Result.VOID;
+    // #IC-233.9102.97 2023.3 EAP
+    @Hook(target = "com.intellij.openapi.wm.impl.WinMainFrameDecorator$toggleFullScreen$2",
+            at = @At(method = @At.MethodInsn(name = "dispose"), offset = -3), jump = @At(method = @At.MethodInsn(name = "setUndecorated"), offset = 1), exactMatch = false)
+    private static Hook.Result invokeSuspend() = shouldEnable() ? new Hook.Result().jump() : Hook.Result.VOID;
     
-    @Hook(value = IdeFrameDecorator.class, isStatic = true)
-    private static Hook.Result isCustomDecorationAvailable() = Hook.Result.falseToVoid(shouldEnable());
+    @Hook
+    private static Hook.Result isCustomDecorationAvailable$intellij_platform_ide_impl(final IdeFrameDecorator.Companion $this) = Hook.Result.falseToVoid(shouldEnable());
     
-    @Hook(value = IdeFrameDecorator.class, isStatic = true)
-    private static Hook.Result isCustomDecorationActive() = Hook.Result.falseToVoid(shouldEnable());
+    @Hook
+    private static Hook.Result isCustomDecorationActive(final IdeFrameDecorator.Companion $this) = Hook.Result.falseToVoid(shouldEnable());
     
     @Hook
     private static Hook.Result setUndecorated(final Frame $this, final boolean flag) = Hook.Result.falseToVoid(shouldEnable() && !flag && $this instanceof RootPaneContainer, null);

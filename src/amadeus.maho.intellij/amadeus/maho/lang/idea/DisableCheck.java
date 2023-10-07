@@ -1,12 +1,11 @@
 package amadeus.maho.lang.idea;
 
-import java.util.function.Supplier;
 import javax.swing.JComponent;
 
 import com.intellij.codeInsight.daemon.impl.analysis.AnnotationsHighlightUtil;
 import com.intellij.debugger.impl.InvokeThread;
 import com.intellij.diagnostic.LoadingState;
-import com.intellij.ide.SystemHealthMonitorKt;
+import com.intellij.idea.SystemHealthMonitorKt;
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
 import com.intellij.openapi.actionSystem.impl.ActionUpdater;
 import com.intellij.openapi.application.TransactionGuardImpl;
@@ -27,6 +26,7 @@ import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.util.CachedValueStabilityChecker;
 import com.intellij.util.IdempotenceChecker;
 import com.intellij.util.SlowOperations;
+import com.intellij.util.concurrency.ThreadingAssertions;
 import com.intellij.util.indexing.FileBasedIndexImpl;
 import com.intellij.util.indexing.ID;
 import com.intellij.util.ui.EDT;
@@ -40,6 +40,9 @@ import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.misc.ConstantLookup;
 
+import kotlin.coroutines.Continuation;
+import kotlin.jvm.functions.Function0;
+
 // These checks are too expensive, and most of the time are almost purely redundant calculations
 @TransformProvider
 interface DisableCheck {
@@ -48,7 +51,7 @@ interface DisableCheck {
     @Hook(value = SystemHealthMonitorKt.class, isStatic = true, exactMatch = false, forceReturn = true)
     private static void checkRuntime() { } // kt suspend fun
     
-    @Hook(value = ApplicationImpl.class, isStatic = true, exactMatch = false, forceReturn = true)
+    @Hook(value = ThreadingAssertions.class, isStatic = true, exactMatch = false, forceReturn = true)
     private static void throwThreadAccessException() { }
     
     @Hook(exactMatch = false, forceReturn = true)
@@ -108,9 +111,11 @@ interface DisableCheck {
     private static void reportCommandError(final Throwable throwable) { }
     
     @Hook(forceReturn = true)
-    private static void inconsistencyDetected(final StubProcessingHelperBase $this, final ObjectStubTree stubTree, final PsiFileWithStubSupport support) = (Privilege) $this.onInternalError(support.getVirtualFile());
+    private static void inconsistencyDetected(final StubProcessingHelperBase $this, final ObjectStubTree stubTree, final PsiFileWithStubSupport support, final String extraMessage)
+            = (Privilege) $this.onInternalError(support.getVirtualFile());
     
     @Hook(forceReturn = true)
-    private static <T> T computeOnEdt(final ActionUpdater $this, final Object action, final String operationName, final Supplier<? extends T> call, final boolean noRulesInEDT) = (Privilege) $this.computeOnEdt(call);
+    private static <T> T computeOnEdt(final ActionUpdater $this, final Object action, final String operationName, final boolean noRulesInEDT, final Function0<T> call, final Continuation<T> continuation)
+            = (T) (Privilege) $this.computeOnEdt(call, continuation);
     
 }

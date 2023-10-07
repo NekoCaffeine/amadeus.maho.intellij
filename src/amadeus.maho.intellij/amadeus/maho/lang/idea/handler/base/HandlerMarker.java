@@ -160,7 +160,6 @@ import amadeus.maho.lang.idea.light.LightElement;
 import amadeus.maho.lang.idea.light.LightElementReference;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
-import amadeus.maho.transform.mark.Proxy;
 import amadeus.maho.transform.mark.Redirect;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.Slice;
@@ -172,7 +171,7 @@ import amadeus.maho.util.function.Consumer4;
 import amadeus.maho.util.runtime.ObjectHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
-import static amadeus.maho.util.bytecode.Bytecodes.*;
+import static amadeus.maho.util.bytecode.Bytecodes.ATHROW;
 
 public class HandlerMarker {
     
@@ -544,15 +543,9 @@ public class HandlerMarker {
             
             RefCountHolder inner;
             
-            public MultiMap<PsiElement, PsiReference> localRefMap() = myLocalRefsMap(inner);
+            public MultiMap<PsiElement, PsiReference> localRefMap() = (Privilege) inner.myLocalRefsMap;
             
         }
-        
-        @Proxy(value = INVOKESTATIC, targetClass = RefCountHolder.class)
-        private static native RefCountHolder get(PsiFile file, TextRange dirtyScope);
-        
-        @Proxy(GETFIELD)
-        private static native MultiMap<PsiElement, PsiReference> myLocalRefsMap(RefCountHolder $this);
         
         private static @Nullable RefData refData(final PsiElement element) {
             @Nullable PsiFile file = PsiTreeUtil.getParentOfType(element, PsiFile.class);
@@ -567,7 +560,7 @@ public class HandlerMarker {
             final Project project = element.getProject();
             final Document document = PsiDocumentManager.getInstance(project).getDocument(file);
             final @Nullable TextRange dirtyScope = document == null ? null : DaemonCodeAnalyzerEx.getInstanceEx(project).getFileStatusMap().getFileDirtyScope(document, file, com.intellij.codeHighlighting.Pass.UPDATE_ALL);
-            return { get(file, dirtyScope ?? file.getTextRange()) };
+            return { (Privilege) RefCountHolder.get(file, dirtyScope ?? file.getTextRange()) };
         }
         
         @Override
@@ -830,17 +823,14 @@ public class HandlerMarker {
                 process(owner, (handler, target, annotation, annotationTree) -> handler.check(element, annotation, annotationTree, holder, quickFix));
         }
         
-        @Proxy(GETFIELD)
-        private static native PsiExtensibleClass myClass(final ClassInnerStuffCache $this);
-        
         private static final ThreadLocal<LinkedList<PsiExtensibleClass>> collectMemberContextLocal = ThreadLocal.withInitial(LinkedList::new);
         
-        private static ExtensibleMembers members(final ClassInnerStuffCache cache) = members(myClass(cache));
+        private static ExtensibleMembers members(final ClassInnerStuffCache cache) = members((Privilege) cache.myClass);
         
         private static ExtensibleMembers members(final PsiExtensibleClass extensible) {
+            final var context = collectMemberContextLocal.get();
             ProgressManager.checkCanceled();
             if (!accessSourceAST()) {
-                final var context = collectMemberContextLocal.get();
                 if (!context.contains(extensible)) {
                     context.addLast(extensible);
                     try {

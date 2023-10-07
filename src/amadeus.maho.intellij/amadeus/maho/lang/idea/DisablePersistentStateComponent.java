@@ -3,8 +3,10 @@ package amadeus.maho.lang.idea;
 import com.intellij.codeInsight.daemon.impl.HighlightingMarkupGrave;
 import com.intellij.codeInsight.daemon.impl.analysis.FileHighlightingSetting;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightingSettingsPerFile;
+import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 
 import amadeus.maho.lang.inspection.Nullable;
@@ -41,11 +43,14 @@ public interface DisablePersistentStateComponent {
     @Hook(value = HighlightingMarkupGrave.class, isStatic = true, forceReturn = true)
     private static boolean isZombieMarkup(final RangeMarker highlighter) = false;
     
-    @Hook(forceReturn = true)
-    private static void loadState(final HighlightingMarkupGrave $this, final Element element) { }
+    @Hook(value = HighlightingMarkupGrave.class, isStatic = true, forceReturn = true)
+    private static void unmarkZombieMarkup(final RangeMarker highlighter) { }
     
     @Hook(forceReturn = true)
-    private static @Nullable Element getState(final HighlightingMarkupGrave $this) = null;
+    private static void dispose(final HighlightingMarkupGrave $this) { }
+    
+    @Hook(forceReturn = true)
+    private static void resurrectZombies(final HighlightingMarkupGrave $this, final Document document, final VirtualFile file) { }
     
     @Hook(at = @At(field = @At.FieldInsn(name = "myProject")), before = false)
     private static Hook.Result _init_(final HighlightingMarkupGrave $this, final Project project) = Hook.Result.NULL;

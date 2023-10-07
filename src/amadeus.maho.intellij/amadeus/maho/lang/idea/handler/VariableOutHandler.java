@@ -4,7 +4,6 @@ import java.lang.annotation.Annotation;
 
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.codeInspection.defUse.DefUseInspection;
-import com.intellij.psi.PsiAssignmentExpression;
 import com.intellij.psi.PsiParameter;
 import com.intellij.psi.PsiVariable;
 
@@ -29,7 +28,7 @@ public class VariableOutHandler<A extends Annotation> extends BaseHandler<A> {
     public boolean isVariableOut(final PsiVariable variable) = variable.hasAnnotation(handler().value().getCanonicalName());
     
     @Hook(value = DefUseInspection.class, isStatic = true)
-    private static Hook.Result reportAssignmentProblem(final PsiVariable variable, final PsiAssignmentExpression assignment, final ProblemsHolder holder) = Hook.Result.falseToVoid(
+    private static Hook.Result reportInitializerProblem(final PsiVariable variable, final ProblemsHolder holder) = Hook.Result.falseToVoid(
             Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isVariableOut(variable)) || Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isVariableOut(variable)));
     
 }
