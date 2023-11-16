@@ -334,8 +334,8 @@ public class OperatorOverloadingHandler {
         default                                 -> null;
     };
     
-    public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null ? null : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
-    // MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType)
+    public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null ? null :
+            MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
     
     private static @Nullable PsiMethod resolveMethod(final @Nullable PsiMethodCallExpression expression)
             = expression != null && expression.resolveMethodGenerics() instanceof final MethodCandidateInfo info &&
