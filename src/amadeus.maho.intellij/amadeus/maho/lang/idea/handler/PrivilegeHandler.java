@@ -109,10 +109,10 @@ public class PrivilegeHandler {
             final PsiJavaCodeReferenceElement place, final PsiElement fileResolveScope, final TextRange parentFixRange) {
         if (info != null) {
             final @Nullable PsiExpression target = switch (place.getParent()) {
-                case PsiMethodCallExpression callExpression && callExpression.getMethodExpression() == place        -> callExpression;
-                case PsiNewExpression newExpression && newExpression.getClassOrAnonymousClassReference() == place   -> newExpression;
-                case PsiAssignmentExpression assignmentExpression && assignmentExpression.getLExpression() == place -> assignmentExpression;
-                default                                                                                             -> place instanceof PsiExpression expression ? expression : null;
+                case PsiMethodCallExpression callExpression when callExpression.getMethodExpression() == place        -> callExpression;
+                case PsiNewExpression newExpression when newExpression.getClassOrAnonymousClassReference() == place   -> newExpression;
+                case PsiAssignmentExpression assignmentExpression when assignmentExpression.getLExpression() == place -> assignmentExpression;
+                default                                                                                               -> place instanceof PsiExpression expression ? expression : null;
             };
             if (target != null)
                 info.registerFix(QuickFixFactory.getInstance().createAddTypeCastFix(JavaPsiFacade.getElementFactory(place.getProject())

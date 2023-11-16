@@ -177,14 +177,14 @@ public class SelfHandler extends BaseSyntaxHandler {
     private static @Nullable PsiType resolveThis(final PsiMethodCallExpression expression) {
         for (PsiElement scope = expression.getContext(); scope != null; scope = scope.getContext())
             switch (scope) {
-                case PsiExpressionList list && list.getParent() instanceof PsiAnonymousClass -> scope = scope.getParent();
-                case PsiClass psiClass                                                       -> new PsiImmediateClassType(psiClass, PsiSubstitutor.EMPTY);
-                case JavaCodeFragment fragment                                               -> {
+                case PsiExpressionList list when list.getParent() instanceof PsiAnonymousClass -> scope = scope.getParent();
+                case PsiClass psiClass                                                         -> new PsiImmediateClassType(psiClass, PsiSubstitutor.EMPTY);
+                case JavaCodeFragment fragment                                                 -> {
                     final @Nullable PsiType fragmentThisType = fragment.getThisType();
                     if (fragmentThisType != null)
                         return fragmentThisType;
                 }
-                default                                                                      -> { }
+                default                                                                        -> { }
             }
         return null;
     }

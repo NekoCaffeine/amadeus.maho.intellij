@@ -1,6 +1,5 @@
 package amadeus.maho.lang.idea.handler;
 
-import java.util.LinkedList;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -31,6 +30,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFunctionalExpression;
 import com.intellij.psi.PsiIntersectionType;
 import com.intellij.psi.PsiInvalidElementAccessException;
+import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiLambdaParameterType;
@@ -52,7 +52,9 @@ import com.intellij.psi.controlFlow.ControlFlowAnalyzer;
 import com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
 import com.intellij.psi.impl.search.MethodUsagesSearcher;
 import com.intellij.psi.impl.source.PsiParameterImpl;
+import com.intellij.psi.impl.source.resolve.JavaResolveCache;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
+import com.intellij.psi.impl.source.resolve.graphInference.PsiPolyExpressionUtil;
 import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import com.intellij.psi.impl.source.tree.java.PsiArrayAccessExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiAssignmentExpressionImpl;
@@ -85,6 +87,9 @@ import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.light.LightElementReference;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
+import amadeus.maho.transform.mark.Redirect;
+import amadeus.maho.transform.mark.base.At;
+import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.runtime.DebugHelper;
 
@@ -122,9 +127,9 @@ public class OperatorOverloadingHandler {
     private static Hook.Result isLValue(final PsiExpression expression) = Hook.Result.falseToVoid(checkLValue(expression));
     
     public static boolean checkLValue(final PsiExpression expression) = CachedValuesManager.getProjectPsiDependentCache(expression, it -> switch (it) {
-        case PsiMethodCallExpression callExpression && callExpression.getArgumentList().isEmpty() -> hasSetter(callExpression);
-        case PsiArrayAccessExpression accessExpression && expr(accessExpression) != null          -> hasPutter(accessExpression);
-        default                                                                                   -> false;
+        case PsiMethodCallExpression callExpression when callExpression.getArgumentList().isEmpty() -> hasSetter(callExpression);
+        case PsiArrayAccessExpression accessExpression when expr(accessExpression) != null          -> hasPutter(accessExpression);
+        default                                                                                     -> false;
     });
     
     private static boolean hasSetter(final PsiMethodCallExpression expression) {
@@ -145,6 +150,9 @@ public class OperatorOverloadingHandler {
         } catch (final IncorrectOperationException e) { DebugHelper.breakpoint(); }
         return false;
     }
+    
+    @Redirect(targetClass = JavaResolveCache.class, selector = "getType", slice = @Slice(@At(method = @At.MethodInsn(name = "isPolyExpression"))))
+    private static boolean prohibitCaching(final PsiExpression expression) = expression instanceof PsiJavaCodeReferenceElement || PsiPolyExpressionUtil.isPolyExpression(expression);
     
     @Hook(value = PsiUtil.class, isStatic = true)
     private static Hook.Result isStatement(final PsiElement element) = avoid(element, true);
@@ -414,9 +422,9 @@ public class OperatorOverloadingHandler {
     
     public static void lookupExpression(final Processor<PsiReference> consumer, final Project project, final PsiMethod method, final SearchScope searchScope) {
         if (searchScope instanceof final GlobalSearchScope globalSearchScope)
-            JavaShortClassNameIndex.getInstance().getAllKeys(project).forEach(name -> JavaShortClassNameIndex.getInstance().get(name, project, globalSearchScope).forEach(psiClass -> lookupExpression(consumer, method, psiClass)));
-        else if (searchScope instanceof final LocalSearchScope localSearchScope) Stream.of(localSearchScope.getScope()).forEach(element -> lookupExpression(consumer, method, element));
-        else DebugHelper.breakpoint();
+            JavaShortClassNameIndex.getInstance().getAllKeys(project).forEach(name -> JavaShortClassNameIndex.getInstance().getClasses(name, project, globalSearchScope).forEach(psiClass -> lookupExpression(consumer, method, psiClass)));
+        else if (searchScope instanceof final LocalSearchScope localSearchScope)
+            Stream.of(localSearchScope.getScope()).forEach(element -> lookupExpression(consumer, method, element));
     }
     
     public static void lookupExpression(final Processor<PsiReference> consumer, final PsiMethod method, final PsiElement element)
@@ -542,8 +550,6 @@ public class OperatorOverloadingHandler {
     @Hook(value = ExpressionUtils.class, isStatic = true)
     private static Hook.Result isStringConcatenation(final PsiElement element) = Hook.Result.falseToVoid(element instanceof final PsiPolyadicExpression expression && expression.getOperationTokenType() != PLUS, false);
     
-    public static final ThreadLocal<LinkedList<PsiElement>> inferFunctionInterfaceTypeStackLocal = ThreadLocal.withInitial(LinkedList::new);
-    
     @Hook(value = PsiParameterImpl.class, isStatic = true, forceReturn = true)
     private static PsiType getLambdaParameterType(final PsiParameter parameter) {
         final PsiElement parent = parameter.getParent();
@@ -552,20 +558,15 @@ public class OperatorOverloadingHandler {
             if (parameterIndex > -1) {
                 final PsiLambdaExpression lambdaExpression = PsiTreeUtil.getParentOfType(parameter, PsiLambdaExpression.class);
                 if (lambdaExpression != null) {
-                    final LinkedList<PsiElement> stack = inferFunctionInterfaceTypeStackLocal.get();
-                    final @Nullable PsiType functionalInterfaceType;
-                    if (stack.stream().filter(element -> element != parameter).count() < 2) {
-                        stack << parameter;
-                        try {
-                            functionalInterfaceType = LambdaUtil.getFunctionalInterfaceType(lambdaExpression, true);
-                        } finally { stack--; }
-                    } else functionalInterfaceType = null;
+                    final @Nullable PsiType functionalInterfaceType = MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(parameter, false, () -> LambdaUtil.getFunctionalInterfaceType(lambdaExpression, true)) ??
+                                                                      (MethodCandidateInfo.ourOverloadGuard.currentStack().contains(parameter) ? LambdaUtil.getFunctionalInterfaceType(lambdaExpression, true) : null);
                     final @Nullable PsiType type = lambdaExpression.getGroundTargetType(functionalInterfaceType);
-                    if (type instanceof PsiIntersectionType intersectionType) for (final PsiType conjunct : intersectionType.getConjuncts()) {
-                        final @Nullable PsiType lambdaParameterFromType = LambdaUtil.getLambdaParameterFromType(conjunct, parameterIndex);
-                        if (lambdaParameterFromType != null)
-                            return lambdaParameterFromType;
-                    }
+                    if (type instanceof PsiIntersectionType intersectionType)
+                        for (final PsiType conjunct : intersectionType.getConjuncts()) {
+                            final @Nullable PsiType lambdaParameterFromType = LambdaUtil.getLambdaParameterFromType(conjunct, parameterIndex);
+                            if (lambdaParameterFromType != null)
+                                return lambdaParameterFromType;
+                        }
                     else {
                         final @Nullable PsiType lambdaParameterFromType = LambdaUtil.getLambdaParameterFromType(type, parameterIndex);
                         if (lambdaParameterFromType != null)

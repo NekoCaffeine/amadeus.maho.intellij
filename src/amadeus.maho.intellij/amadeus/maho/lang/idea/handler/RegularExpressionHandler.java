@@ -46,9 +46,8 @@ public class RegularExpressionHandler extends BaseSyntaxHandler {
                     if (variable.getInitializer() == expression)
                         check(expression, variable, holder, quickFix);
                 }
-                case PsiAssignmentExpression assignment
-                        && assignment.getLExpression() instanceof PsiReferenceExpression reference
-                           && reference.resolve() instanceof PsiModifierListOwner owner -> {
+                case PsiAssignmentExpression assignment when assignment.getLExpression() instanceof PsiReferenceExpression reference
+                                                             && reference.resolve() instanceof PsiModifierListOwner owner -> {
                     if (assignment.getRExpression() == expression)
                         check(expression, owner, holder, quickFix);
                 }

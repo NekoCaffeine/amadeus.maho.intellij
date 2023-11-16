@@ -112,7 +112,7 @@ import amadeus.maho.util.runtime.ArrayHelper;
 import com.siyeh.ig.BaseInspectionVisitor;
 import org.cef.SystemBootstrap;
 
-import static org.objectweb.asm.Opcodes.*;
+import static amadeus.maho.util.bytecode.Bytecodes.*;
 
 @TransformProvider
 interface Fix {
@@ -167,7 +167,7 @@ interface Fix {
         final @Nullable Project project = scope.getProject();
         if (project == null)
             return Hook.Result.VOID;
-        return { JavaShortClassNameIndex.getInstance().get(name, project, scope).toArray(PsiClass.ARRAY_FACTORY::create) };
+        return { JavaShortClassNameIndex.getInstance().getClasses(name, project, scope).toArray(PsiClass.ARRAY_FACTORY::create) };
     }
     
     private static ProgressIndicator getOrCreateIndicator() {
@@ -183,7 +183,7 @@ interface Fix {
         final JavaShortClassNameIndex nameIndex = JavaShortClassNameIndex.getInstance();
         final Map<String, Collection<PsiClass>> resultMap = new ConcurrentHashMap<>();
         JobLauncher.getInstance().invokeConcurrentlyUnderProgress(new ArrayList<>(names), getOrCreateIndicator(), name -> {
-            resultMap[name] = nameIndex.get(name, project, scope);
+            resultMap[name] = nameIndex.getClasses(name, project, scope);
             return true;
         });
         return { names.stream().map(resultMap::get).allMatch(collection -> collection.stream().peek(it -> ProgressIndicatorProvider.checkCanceled()).allMatch(processor::process)) };

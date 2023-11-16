@@ -36,7 +36,7 @@ public interface LargeMemoryPatcher {
     interface Layer {
         
         @Hook(forceReturn = true)
-        private static String intern(final StubStringInterner $this, final String str) = str;
+        private static String apply(final StubStringInterner $this, final String str) = str;
         
         @Hook(forceReturn = true)
         private static boolean isKeepTreeElementByHardReference(final PsiFileImpl $this) = true;
@@ -60,7 +60,7 @@ public interface LargeMemoryPatcher {
         }
         
         @Hook(exactMatch = false)
-        private static void onClick(final @InvisibleType("com.intellij.openapi.wm.impl.status.MemoryUsagePanel$1") ClickListener $this) = Stream.of(ProjectManager.getInstance().getOpenProjects())
+        private static void onClick(final @InvisibleType("com.intellij.openapi.wm.impl.status.MemoryUsagePanel$MemoryUsagePanelImpl$1") ClickListener $this) = Stream.of(ProjectManager.getInstance().getOpenProjects())
                 .map(PsiManager::getInstance)
                 .cast(PsiManagerEx.class)
                 .map(PsiManagerEx::getFileManager)
@@ -86,7 +86,7 @@ public interface LargeMemoryPatcher {
     static void extendWorkingSetSize() {
         if (SystemInfo.isWindows) {
             final WinNT.HANDLE hProcess = Kernel32.INSTANCE.GetCurrentProcess();
-            final long maxMemory = Runtime.getRuntime().maxMemory(), workingSet = maxMemory / 4 * 5;
+            final long maxMemory = Runtime.getRuntime().maxMemory(), workingSet = maxMemory;
             final boolean result = MemoryAPI.INSTANCE.SetProcessWorkingSetSizeEx(hProcess, workingSet, workingSet, MemoryAPI.QUOTA_LIMITS_HARDWS_MIN_ENABLE | MemoryAPI.QUOTA_LIMITS_HARDWS_MAX_DISABLE);
             System.out.println("SetProcessWorkingSetSizeEx: " + result);
         }

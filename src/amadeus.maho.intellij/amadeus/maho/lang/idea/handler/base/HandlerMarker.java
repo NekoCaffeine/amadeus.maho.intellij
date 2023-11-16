@@ -144,6 +144,7 @@ import com.intellij.usages.impl.rules.JavaUsageTypeProvider;
 import com.intellij.usages.impl.rules.UsageType;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.Processor;
+import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.intellij.util.containers.MultiMap;
 
 import amadeus.maho.lang.AccessLevel;
@@ -756,11 +757,9 @@ public class HandlerMarker {
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.FINALLY)), exactMatch = false)
         private static void buildStubTree_$Exit(final LightStubBuilder $this) = collectGuard.get().getAndDecrement();
         
-        // @Hook(at = @At(method = @At.MethodInsn(name = "performPsiModification")), before = false)
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
         private static void ensureParsed(final LazyParseableElement $this) {
             if ($this.getElementType().getLanguage() == JavaLanguage.INSTANCE && loadTreeGuard.get().get() == 0)
-                // if ($this.getElementType().getLanguage() == JavaLanguage.INSTANCE)
                 transform($this);
         }
         
@@ -823,22 +822,32 @@ public class HandlerMarker {
                 process(owner, (handler, target, annotation, annotationTree) -> handler.check(element, annotation, annotationTree, holder, quickFix));
         }
         
-        private static final ThreadLocal<LinkedList<PsiExtensibleClass>> collectMemberContextLocal = ThreadLocal.withInitial(LinkedList::new);
+        private static final ThreadLocal<LinkedList<PsiClass>> collectMemberContextLocal = ThreadLocal.withInitial(LinkedList::new);
+        
+        @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
+        private static Object getMap(final PsiClass psiClass, final GlobalSearchScope scope) { // Consistent lambda with different identities
+            if (!accessSourceAST()) {
+                if (collectMemberContextLocal.get().isEmpty())
+                    return CachedValuesManager.getProjectPsiDependentCache(psiClass, c -> ConcurrentFactoryMap.createMap((GlobalSearchScope s) -> (Privilege) new PsiClassImplUtil.MemberCache(c, s))).get(scope);
+                return (Privilege) new PsiClassImplUtil.MemberCache(psiClass, scope);
+            }
+            return CachedValuesManager.getProjectPsiDependentCache(psiClass, c -> ConcurrentFactoryMap.createMap((GlobalSearchScope s) -> (Privilege) new PsiClassImplUtil.MemberCache(c, s))).get(scope);
+        }
         
         private static ExtensibleMembers members(final ClassInnerStuffCache cache) = members((Privilege) cache.myClass);
         
         private static ExtensibleMembers members(final PsiExtensibleClass extensible) {
-            final var context = collectMemberContextLocal.get();
             ProgressManager.checkCanceled();
             if (!accessSourceAST()) {
-                if (!context.contains(extensible)) {
-                    context.addLast(extensible);
+                final var context = collectMemberContextLocal.get();
+                if (!context[extensible]) {
+                    context << extensible;
                     try {
                         return CachedValuesManager.getProjectPsiDependentCache(extensible, it -> IDEAContext.computeReadActionIgnoreDumbMode(() -> new ExtensibleMembers(it)));
-                    } finally { context.removeLast(); }
+                    } finally { context--; }
                 }
             }
-            return CachedValuesManager.getProjectPsiDependentCache(extensible, it -> new ExtensibleMembers(extensible, true));
+            return CachedValuesManager.getProjectPsiDependentCache(extensible, it -> new ExtensibleMembers(it, true));
         }
         
         @Hook

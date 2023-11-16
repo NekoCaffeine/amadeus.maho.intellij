@@ -6,7 +6,7 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightingSettingsPerFile
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileWithId;
 import com.intellij.psi.PsiElement;
 
 import amadeus.maho.lang.inspection.Nullable;
@@ -50,7 +50,7 @@ public interface DisablePersistentStateComponent {
     private static void dispose(final HighlightingMarkupGrave $this) { }
     
     @Hook(forceReturn = true)
-    private static void resurrectZombies(final HighlightingMarkupGrave $this, final Document document, final VirtualFile file) { }
+    private static void resurrectZombies(final HighlightingMarkupGrave $this, final Document document, final VirtualFileWithId file) { }
     
     @Hook(at = @At(field = @At.FieldInsn(name = "myProject")), before = false)
     private static Hook.Result _init_(final HighlightingMarkupGrave $this, final Project project) = Hook.Result.NULL;

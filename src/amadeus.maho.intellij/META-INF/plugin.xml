@@ -19,6 +19,7 @@
     </application-components>
 
     <extensions defaultExtensionNs="com.intellij">
+        <fileBasedIndexInfrastructureExtension implementation="amadeus.maho.lang.idea.InMemoryIndex$InfrastructureExtension"/>
         <referencesSearch implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$ReferenceSearcher"/>
         <lang.psiAugmentProvider implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$EntryPoint"/>
         <renamePsiElementProcessor implementation="amadeus.maho.lang.idea.handler.base.HandlerMarker$RenameLightElementProcessor" order="first"/>
