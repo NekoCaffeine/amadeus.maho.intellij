@@ -29,4 +29,6 @@ public interface Remote {
     
     static void release(final Path distributive = build()) = Distributive.release(workspace, module, repo, List.of(distributive));
     
+    static void releasePush(final Path distributive = build()) = push(distributive.let(Remote::release));
+    
 }

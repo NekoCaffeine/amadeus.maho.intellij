@@ -92,8 +92,8 @@ public interface Build {
     
     static void hotswap() = Javac.compile(workspace, module, useModulePath::contains, args -> Javac.addReadsAllUnnamed(args, module));
     
-    static void push() {
-        build() | root -> libPath(root) >> --~libPath(run.path() / "plugins");
+    static void push(final Path build = build()) {
+        build | root -> libPath(root) >> --~libPath(run.path() / "plugins");
         buildRun();
     }
     
