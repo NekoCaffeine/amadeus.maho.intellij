@@ -20,6 +20,7 @@ import com.intellij.psi.PsiArrayAccessExpression;
 import com.intellij.psi.PsiAssignmentExpression;
 import com.intellij.psi.PsiBinaryExpression;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiCodeBlock;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementFactory;
 import com.intellij.psi.PsiElementVisitor;
@@ -60,6 +61,7 @@ import com.intellij.psi.impl.source.tree.java.PsiArrayAccessExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiAssignmentExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiBinaryExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiJavaTokenImpl;
+import com.intellij.psi.impl.source.tree.java.PsiLambdaExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiPolyadicExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiPostfixExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiPrefixExpressionImpl;
@@ -153,6 +155,10 @@ public class OperatorOverloadingHandler {
     
     @Redirect(targetClass = JavaResolveCache.class, selector = "getType", slice = @Slice(@At(method = @At.MethodInsn(name = "isPolyExpression"))))
     private static boolean prohibitCaching(final PsiExpression expression) = expression instanceof PsiJavaCodeReferenceElement || PsiPolyExpressionUtil.isPolyExpression(expression);
+    
+    @Hook(forceReturn = true)
+    private static boolean isValueCompatible(final PsiLambdaExpressionImpl $this) = CachedValuesManager.getProjectPsiDependentCache($this,
+            lambda -> !(lambda.getBody() instanceof PsiCodeBlock block) || Stream.of(PsiUtil.findReturnStatements(block)).anyMatch(statement -> statement.getReturnValue() != null));
     
     @Hook(value = PsiUtil.class, isStatic = true)
     private static Hook.Result isStatement(final PsiElement element) = avoid(element, true);
@@ -334,8 +340,17 @@ public class OperatorOverloadingHandler {
         default                                 -> null;
     };
     
-    public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null ? null :
-            MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
+    public static boolean canResolve(final PsiExpression expression) = ((Stream<PsiExpression>) switch (expression) {
+        case PsiUnaryExpression unary           -> Stream.of(unary.getOperand());
+        case PsiPolyadicExpression polyadic     -> Stream.of(polyadic.getOperands());
+        case PsiAssignmentExpression assignment -> Stream.of(assignment.getLExpression(), assignment.getRExpression());
+        case PsiArrayAccessExpression access    -> Stream.of(access.getArrayExpression(), access.getIndexExpression());
+        default                                 -> Stream.empty();
+    }).map(expr -> expr?.getType() ?? null).noneMatch(type -> type == null || type instanceof PsiLambdaParameterType);
+    
+    public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null || !canResolve(expr) ? null :
+            CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
+    // MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
     
     private static @Nullable PsiMethod resolveMethod(final @Nullable PsiMethodCallExpression expression)
             = expression != null && expression.resolveMethodGenerics() instanceof final MethodCandidateInfo info &&
