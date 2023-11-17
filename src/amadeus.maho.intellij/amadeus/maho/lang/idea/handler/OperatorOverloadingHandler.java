@@ -325,11 +325,8 @@ public class OperatorOverloadingHandler {
         return info;
     }
     
-    public static @Nullable OverloadInfo calculateAccessType(final PsiArrayAccessExpression expr) {
-        if (expr.getIndexExpression() == null)
-            return null;
-        return calculateExprType(expr, expr.getArrayExpression(), "GET", expr.getIndexExpression());
-    }
+    public static @Nullable OverloadInfo calculateAccessType(final PsiArrayAccessExpression expr)
+            = expr.getIndexExpression() == null ? null : calculateExprType(expr, expr.getArrayExpression(), "GET", expr.getIndexExpression());
     
     public static @Nullable OverloadInfo resolveExprType(final PsiElement element) = switch (element) {
         case PsiUnaryExpression unary           -> calculateUnaryType(unary);
