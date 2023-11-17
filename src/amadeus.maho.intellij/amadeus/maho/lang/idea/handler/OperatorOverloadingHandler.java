@@ -340,13 +340,9 @@ public class OperatorOverloadingHandler {
         default                                 -> null;
     };
     
-    public static boolean canResolve(final PsiExpression expression) = ((Stream<PsiExpression>) switch (expression) {
-        case PsiUnaryExpression unary           -> Stream.of(unary.getOperand());
-        case PsiPolyadicExpression polyadic     -> Stream.of(polyadic.getOperands());
-        case PsiAssignmentExpression assignment -> Stream.of(assignment.getLExpression(), assignment.getRExpression());
-        case PsiArrayAccessExpression access    -> Stream.of(access.getArrayExpression(), access.getIndexExpression());
-        default                                 -> Stream.empty();
-    }).map(expr -> expr?.getType() ?? null).noneMatch(type -> type == null || type instanceof PsiLambdaParameterType);
+    public static boolean canResolve(final PsiExpression expression) = Stream.of(expressions(expression))
+            .map(expr -> expr?.getType() ?? null)
+            .noneMatch(type -> type == null || type instanceof PsiLambdaParameterType);
     
     public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null || !canResolve(expr) ? null :
             CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
@@ -373,7 +369,8 @@ public class OperatorOverloadingHandler {
             for (final PsiClass ext : ExtensionHandler.extensionSet(element.getResolveScope())) {
                 overloadCall = expr(element, ext.getQualifiedName(), name, Stream.concat(Stream.of(expression), Stream.of(expressions)).map(PsiExpression::getText).collect(Collectors.joining(", ")));
                 method = resolveMethod(overloadCall);
-                if (method != null) break;
+                if (method != null)
+                    break;
             }
         } else {
             overloadCall = expr(element, String.format("(%s)", expression.getText()), name, Stream.of(expressions).map(PsiExpression::getText).collect(Collectors.joining(", ")));
