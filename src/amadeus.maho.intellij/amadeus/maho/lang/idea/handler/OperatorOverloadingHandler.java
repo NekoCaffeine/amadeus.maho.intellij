@@ -10,6 +10,8 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightControlFlowUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.RefCountHolder;
 import com.intellij.codeInsight.highlighting.ReadWriteAccessDetector;
+import com.intellij.codeInspection.OverwrittenKeyInspection;
+import com.intellij.codeInspection.util.InspectionMessage;
 import com.intellij.debugger.engine.evaluation.expression.EvaluatorBuilderImpl;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.Project;
@@ -337,13 +339,13 @@ public class OperatorOverloadingHandler {
         default                                 -> null;
     };
     
-    public static boolean canResolve(final PsiExpression expression) = Stream.of(expressions(expression))
+    public static boolean canResolve(final @Nullable PsiExpression expressions[] = expressions(expression), final PsiExpression expression) = expressions != null && Stream.of(expressions)
+            .filter(expr -> !(expr instanceof PsiArrayAccessExpression))
             .map(expr -> expr?.getType() ?? null)
             .noneMatch(type -> type == null || type instanceof PsiLambdaParameterType);
     
     public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null || !canResolve(expr) ? null :
             CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
-    // MethodCandidateInfo.isOverloadCheck() ? resolveExprType(expr) : CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
     
     private static @Nullable PsiMethod resolveMethod(final @Nullable PsiMethodCallExpression expression)
             = expression != null && expression.resolveMethodGenerics() instanceof final MethodCandidateInfo info &&
@@ -588,9 +590,15 @@ public class OperatorOverloadingHandler {
     }
     
     @Hook
-    private static Hook.Result visitPrefixExpression(final UnaryPlusInspection.UnaryPlusVisitor $this, final PsiPrefixExpression expression) = Hook.Result.falseToVoid(expr(expression) != null, null);
+    private static Hook.Result visitPrefixExpression(final UnaryPlusInspection.UnaryPlusVisitor $this, final PsiPrefixExpression expression)
+            = Hook.Result.falseToVoid(expr(expression) != null, null);
     
     @Hook
-    private static Hook.Result visitPrefixExpression(final UnnecessaryUnaryMinusInspection.UnnecessaryUnaryMinusVisitor $this, final PsiPrefixExpression expression) = Hook.Result.falseToVoid(expr(expression) != null, null);
+    private static Hook.Result visitPrefixExpression(final UnnecessaryUnaryMinusInspection.UnnecessaryUnaryMinusVisitor $this, final PsiPrefixExpression expression)
+            = Hook.Result.falseToVoid(expr(expression) != null, null);
+    
+    @Hook
+    private static Hook.Result processArraySequence(final OverwrittenKeyInspection $this, final PsiAssignmentExpression assignment, final PsiExpressionStatement statement, @InspectionMessage final String message)
+            = Hook.Result.falseToVoid(expr(assignment) == null);
     
 }
