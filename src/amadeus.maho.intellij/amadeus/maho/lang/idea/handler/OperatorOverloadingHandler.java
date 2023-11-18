@@ -598,7 +598,7 @@ public class OperatorOverloadingHandler {
             = Hook.Result.falseToVoid(expr(expression) != null, null);
     
     @Hook
-    private static Hook.Result processArraySequence(final OverwrittenKeyInspection $this, final PsiAssignmentExpression assignment, final PsiExpressionStatement statement, @InspectionMessage final String message)
+    private static Hook.Result processArraySequence(final OverwrittenKeyInspection.OverwrittenKeyVisitor $this, final PsiAssignmentExpression assignment, final PsiExpressionStatement statement, @InspectionMessage final String message)
             = Hook.Result.falseToVoid(expr(assignment) == null);
     
 }
