@@ -5,8 +5,9 @@ import java.util.ResourceBundle;
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInsight.javadoc.JavaDocInfoGenerator;
 import com.intellij.ide.actions.searcheverywhere.WaitForContributorsListenerWrapper;
-import com.intellij.ide.ui.UIThemeBeanKt;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.vfs.newvfs.persistent.PersistentFSImpl;
+import com.intellij.psi.impl.source.tree.java.PsiMethodCallExpressionImpl;
 import com.intellij.ui.popup.AbstractPopup;
 import com.intellij.util.xmlb.BeanBinding;
 import com.intellij.workspaceModel.ide.impl.jps.serialization.JpsGlobalModelSynchronizerImpl;
@@ -78,7 +79,10 @@ public interface DisableLogger {
     @Hook(value = BeanBinding.class, isStatic = true, forceReturn = true)
     private static boolean isAssertBindings(final Class<?> owner) = true;
     
-    @Redirect(targetClass = UIThemeBeanKt.class, selector = "readTheme", slice = @Slice(@At(method = @At.MethodInsn(name = "warn"))))
-    private static void warn_$UIThemeBeanKt(final Logger logger, final String msg) { }
+    @Redirect(targetClass = PersistentFSImpl.class, selector = "cacheMissedRootFromPersistence", slice = @Slice(@At(method = @At.MethodInsn(name = "warn"))))
+    private static void warn_$PersistentFSImpl(final Logger logger, final String msg) { }
+    
+    @Redirect(targetClass = PsiMethodCallExpressionImpl.TypeEvaluator.class, selector = "fun", slice = @Slice(@At(method = @At.MethodInsn(name = "error"))))
+    private static void error_$PsiMethodCallExpressionImp$TypeEvaluator(final Logger logger, final String msg) { }
     
 }

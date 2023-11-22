@@ -405,7 +405,8 @@ public class OperatorOverloadingHandler {
             final PsiElement result = PsiElementFactory.getInstance(element.getProject()).createExpressionFromText(String.format("%s.%s(%s)", expressions), element);
             return result instanceof final PsiMethodCallExpression expression ? expression : null;
         } catch (final Throwable throwable) {
-            if (!(throwable instanceof ProcessCanceledException)) throwable.printStackTrace();
+            if (!(throwable instanceof ProcessCanceledException))
+                DebugHelper.breakpoint(throwable);
             return null;
         }
     }

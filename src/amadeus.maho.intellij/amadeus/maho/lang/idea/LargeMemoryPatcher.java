@@ -28,7 +28,6 @@ import amadeus.maho.lang.Privilege;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.InvisibleType;
 import amadeus.maho.transform.mark.base.TransformProvider;
-import amadeus.maho.util.dynamic.ReferenceCollector;
 
 public interface LargeMemoryPatcher {
     
@@ -86,12 +85,10 @@ public interface LargeMemoryPatcher {
     static void extendWorkingSetSize() {
         if (SystemInfo.isWindows) {
             final WinNT.HANDLE hProcess = Kernel32.INSTANCE.GetCurrentProcess();
-            final long maxMemory = Runtime.getRuntime().maxMemory(), workingSet = maxMemory;
-            final boolean result = MemoryAPI.INSTANCE.SetProcessWorkingSetSizeEx(hProcess, workingSet, workingSet, MemoryAPI.QUOTA_LIMITS_HARDWS_MIN_ENABLE | MemoryAPI.QUOTA_LIMITS_HARDWS_MAX_DISABLE);
-            System.out.println("SetProcessWorkingSetSizeEx: " + result);
+            final long maxMemory = Runtime.getRuntime().maxMemory();
+            final boolean result = MemoryAPI.INSTANCE.SetProcessWorkingSetSizeEx(hProcess, maxMemory * 2, -1, MemoryAPI.QUOTA_LIMITS_HARDWS_MIN_ENABLE | MemoryAPI.QUOTA_LIMITS_HARDWS_MAX_DISABLE);
+            System.out.println(STR."SetProcessWorkingSetSizeEx: \{result}");
         }
     }
-    
-    ReferenceCollector.Base collector = new ReferenceCollector.Base().let(ReferenceCollector.Base::start);
     
 }

@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -51,7 +50,6 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.ScrollType;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
-import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
@@ -144,7 +142,6 @@ import com.intellij.usages.impl.rules.JavaUsageTypeProvider;
 import com.intellij.usages.impl.rules.UsageType;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.Processor;
-import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.intellij.util.containers.MultiMap;
 
 import amadeus.maho.lang.AccessLevel;
@@ -196,8 +193,6 @@ public class HandlerMarker {
         
         public ReferenceSearcher() = super(true);
         
-        public static Collection<PsiNameIdentifierOwner> relatedTargets(final PsiElement element) = CachedValuesManager.getProjectPsiDependentCache(element, _ -> new ConcurrentLinkedQueue<>());
-        
         @Override
         public void processQuery(final ReferencesSearch.SearchParameters parameters, final Processor<? super PsiReference> consumer)
                 = search(parameters.getElementToSearch(), parameters.getScopeDeterminedByUser(), parameters.getOptimizer(), consumer);
@@ -207,8 +202,8 @@ public class HandlerMarker {
                 final @Nullable String name = namedElement.getName();
                 if (name != null) {
                     final HashSet<PsiNameIdentifierOwner> targets = { };
-                    EntryPoint.process(owner, (handler, target, annotation, annotationTree) -> handler.collectRelatedTarget(owner, annotation, annotationTree, targets));
-                    targets *= relatedTargets(owner);
+                    EntryPoint.process(owner, (handler, target, annotation, annotationTree) -> handler.collectRelatedTarget(target, annotation, annotationTree, targets));
+                    Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.collectRelatedTarget(owner, targets));
                     targets -= null;
                     targets.forEach(target -> {
                         if (target.getNameIdentifier() != null)
@@ -824,20 +819,19 @@ public class HandlerMarker {
         
         private static final ThreadLocal<LinkedList<PsiClass>> collectMemberContextLocal = ThreadLocal.withInitial(LinkedList::new);
         
-        @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
-        private static Object getMap(final PsiClass psiClass, final GlobalSearchScope scope) { // Consistent lambda with different identities
-            if (!accessSourceAST()) {
-                if (collectMemberContextLocal.get().isEmpty())
-                    return CachedValuesManager.getProjectPsiDependentCache(psiClass, c -> ConcurrentFactoryMap.createMap((GlobalSearchScope s) -> (Privilege) new PsiClassImplUtil.MemberCache(c, s))).get(scope);
-                return (Privilege) new PsiClassImplUtil.MemberCache(psiClass, scope);
-            }
-            return CachedValuesManager.getProjectPsiDependentCache(psiClass, c -> ConcurrentFactoryMap.createMap((GlobalSearchScope s) -> (Privilege) new PsiClassImplUtil.MemberCache(c, s))).get(scope);
-        }
+        // @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
+        // private static Object getMap(final PsiClass psiClass, final GlobalSearchScope scope) { // Consistent lambda with different identities
+        //     if (!accessSourceAST()) {
+        //         if (collectMemberContextLocal.get().isEmpty())
+        //             return CachedValuesManager.getProjectPsiDependentCache(psiClass, c -> ConcurrentFactoryMap.createMap((GlobalSearchScope s) -> (Privilege) new PsiClassImplUtil.MemberCache(c, s))).get(scope);
+        //         return (Privilege) new PsiClassImplUtil.MemberCache(psiClass, scope);
+        //     }
+        //     return CachedValuesManager.getProjectPsiDependentCache(psiClass, c -> ConcurrentFactoryMap.createMap((GlobalSearchScope s) -> (Privilege) new PsiClassImplUtil.MemberCache(c, s))).get(scope);
+        // }
         
         private static ExtensibleMembers members(final ClassInnerStuffCache cache) = members((Privilege) cache.myClass);
         
         private static ExtensibleMembers members(final PsiExtensibleClass extensible) {
-            ProgressManager.checkCanceled();
             if (!accessSourceAST()) {
                 final var context = collectMemberContextLocal.get();
                 if (!context[extensible]) {
@@ -1010,16 +1004,16 @@ public class HandlerMarker {
         
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
         public static PsiClass[] getInterfaces(final PsiClass capture[], final PsiClassImpl $this) = IDEAContext.computeReadActionIgnoreDumbMode(() -> new HashSet<>(List.of(capture)).let(
-                result -> process($this, (handler, tree, annotation, annotationTree) -> handler.transformInterfaces((PsiClass) tree, annotation, annotationTree, result))).toArray(PsiClass[]::new));
+                result -> process($this, (handler, tree, annotation, annotationTree) -> handler.transformInterfaces(tree, annotation, annotationTree, result))).toArray(PsiClass[]::new));
         
         @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
         public static PsiClassType[] getImplementsListTypes(final PsiClassType capture[], final PsiClass $this) = IDEAContext.computeReadActionIgnoreDumbMode(() -> new HashSet<>(List.of(capture)).let(
-                result -> process($this, (handler, tree, annotation, annotationTree) -> handler.transformInterfaceTypes((PsiClass) tree, annotation, annotationTree, result))).toArray(PsiClassType[]::new));
+                result -> process($this, (handler, tree, annotation, annotationTree) -> handler.transformInterfaceTypes(tree, annotation, annotationTree, result))).toArray(PsiClassType[]::new));
         
-        public static void process(final PsiModifierListOwner tree, final Class<? extends Annotation> annotationType, final Consumer4<BaseHandler<Annotation>, PsiElement, Annotation, PsiAnnotation> consumer)
+        public static <T extends PsiModifierListOwner> void process(final T tree, final Class<? extends Annotation> annotationType, final Consumer4<BaseHandler<Annotation>, ? super T, Annotation, PsiAnnotation> consumer)
                 = process(tree, it -> it.handler().value() == annotationType, consumer);
         
-        public static void process(final PsiModifierListOwner tree, final Predicate<BaseHandler<?>> predicate = _ -> true, final Consumer4<BaseHandler<Annotation>, PsiElement, Annotation, PsiAnnotation> consumer)
+        public static <T extends PsiModifierListOwner> void process(final T tree, final Predicate<BaseHandler<?>> predicate = _ -> true, final Consumer4<BaseHandler<Annotation>, ? super T, Annotation, PsiAnnotation> consumer)
                 = Handler.Marker.baseHandlers().stream()
                 .filter(predicate)
                 .map(baseHandler -> getAnnotationsByTypeWithOuter(tree, baseHandler))

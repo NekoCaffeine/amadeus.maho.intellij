@@ -12,9 +12,9 @@ import amadeus.maho.core.MahoExport;
 import amadeus.maho.core.extension.ReflectBreaker;
 import amadeus.maho.lang.SneakyThrows;
 import amadeus.maho.util.resource.ResourcePath;
+import amadeus.maho.vm.tools.hotspot.JIT;
 
-@SneakyThrows
-final class MahoIDEA {
+@SneakyThrows final class MahoIDEA {
     
     private static Predicate<URL> sourceChecker(final Class<?> target) {
         final Function<URL, String> name = url -> {
@@ -27,6 +27,15 @@ final class MahoIDEA {
         if (target.getName().startsWith("amadeus.maho."))
             return url -> name.apply(url).startsWith("amadeus.maho-");
         throw new IllegalArgumentException(target.getName());
+    }
+    
+    private static final List<String> packages = List.of("java.io.", "java.nio.", "java.util.concurrent.", "java.awt.", "javax.swing.", "sun.nio.", "sun.java2d.", "com.intellij.", "com.jetbrains.", "amadeus.maho.lang.idea.");
+    
+    private static boolean shouldCompile(final String name) {
+        for (final String pkg : packages)
+            if (name.startsWith(pkg))
+                return true;
+        return false;
     }
     
     static {
@@ -47,6 +56,7 @@ final class MahoIDEA {
             Maho.setupFromClass();
             ReflectBreaker.jailbreak();
             ObjectTreeInjector.inject();
+            JIT.instance().compileAll(target -> shouldCompile(target.getName()));
         } catch (final Throwable throwable) { throwable.printStackTrace(); }
     }
     

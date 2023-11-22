@@ -43,12 +43,12 @@ public class StructureElement<V extends PsiElement & LightElement> extends JavaC
     }
     
     @Override
-    public String getLocationString() = " " + UIUtil.rightArrow() + " " + (getValue().virtual() ? "(virtual) " : "") + getValue().equivalents().stream()
+    public String getLocationString() = STR." \{UIUtil.rightArrow()} \{getValue().virtual() ? "(virtual) " : ""}\{getValue().equivalents().stream()
             .filter(PsiAnnotation.class::isInstance)
             .map(PsiAnnotation.class::cast)
             .findFirst()
             .map(PsiAnnotation::getText)
-            .orElseGet(getValue()::mark);
+            .orElseGet(getValue()::mark)}";
     
     @Override
     public Collection<StructureViewTreeElement> getChildrenBase() = getElement() instanceof PsiClass psiClass ? new JavaClassTreeElement(psiClass, false).getChildrenBase() : List.of();

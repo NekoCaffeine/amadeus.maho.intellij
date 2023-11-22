@@ -580,7 +580,7 @@ public class IDEAContext {
         try {
             accessor.apply(annotation);
         } catch (final PsiClassesException e) {
-            if (e.classes().size() > 0)
+            if (!e.classes().isEmpty())
                 return e.classes()[0];
         }
         return null;

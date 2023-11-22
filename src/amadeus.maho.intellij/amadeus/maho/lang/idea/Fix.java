@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.swing.JComponent;
 
 import com.intellij.codeInsight.AnnotationTargetUtil;
 import com.intellij.codeInsight.AutoPopupControllerImpl;
@@ -37,7 +38,13 @@ import com.intellij.lang.folding.CompositeFoldingBuilder;
 import com.intellij.lang.folding.CustomFoldingBuilder;
 import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
 import com.intellij.lang.parameterInfo.ParameterInfoUtils;
+import com.intellij.openapi.actionSystem.ActionGroup;
+import com.intellij.openapi.actionSystem.ActionGroupUtil;
 import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.actionSystem.PlatformCoreDataKeys;
+import com.intellij.openapi.actionSystem.impl.ActionButton;
+import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
+import com.intellij.openapi.actionSystem.impl.Utils;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
@@ -47,6 +54,7 @@ import com.intellij.openapi.options.ex.ConfigurableWrapper;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicatorProvider;
+import com.intellij.openapi.progress.impl.CoreProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Computable;
@@ -54,14 +62,18 @@ import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.ThrowableComputable;
+import com.intellij.openapi.wm.impl.IdeFrameImpl;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiAnnotationOwner;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiElementFactory;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFunctionalExpression;
+import com.intellij.psi.PsiImportStaticStatement;
+import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
@@ -73,6 +85,7 @@ import com.intellij.psi.PsiTypeCastExpression;
 import com.intellij.psi.PsiTypeElement;
 import com.intellij.psi.SyntaxTraverser;
 import com.intellij.psi.controlFlow.ControlFlowUtil;
+import com.intellij.psi.impl.PsiElementFactoryImpl;
 import com.intellij.psi.impl.PsiShortNamesCacheImpl;
 import com.intellij.psi.impl.compiled.ClsParsingUtil;
 import com.intellij.psi.impl.java.JavaFunctionalExpressionIndex;
@@ -81,6 +94,7 @@ import com.intellij.psi.impl.search.AllClassesSearchExecutor;
 import com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.intellij.psi.impl.source.PsiFieldImpl;
+import com.intellij.psi.impl.source.PsiJavaFileBaseImpl;
 import com.intellij.psi.impl.source.resolve.ParameterTypeInferencePolicy;
 import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.infos.CandidateInfo;
@@ -90,6 +104,7 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.IconDeferrerImpl;
+import com.intellij.ui.popup.PopupFactoryImpl;
 import com.intellij.util.Processor;
 import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndexEx;
@@ -106,6 +121,7 @@ import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
+import amadeus.maho.util.bytecode.Bytecodes;
 import amadeus.maho.util.dynamic.CallerContext;
 import amadeus.maho.util.runtime.ArrayHelper;
 
@@ -330,5 +346,34 @@ interface Fix {
             System.load(Path.of(PathManager.getHomePath()) / "jbr" / "bin" / System.mapLibraryName(libName) | "/");
         }
     }
+    
+    // fucking slow: createImportStaticStatement => reformat
+    @Redirect(targetClass = PsiJavaFileBaseImpl.class, selector = "lambda$static$3", slice = @Slice(@At(method = @At.MethodInsn(name = "createImportStaticStatement"))))
+    private static PsiImportStaticStatement createImportStaticStatement(final PsiElementFactory factory, final PsiClass owner, final String member) {
+        final PsiJavaFile dummy = (Privilege) ((PsiElementFactoryImpl) factory).createDummyJavaFile(STR."import static \{owner.getQualifiedName()}.\{member};");
+        return (PsiImportStaticStatement) (Privilege) PsiElementFactoryImpl.extractImport(dummy, true);
+    }
+    
+    // expandActionGroupAsync => never invoke suspend fun
+    @Hook(forceReturn = true)
+    private static void updateActionsImpl(final ActionToolbarImpl $this, final boolean forced) {
+        if (forced)
+            (Privilege) ($this.myForcedUpdateRequested = true);
+        final ActionGroup group = (Privilege) $this.myActionGroup, adjustedGroup = (Privilege) $this.myHideDisabled ? ActionGroupUtil.forceHideDisabledChildren(group) : group;
+        (Privilege) $this.actionsUpdated(forced || (Privilege) $this.myForcedUpdateRequested, Utils.expandActionGroup(adjustedGroup, (Privilege) $this.myPresentationFactory, (Privilege) $this.getDataContext(), (Privilege) $this.myPlace));
+        final @Nullable ActionButton button = (Privilege) $this.mySecondaryActionsButton;
+        if (button != null) {
+            button.update();
+            button.repaint();
+        }
+    }
+    
+    @Hook(forceReturn = true)
+    private static boolean sleepIfNeededToGivePriorityToAnotherThread(final CoreProgressManager $this) = false;
+    
+    // IllegalArgumentException: focusOwner == null
+    @Hook(at = @At(var = @At.VarInsn(opcode = Bytecodes.ASTORE, var = 3)), capture = true)
+    private static JComponent guessBestPopupLocation(final @Nullable JComponent capture, final PopupFactoryImpl $this, final DataContext dataContext)
+            = capture ?? (PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(dataContext) instanceof IdeFrameImpl frame ? frame.getComponent() : null);
     
 }

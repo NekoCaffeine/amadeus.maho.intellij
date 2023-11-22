@@ -1,12 +1,10 @@
 package amadeus.maho.lang.idea.handler;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.intellij.codeInsight.daemon.JavaErrorBundle;
@@ -33,6 +31,8 @@ import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiModifier;
+import com.intellij.psi.PsiModifierListOwner;
+import com.intellij.psi.PsiNameIdentifierOwner;
 import com.intellij.psi.PsiNewExpression;
 import com.intellij.psi.PsiParameter;
 import com.intellij.psi.PsiParameterList;
@@ -47,11 +47,13 @@ import com.intellij.psi.ResolveState;
 import com.intellij.psi.formatter.java.JavaSpacePropertyProcessor;
 import com.intellij.psi.impl.PsiClassImplUtil;
 import com.intellij.psi.impl.PsiImplUtil;
+import com.intellij.psi.impl.source.PsiMethodImpl;
 import com.intellij.psi.impl.source.resolve.graphInference.PsiPolyExpressionUtil;
 import com.intellij.psi.scope.ElementClassHint;
 import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.tree.IElementType;
+import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiTypesUtil;
 import com.intellij.psi.util.TypeConversionUtil;
@@ -86,61 +88,66 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
     public static final int PRIORITY = ConstructorHandler.PRIORITY << 1;
     
     @NoArgsConstructor
-    public static class DerivedMethod extends LightMethod {
-        
-        @Override
-        public boolean isEquivalentTo(final PsiElement another) = equivalents().contains(another);
-        
-    }
+    public static class DerivedMethod extends LightMethod { }
     
-    // Expand methods with default parameters into common methods
-    @Override
-    public void processMethod(final PsiMethod tree, final ExtensibleMembers members, final PsiClass context) {
-        if (tree instanceof DerivedMethod)
-            return;
-        final @Nullable PsiType returnType = tree.getReturnType();
-        final LinkedList<Tuple2<PsiParameter, PsiExpression>> defaultValues = Stream.of(tree.getParameterList().getParameters())
-                .map(parameter -> Tuple.tuple(parameter, defaultValue(parameter)))
-                .filter(tuple -> tuple.v2 != null)
-                .collect(Collectors.toCollection(LinkedList::new));
-        if (!defaultValues.isEmpty()) {
-            Collections.reverse(defaultValues);
-            Stream.concat(Stream.of(new ArrayList<>(defaultValues)), Stream.generate(() -> defaultValues)
-                            .limit(defaultValues.size() - 1)
-                            .peek(LinkedList::removeLast)
-                            .map(ArrayList::new))
-                    .forEach(list -> {
-                        final List<PsiParameter> parameters = new ArrayList<>(List.of(tree.getParameterList().getParameters()));
-                        parameters.removeIf(parameter -> list.stream().anyMatch(tuple -> tuple.v1 == parameter || tuple.v1.equals(parameter)));
-                        final DerivedMethod derivedBridgeMethod = { context, tree.getName(), tree };
-                        derivedBridgeMethod.mark("Derived");
-                        if (returnType != null)
-                            derivedBridgeMethod.setMethodReturnType(returnType);
-                        Stream.of(tree.getThrowsList().getReferencedTypes()).forEach(derivedBridgeMethod.getThrowsList()::addReference);
-                        parameters.forEach(parameter -> {
-                            final LightParameter lightParameter = { derivedBridgeMethod, parameter.getName(), parameter.getType(), parameter.isVarArgs() };
-                            followAnnotation(parameter.getModifierList(), lightParameter.getModifierList());
-                            derivedBridgeMethod.addParameter(lightParameter);
-                        });
-                        derivedBridgeMethod.setContainingClass(context);
-                        derivedBridgeMethod.setNavigationElement(tree);
-                        derivedBridgeMethod.setConstructor(tree.isConstructor());
-                        derivedBridgeMethod.fieldInitialized(true);
-                        final LightModifierList modifierList = derivedBridgeMethod.getModifierList();
-                        followModifier(tree, modifierList);
-                        modifierList.annotations().removeIf(annotation -> {
-                            final String name = annotation.getQualifiedName();
-                            return Override.class.getCanonicalName().equals(name) || SafeVarargs.class.getCanonicalName().equals(name);
-                        });
-                        final Set<String> modifiers = modifierList.modifiers();
-                        modifiers.remove(PsiModifier.ABSTRACT);
-                        if (context.isInterface() && !modifiers.contains(PsiModifier.STATIC))
-                            modifiers.add(PsiModifier.DEFAULT);
-                        Stream.of(tree.getTypeParameters()).forEach(derivedBridgeMethod::addTypeParameter);
-                        Stream.of(tree.getThrowsList().getReferencedTypes()).forEach(derivedBridgeMethod::addException);
-                        members.inject(derivedBridgeMethod);
-                    });
+    public static List<DerivedMethod> derivedMethods(final PsiMethod method) = CachedValuesManager.getProjectPsiDependentCache(method, it -> {
+        if (!(it instanceof DerivedMethod)) {
+            final @Nullable PsiType returnType = it.getReturnType();
+            final LinkedList<Tuple2<PsiParameter, PsiExpression>> defaultValues = { };
+            Stream.of(it.getParameterList().getParameters())
+                    .map(parameter -> Tuple.tuple(parameter, defaultValue(parameter)))
+                    .filter(tuple -> tuple.v2 != null)
+                    .forEach(defaultValues::addFirst);
+            if (!defaultValues.isEmpty()) {
+                final @Nullable PsiClass context = it.getContainingClass();
+                return Stream.concat(Stream.of(new ArrayList<>(defaultValues)), Stream.generate(() -> defaultValues)
+                                .limit(defaultValues.size() - 1)
+                                .peek(LinkedList::removeLast)
+                                .map(ArrayList::new))
+                        .map(list -> {
+                            final List<PsiParameter> parameters = new ArrayList<>(List.of(it.getParameterList().getParameters()));
+                            parameters.removeIf(parameter -> list.stream().anyMatch(tuple -> tuple.v1 == parameter || tuple.v1.equals(parameter)));
+                            final DerivedMethod derivedBridgeMethod = { context, it.getName(), it };
+                            derivedBridgeMethod.mark("Derived");
+                            if (returnType != null)
+                                derivedBridgeMethod.setMethodReturnType(returnType);
+                            Stream.of(it.getThrowsList().getReferencedTypes()).forEach(derivedBridgeMethod.getThrowsList()::addReference);
+                            parameters.forEach(parameter -> {
+                                final LightParameter lightParameter = { derivedBridgeMethod, parameter.getName(), parameter.getType(), parameter.isVarArgs() };
+                                followAnnotation(parameter.getModifierList(), lightParameter.getModifierList());
+                                derivedBridgeMethod.addParameter(lightParameter);
+                            });
+                            derivedBridgeMethod.setContainingClass(context);
+                            derivedBridgeMethod.setNavigationElement(it);
+                            derivedBridgeMethod.setConstructor(it.isConstructor());
+                            derivedBridgeMethod.fieldInitialized(true);
+                            final LightModifierList modifierList = derivedBridgeMethod.getModifierList();
+                            followModifier(it, modifierList);
+                            modifierList.annotations().removeIf(annotation -> {
+                                final String name = annotation.getQualifiedName();
+                                return Override.class.getCanonicalName().equals(name) || SafeVarargs.class.getCanonicalName().equals(name);
+                            });
+                            final Set<String> modifiers = modifierList.modifiers();
+                            modifiers.remove(PsiModifier.ABSTRACT);
+                            if (context.isInterface() && !modifiers.contains(PsiModifier.STATIC))
+                                modifiers.add(PsiModifier.DEFAULT);
+                            Stream.of(it.getTypeParameters()).forEach(derivedBridgeMethod::addTypeParameter);
+                            Stream.of(it.getThrowsList().getReferencedTypes()).forEach(derivedBridgeMethod::addException);
+                            return derivedBridgeMethod;
+                        })
+                        .toList();
+            }
         }
+        return List.of();
+    });
+    
+    @Override
+    public void processMethod(final PsiMethod tree, final ExtensibleMembers members, final PsiClass context) = derivedMethods(tree).forEach(members::inject);
+    
+    @Override
+    public void collectRelatedTarget(final PsiModifierListOwner tree, final Set<PsiNameIdentifierOwner> targets) {
+        if (tree instanceof PsiMethodImpl method)
+            targets *= derivedMethods(method);
     }
     
     // Use the assigned setting when formatting the equals of the default value

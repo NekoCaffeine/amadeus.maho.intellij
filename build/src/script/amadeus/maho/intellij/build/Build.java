@@ -56,7 +56,9 @@ public interface Build {
     List<String> shouldInCompile = Stream.of("app", "app-client", "platform-api", "platform-impl", "platform-loader", "lib", "lib-client", "util", "util-8", "util_rt", "spellchecker", "java-api", "java-impl")
             .map(name -> name + Jar.SUFFIX).collect(Collectors.toList());
     
-    static Set<Module.Dependency> dependencies() = IDEA.DevKit.attachLocalInstance(Path.of(config.intellijPath), plugins, path -> shouldInCompile.contains(path.getFileName().toString())) += Module.DependencySet.maho();
+    Module.DependencySet ddlc = { "DDLC", Files.list(workspace.root() / "ddlc").filter(path -> path.getFileName().toString().endsWith(Jar.SUFFIX)).map(Path::toAbsolutePath).map(Module.SingleDependency::new).collect(Collectors.toSet()) };
+    
+    static Set<Module.Dependency> dependencies() = IDEA.DevKit.attachLocalInstance(Path.of(config.intellijPath), plugins, path -> shouldInCompile.contains(path.getFileName().toString())) *= List.of(Module.DependencySet.maho(), ddlc);
     
     Module module = { "amadeus.maho.intellij", dependencies() }, run = IDEA.DevKit.run(Path.of(config.intellijPath));
     
@@ -64,7 +66,7 @@ public interface Build {
     
     static void sync() {
         IDEA.deleteLibraries(workspace);
-        IDEA.generateAll(workspace, "17", true, List.of(Module.build(), module, run));
+        IDEA.generateAll(workspace, "21", true, List.of(Module.build(), module, run));
     }
     
     static Path libPath(final Path pluginsPath) = pluginsPath / module.name() / "lib";

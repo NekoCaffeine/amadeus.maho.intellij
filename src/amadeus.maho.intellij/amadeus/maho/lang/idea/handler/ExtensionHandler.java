@@ -272,7 +272,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         final @Nullable Project project = resolveScope.getProject();
         if (project == null)
             return List.of();
-        return JavaAnnotationIndex.getInstance().get(Extension.class.getSimpleName(), project, resolveScope).stream()
+        return JavaAnnotationIndex.getInstance().getAnnotations(Extension.class.getSimpleName(), project, resolveScope).stream()
                 .filter(annotation -> {
                     if (Extension.class.getCanonicalName().equals(annotation.getQualifiedName()))
                         return true;

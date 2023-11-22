@@ -12,12 +12,16 @@ import com.intellij.openapi.util.ObjectTree;
 
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.util.concurrent.ConcurrentWeakIdentityHashMap;
+import amadeus.maho.util.dynamic.ReferenceCollector;
 import amadeus.maho.util.runtime.DebugHelper;
 import amadeus.maho.util.runtime.UnsafeHelper;
 
-public class ObjectTreeInjector { // FWIW ObjectTree performance increase was 1000x. O(2^N) => O(1)
+public interface ObjectTreeInjector { // FWIW ObjectTree performance increase was 1000x. O(2^N) => O(1)
     
-    public static void inject() {
+    ReferenceCollector.Base collector = new ReferenceCollector.Base().let(ReferenceCollector.Base::start);
+    
+    static void inject() {
+        // noinspection TestOnlyProblems
         final ObjectTree tree = Disposer.getTree();
         try {
             final Field disposedObjects = tree.getClass().getDeclaredField("myDisposedObjects");
@@ -28,7 +32,7 @@ public class ObjectTreeInjector { // FWIW ObjectTree performance increase was 10
                 final ConcurrentHashMap<ConcurrentWeakIdentityHashMap.Key<Disposable>, Object> concurrentHashMap = { 1 << 16, 0.5F };
                 final ConcurrentWeakIdentityHashMap.Managed<Disposable, Object> concurrentWeakIdentityHashMap = { concurrentHashMap };
                 concurrentWeakIdentityHashMap.putAll(myDisposedObjects);
-                LargeMemoryPatcher.collector.manage(concurrentWeakIdentityHashMap);
+                collector.manage(concurrentWeakIdentityHashMap);
                 unsafe.putReferenceVolatile(tree, objectFieldOffset, concurrentWeakIdentityHashMap);
             }
         } catch (final NoSuchFieldException ignored) { DebugHelper.breakpoint(); }

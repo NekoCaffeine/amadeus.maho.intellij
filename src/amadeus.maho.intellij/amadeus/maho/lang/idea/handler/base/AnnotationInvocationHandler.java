@@ -122,7 +122,7 @@ public class AnnotationInvocationHandler implements InvocationHandler {
             if (Annotation.class.isAssignableFrom(method.getReturnType()) && value instanceof PsiAnnotation valueAnnotation) {
                 final List<? extends Tuple2<? extends Annotation, PsiAnnotation>> result
                         = HandlerMarker.EntryPoint.getAnnotationsByType(annotationTree.getProject(), (Class<? extends Annotation>) method.getReturnType(), valueAnnotation);
-                if (result.size() > 0)
+                if (!result.isEmpty())
                     return { result[0].v1, null };
             }
             if (Annotation[].class.isAssignableFrom(method.getReturnType())) {
@@ -146,10 +146,10 @@ public class AnnotationInvocationHandler implements InvocationHandler {
         try {
             final @Nullable Object defaultValue = annotationType.memberDefaults().get(attributeName);
             if (defaultValue == null)
-                return { null, "No default value is specified for method " + attributeName };
+                return { null, STR."No default value is specified for method \{attributeName}" };
             else
                 return { defaultValue, null };
-        } catch (final NoSuchMethodException e) { return { null, "Method not found: " + attributeName }; }
+        } catch (final NoSuchMethodException e) { return { null, STR."Method not found: \{attributeName}" }; }
     }
     
     protected @Nullable Object computeConstant(final PsiAnnotationMemberValue value, final Class<?> type) {

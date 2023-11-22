@@ -7,7 +7,6 @@ import java.util.stream.Stream;
 
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.ProblemsHolder;
-import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
@@ -53,13 +52,12 @@ public abstract class BaseHandler<A extends Annotation> extends IDEAContext impl
     
     public void process(final PsiElement tree, final A annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
         if (contextFilter(context)) {
-            ProgressManager.checkCanceled();
             switch (tree) {
                 case PsiField element           -> processVariable(element, annotation, annotationTree, members, context);
                 case PsiMethod element          -> processMethod(element, annotation, annotationTree, members, context);
                 case PsiClass element           -> processClass(element, annotation, annotationTree, members, context);
                 case PsiRecordComponent element -> processRecordComponent(element, annotation, annotationTree, members, context);
-                default                         -> throw new AssertionError("Unreachable area: " + tree.getClass());
+                default                         -> throw new AssertionError(STR."Unreachable area: \{tree.getClass()}");
             }
         }
     }
