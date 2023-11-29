@@ -22,6 +22,9 @@ import amadeus.maho.transform.mark.base.InvisibleType;
 import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
+import com.github.benmanes.caffeine.cache.BoundedLocalCache;
+import com.github.benmanes.caffeine.cache.Node;
+
 @TransformProvider
 public interface DisableLogger {
     
@@ -84,5 +87,8 @@ public interface DisableLogger {
     
     @Redirect(targetClass = PsiMethodCallExpressionImpl.TypeEvaluator.class, selector = "fun", slice = @Slice(@At(method = @At.MethodInsn(name = "error"))))
     private static void error_$PsiMethodCallExpressionImp$TypeEvaluator(final Logger logger, final String msg) { }
+    
+    @Hook(forceReturn = true)
+    private static void logIfAlive(final BoundedLocalCache<?, ?> $this, final Node<?, ?> node) { }
     
 }

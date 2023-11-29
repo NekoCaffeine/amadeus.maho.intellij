@@ -18,6 +18,6 @@ public interface DisableBytecodeAnalysis {
     private static @Nullable PsiAnnotation findInferredAnnotation(final ProjectBytecodeAnalysis $this, final PsiModifierListOwner owner, final String fqn) = null;
     
     @Hook(forceReturn = true, metadata = @TransformMetadata(disable = ENABLE_BYTECODE_ANALYSIS))
-    private static PsiAnnotation[] findInferredAnnotations(final ProjectBytecodeAnalysis $this, final PsiModifierListOwner owner, final String fqn) = PsiAnnotation.EMPTY_ARRAY;
+    private static PsiAnnotation[] findInferredAnnotations(final ProjectBytecodeAnalysis $this, final PsiModifierListOwner owner) = PsiAnnotation.EMPTY_ARRAY;
     
 }

@@ -7,14 +7,12 @@ import com.intellij.psi.PsiArrayType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiEllipsisType;
 import com.intellij.psi.PsiField;
-import com.intellij.psi.PsiInvalidElementAccessException;
 import com.intellij.psi.PsiType;
 import com.intellij.util.IncorrectOperationException;
 
 import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Getter;
-import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.util.runtime.ObjectHelper;
 
 @Getter
@@ -52,10 +50,7 @@ public class LightParameter extends com.intellij.psi.impl.light.LightParameter i
         if (o == null || getClass() != o.getClass())
             return false;
         final LightParameter parameter = (LightParameter) o;
-        try {
-            return IDEAContext.computeReadActionIgnoreDumbMode(() -> ObjectHelper.equals(getName(), parameter.getName()) && ObjectHelper.equals(getType(), parameter.getType()));
-        } catch (final PsiInvalidElementAccessException exception) { return false; }
-        
+        return ObjectHelper.equals(getName(), parameter.getName()) && ObjectHelper.equals(getType(), parameter.getType());
     }
     
     @Override

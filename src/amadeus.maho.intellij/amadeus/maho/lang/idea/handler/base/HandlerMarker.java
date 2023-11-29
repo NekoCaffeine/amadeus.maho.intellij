@@ -52,6 +52,7 @@ import com.intellij.openapi.editor.ScrollType;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Pass;
@@ -99,6 +100,8 @@ import com.intellij.psi.impl.source.DummyHolder;
 import com.intellij.psi.impl.source.PsiClassImpl;
 import com.intellij.psi.impl.source.PsiExtensibleClass;
 import com.intellij.psi.impl.source.PsiFileImpl;
+import com.intellij.psi.impl.source.PsiJavaCodeReferenceElementImpl;
+import com.intellij.psi.impl.source.resolve.ResolveCache;
 import com.intellij.psi.impl.source.resolve.reference.impl.PsiMultiReference;
 import com.intellij.psi.impl.source.tree.FileElement;
 import com.intellij.psi.impl.source.tree.JavaSharedImplUtil;
@@ -169,7 +172,7 @@ import amadeus.maho.util.function.Consumer4;
 import amadeus.maho.util.runtime.ObjectHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
-import static amadeus.maho.util.bytecode.Bytecodes.ATHROW;
+import static amadeus.maho.util.bytecode.Bytecodes.*;
 
 public class HandlerMarker {
     
@@ -770,6 +773,10 @@ public class HandlerMarker {
                     }
                 });
         }
+        
+        @Hook(value = ResolveCache.class, isStatic = true, at = @At(var = @At.VarInsn(opcode = ILOAD, var = 2)), before = false, capture = true)
+        private static <TRef, TResult> boolean resolve(final boolean capture, final TRef ref, final Map<TRef, TResult> cache, final boolean preventRecursion, final Computable<? extends TResult> resolver)
+                = capture && !(ref instanceof PsiJavaCodeReferenceElementImpl);
         
         private static final ThreadLocal<LinkedList<Object>> reentrant = ThreadLocal.withInitial(LinkedList::new);
         

@@ -40,10 +40,12 @@ import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
 import com.intellij.lang.parameterInfo.ParameterInfoUtils;
 import com.intellij.openapi.actionSystem.ActionGroup;
 import com.intellij.openapi.actionSystem.ActionGroupUtil;
+import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.PlatformCoreDataKeys;
 import com.intellij.openapi.actionSystem.impl.ActionButton;
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
+import com.intellij.openapi.actionSystem.impl.PresentationFactory;
 import com.intellij.openapi.actionSystem.impl.Utils;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
@@ -51,18 +53,22 @@ import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.options.ex.ConfigurableWrapper;
+import com.intellij.openapi.progress.CeProcessCanceledException;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicatorProvider;
 import com.intellij.openapi.progress.impl.CoreProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.popup.JBPopup;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.wm.impl.IdeFrameImpl;
+import com.intellij.psi.GenericsUtil;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiAnnotationOwner;
 import com.intellij.psi.PsiClass;
@@ -81,6 +87,7 @@ import com.intellij.psi.PsiRecordHeader;
 import com.intellij.psi.PsiReferenceList;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiSwitchExpression;
+import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeCastExpression;
 import com.intellij.psi.PsiTypeElement;
 import com.intellij.psi.SyntaxTraverser;
@@ -103,7 +110,9 @@ import com.intellij.psi.scope.conflictResolvers.JavaMethodsConflictResolver;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.ui.IconDeferrerImpl;
+import com.intellij.ui.LightweightHint;
 import com.intellij.ui.popup.PopupFactoryImpl;
 import com.intellij.util.Processor;
 import com.intellij.util.indexing.DumbModeAccessType;
@@ -159,6 +168,10 @@ interface Fix {
     
     @Hook
     private static Hook.Result addOccurrence(final HighlightUsagesHandlerBase $this, final @Nullable PsiElement element) = Hook.Result.falseToVoid(element == null, null);
+    
+    // Fixed: Incompatible types. Found: 'O<T>', required: 'O<T>'
+    @Hook(value = TypeConversionUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "getType")), before = false, capture = true)
+    private static PsiType areTypesAssignmentCompatible(final PsiType capture, final PsiType lType, final PsiExpression rExpr) = GenericsUtil.getVariableTypeByExpressionType(capture);
     
     @Hook(value = SwitchBlockHighlightingModel.PatternsInSwitchBlockHighlightingModel.class, isStatic = true, forceReturn = true)
     private static Collection<PsiClass> getPermittedClasses(final PsiClass psiClass) = CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> {
@@ -348,11 +361,14 @@ interface Fix {
     }
     
     // fucking slow: createImportStaticStatement => reformat
-    @Redirect(targetClass = PsiJavaFileBaseImpl.class, selector = "lambda$static$3", slice = @Slice(@At(method = @At.MethodInsn(name = "createImportStaticStatement"))))
+    @Redirect(targetClass = PsiJavaFileBaseImpl.class, selector = "lambda$getEnumeratedDeclarations$2", slice = @Slice(@At(method = @At.MethodInsn(name = "createImportStaticStatement"))))
     private static PsiImportStaticStatement createImportStaticStatement(final PsiElementFactory factory, final PsiClass owner, final String member) {
         final PsiJavaFile dummy = (Privilege) ((PsiElementFactoryImpl) factory).createDummyJavaFile(STR."import static \{owner.getQualifiedName()}.\{member};");
         return (PsiImportStaticStatement) (Privilege) PsiElementFactoryImpl.extractImport(dummy, true);
     }
+    
+    @Redirect(targetClass = LightweightHint.class, selector = "getLocationOn", slice = @Slice(@At(method = @At.MethodInsn(name = "isDisposed"))))
+    private static boolean isDisposed(final @Nullable JBPopup popup) = popup?.isDisposed() ?? true;
     
     // expandActionGroupAsync => never invoke suspend fun
     @Hook(forceReturn = true)
@@ -360,7 +376,13 @@ interface Fix {
         if (forced)
             (Privilege) ($this.myForcedUpdateRequested = true);
         final ActionGroup group = (Privilege) $this.myActionGroup, adjustedGroup = (Privilege) $this.myHideDisabled ? ActionGroupUtil.forceHideDisabledChildren(group) : group;
-        (Privilege) $this.actionsUpdated(forced || (Privilege) $this.myForcedUpdateRequested, Utils.expandActionGroup(adjustedGroup, (Privilege) $this.myPresentationFactory, (Privilege) $this.getDataContext(), (Privilege) $this.myPlace));
+        final PresentationFactory factory = (Privilege) $this.myPresentationFactory;
+        final String place = (Privilege) $this.myPlace;
+        final DataContext context = (Privilege) $this.getDataContext();
+        final var point = PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(context) == null ? null : JBPopupFactory.getInstance().guessBestPopupLocation(context);
+        try {
+            (Privilege) $this.actionsUpdated(forced || (Privilege) $this.myForcedUpdateRequested, (Privilege) Utils.INSTANCE.expandActionGroupImpl(adjustedGroup, factory, context, place, ActionPlaces.isPopupPlace(place), point, null, null));
+        } catch (final CeProcessCanceledException ignored) { }
         final @Nullable ActionButton button = (Privilege) $this.mySecondaryActionsButton;
         if (button != null) {
             button.update();

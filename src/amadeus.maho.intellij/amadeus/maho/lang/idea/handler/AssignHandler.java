@@ -176,7 +176,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             public String getCanonicalText(final boolean annotated, final PsiAnnotation annotations[]) = getCanonicalText();
             
             @Override
-            public @Nullable String getReferenceName() = null;
+            public @Nullable String getReferenceName() = classType()?.getClassName() ?? null;
             
             @Override
             public JavaResolveResult[] multiResolve(final boolean incompleteCode) {
