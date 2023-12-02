@@ -72,13 +72,12 @@ public interface StringHandler {
     @Hook(value = HighlightMethodUtil.class, isStatic = true)
     private static void checkMethodCall(final PsiMethodCallExpression methodCall, final PsiResolveHelper resolveHelper, final LanguageLevel languageLevel,
             final JavaSdkVersion javaSdkVersion, final PsiFile file, final Consumer<? super HighlightInfo.Builder> errorSink) {
-        if (methodCall.getMethodExpression().getQualifierExpression() instanceof PsiLiteralExpression expression && expression.getValue() instanceof String string && isFormatted(methodCall.resolveMethod())) {
+        if (methodCall.getMethodExpression().getQualifierExpression() instanceof PsiLiteralExpression expression && isFormatted(methodCall.resolveMethod())) {
+            final String string = expression.getText();
             final Matcher matcher = CONVERSION_SPECIFIER_PATTERN.matcher(string);
             final PsiExpressionList argumentList = methodCall.getArgumentList();
             if (matcher.results().count() == argumentList.getExpressionCount()) {
                 final StringBuilder builder = { "STR." };
-                final String sign = expression.isTextBlock() ? "\"\"\"" : "\"";
-                builder.append(sign);
                 final int p_offset[] = { 0 }, p_index[] = { 0 };
                 final PsiExpression expressions[] = argumentList.getExpressions();
                 matcher.reset().results().forEach(result -> {
@@ -86,7 +85,7 @@ public interface StringHandler {
                     builder.append('\\').append('{').append(expressions[p_index[0]++].getText()).append('}');
                     p_offset[0] = result.end();
                 });
-                final String replaced = builder.append(sign).toString();
+                final String replaced = builder.append(string.substring(p_offset[0])).toString();
                 final ReplaceExpressionAction fix = { methodCall, replaced, replaced };
                 errorSink.accept(HighlightInfo.newHighlightInfo(HighlightInfoType.WEAK_WARNING)
                         .range(methodCall)
