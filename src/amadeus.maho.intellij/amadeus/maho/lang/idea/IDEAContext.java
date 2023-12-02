@@ -600,10 +600,13 @@ public class IDEAContext {
         return List.of();
     }
     
-    public static boolean requiresMaho(final @Nullable PsiElement element) = element != null && requiresMaho(PsiTreeUtil.getContextOfType(element, PsiClass.class));
+    public static boolean requiresMaho(final @Nullable PsiElement element)
+            = element != null && requiresMaho(PsiTreeUtil.getContextOfType(element, PsiClass.class));
     
-    public static boolean requiresMaho(final @Nullable PsiClass psiClass) = psiClass != null && CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> requiresMaho(JavaModuleGraphUtil.findDescriptorByElement(psiClass)));
+    public static boolean requiresMaho(final @Nullable PsiClass psiClass)
+            = psiClass != null && CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> requiresMaho(JavaModuleGraphUtil.findDescriptorByElement(psiClass)));
     
-    public static boolean requiresMaho(final @Nullable PsiJavaModule module) = module != null && module.getRequires().fromIterable().map(PsiRequiresStatement::getModuleName).nonnull().anyMatch(Maho.MODULE_NAME::equals);
+    public static boolean requiresMaho(final @Nullable PsiJavaModule module)
+            = module != null && (Maho.MODULE_NAME.equals(module.getName()) || module.getRequires().fromIterable().map(PsiRequiresStatement::getModuleName).nonnull().anyMatch(Maho.MODULE_NAME::equals));
     
 }
