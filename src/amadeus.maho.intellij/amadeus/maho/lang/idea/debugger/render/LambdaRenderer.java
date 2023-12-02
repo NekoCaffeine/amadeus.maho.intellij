@@ -59,7 +59,7 @@ public class LambdaRenderer extends CompoundRendererProvider {
                         if (parent != null) {
                             final @Nullable PsiClass containingClass = parent.getContainingClass();
                             if (containingClass != null)
-                                return "%s#%s".formatted(containingClass.getQualifiedName(), parent.getName());
+                                return STR."\{containingClass.getQualifiedName()}#\{parent.getName()}";
                         }
                         return "";
                     });

@@ -62,7 +62,7 @@ import amadeus.maho.lang.NoArgsConstructor;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
 import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.idea.light.LightDefaultParameter;
 import amadeus.maho.lang.idea.light.LightElement;
@@ -237,7 +237,7 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
                 
                 @Override
                 public boolean execute(final PsiElement element, final ResolveState state) {
-                    if (element instanceof final PsiField field) {
+                    if (element instanceof PsiField field) {
                         if (Stream.of(recordHeader.getRecordComponents())
                                 .filter(component -> component.getName().equals(field.getName()))
                                 .anyMatch(component -> defaultValue(component) != null))
@@ -374,7 +374,7 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
             final @Nullable HighlightInfo.Builder info = (Privilege) HighlightUtil.checkAssignability(type, expressionType, expression, variable.getTextRange().union(expression.getTextRange()), 0);
             if (info == null)
                 return Stream.empty();
-            final PsiType unpackedType = HandlerMarker.EntryPoint.unwrapType(variable);
+            final PsiType unpackedType = HandlerSupport.unwrapType(variable);
             if (unpackedType instanceof PsiArrayType arrayType)
                 if (expressionType == null)
                     if (expression instanceof PsiArrayInitializerExpression initializer)
@@ -386,7 +386,7 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
                 else if (TypeConversionUtil.isAssignable(arrayType.getComponentType(), expressionType))
                     return Stream.empty();
             return type == unpackedType ? Stream.of(info) :
-                    Stream.ofNullable((Privilege) HighlightUtil.checkAssignability(HandlerMarker.EntryPoint.unwrapType(variable), expressionType, expression, variable.getTextRange().union(expression.getTextRange()), 0));
+                    Stream.ofNullable((Privilege) HighlightUtil.checkAssignability(HandlerSupport.unwrapType(variable), expressionType, expression, variable.getTextRange().union(expression.getTextRange()), 0));
         }
         return Stream.empty();
     }

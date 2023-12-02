@@ -38,22 +38,14 @@ import com.intellij.lang.folding.CompositeFoldingBuilder;
 import com.intellij.lang.folding.CustomFoldingBuilder;
 import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
 import com.intellij.lang.parameterInfo.ParameterInfoUtils;
-import com.intellij.openapi.actionSystem.ActionGroup;
-import com.intellij.openapi.actionSystem.ActionGroupUtil;
-import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.PlatformCoreDataKeys;
-import com.intellij.openapi.actionSystem.impl.ActionButton;
-import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
-import com.intellij.openapi.actionSystem.impl.PresentationFactory;
-import com.intellij.openapi.actionSystem.impl.Utils;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.options.ex.ConfigurableWrapper;
-import com.intellij.openapi.progress.CeProcessCanceledException;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicatorProvider;
@@ -61,7 +53,6 @@ import com.intellij.openapi.progress.impl.CoreProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.popup.JBPopup;
-import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.SystemInfo;
@@ -245,8 +236,8 @@ interface Fix {
     // <T> @A T, '@A' not applicable to type use
     @Hook(value = AnnotationTargetUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static PsiAnnotation.TargetType[] getTargetsForLocation(final PsiAnnotation.TargetType capture[], final @Nullable PsiAnnotationOwner owner)
-    = owner instanceof final PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement &&
-      PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof final PsiMethod method &&
+    = owner instanceof PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement &&
+      PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof PsiMethod method &&
       method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod))
             ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
     
@@ -328,12 +319,12 @@ interface Fix {
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "subSequence")), before = false, capture = true)
     private static CharSequence createMemberCopyFromText(final CharSequence capture, final PsiMember member, final TextRange range)
-            = member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
+            = member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "findPsiByAST")), capture = true)
     private static int getNonPhysicalCopy(final int capture, final Map<TextRange, PsiFile> fragmentCache, final JavaFunctionalExpressionIndex.IndexEntry entry, final PsiFunctionalExpression expression) {
         final PsiMember member = PsiTreeUtil.getStubOrPsiParentOfType(expression, PsiMember.class);
-        return member instanceof final PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? capture + field.getTypeElement().getText().length() + 1 : capture;
+        return member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? capture + field.getTypeElement().getText().length() + 1 : capture;
     }
     
     @Hook(value = GenericsHighlightUtil.class, isStatic = true)
@@ -369,26 +360,6 @@ interface Fix {
     
     @Redirect(targetClass = LightweightHint.class, selector = "getLocationOn", slice = @Slice(@At(method = @At.MethodInsn(name = "isDisposed"))))
     private static boolean isDisposed(final @Nullable JBPopup popup) = popup?.isDisposed() ?? true;
-    
-    // expandActionGroupAsync => never invoke suspend fun
-    @Hook(forceReturn = true)
-    private static void updateActionsImpl(final ActionToolbarImpl $this, final boolean forced) {
-        if (forced)
-            (Privilege) ($this.myForcedUpdateRequested = true);
-        final ActionGroup group = (Privilege) $this.myActionGroup, adjustedGroup = (Privilege) $this.myHideDisabled ? ActionGroupUtil.forceHideDisabledChildren(group) : group;
-        final PresentationFactory factory = (Privilege) $this.myPresentationFactory;
-        final String place = (Privilege) $this.myPlace;
-        final DataContext context = (Privilege) $this.getDataContext();
-        final var point = PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(context) == null ? null : JBPopupFactory.getInstance().guessBestPopupLocation(context);
-        try {
-            (Privilege) $this.actionsUpdated(forced || (Privilege) $this.myForcedUpdateRequested, (Privilege) Utils.INSTANCE.expandActionGroupImpl(adjustedGroup, factory, context, place, ActionPlaces.isPopupPlace(place), point, null, null));
-        } catch (final CeProcessCanceledException ignored) { }
-        final @Nullable ActionButton button = (Privilege) $this.mySecondaryActionsButton;
-        if (button != null) {
-            button.update();
-            button.repaint();
-        }
-    }
     
     @Hook(forceReturn = true)
     private static boolean sleepIfNeededToGivePriorityToAnotherThread(final CoreProgressManager $this) = false;

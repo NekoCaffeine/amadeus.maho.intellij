@@ -34,7 +34,7 @@ import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
 import amadeus.maho.lang.idea.handler.base.Handler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.light.LightExpression;
 import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.inspection.Nullable;
@@ -93,7 +93,7 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
     
     @Override
     public void wrapperType(final PsiTypeElement tree, final A annotation, final PsiAnnotation annotationTree, final PsiType result[]) {
-        if (!(tree.getParent() instanceof final PsiMethod method && method.getParent() instanceof PsiClass owner && owner.isInterface() && !method.hasModifierProperty(PsiModifier.STATIC)
+        if (!(tree.getParent() instanceof PsiMethod method && method.getParent() instanceof PsiClass owner && owner.isInterface() && !method.hasModifierProperty(PsiModifier.STATIC)
               && method.getReturnTypeElement() == tree && method.getParameterList().getParametersCount() == 0))
             doWrapperType(tree, annotation, annotationTree, result);
     }
@@ -113,7 +113,7 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
     
     @Override
     public void processMethod(final PsiMethod tree, final A annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
-        final List<Tuple2<Getter, PsiAnnotation>> annotations = HandlerMarker.EntryPoint.getAnnotationsByTypeWithOuter(tree, Getter.class);
+        final List<Tuple2<Getter, PsiAnnotation>> annotations = HandlerSupport.getAnnotationsByTypeWithOuter(tree, Getter.class);
         final @Nullable PsiTypeElement typeElement = tree.getReturnTypeElement();
         final @Nullable PsiType returnType = tree.getReturnType();
         if (typeElement != null && returnType != null && !annotations.isEmpty() && context.isInterface() && !tree.hasModifierProperty(PsiModifier.STATIC) && tree.getParameterList().getParametersCount() == 0) {
@@ -137,10 +137,10 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
     
     @Override
     public void collectRelatedTarget(final PsiModifierListOwner tree, final A annotation, final PsiAnnotation annotationTree, final Set<PsiNameIdentifierOwner> targets) {
-        if (tree instanceof final PsiMethod method) {
+        if (tree instanceof PsiMethod method) {
             final @Nullable PsiClass containingClass = method.getContainingClass();
             if (containingClass != null) {
-                final List<Tuple2<Getter, PsiAnnotation>> annotations = HandlerMarker.EntryPoint.getAnnotationsByTypeWithOuter(method, Getter.class);
+                final List<Tuple2<Getter, PsiAnnotation>> annotations = HandlerSupport.getAnnotationsByTypeWithOuter(method, Getter.class);
                 final @Nullable PsiTypeElement typeElement = method.getReturnTypeElement();
                 final @Nullable PsiType returnType = method.getReturnType();
                 if (typeElement != null && returnType != null && !annotations.isEmpty() && containingClass.isInterface() && !method.hasModifierProperty(PsiModifier.STATIC) && method.getParameterList().getParametersCount() == 0) {
@@ -161,10 +161,10 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
     private static @Nullable PsiExpression getInitializer(final @Nullable PsiExpression capture, final PsiLocalVariableImpl $this) = findReferences($this) > 0 ? capture ?? lightExpression($this) : capture;
     
     private static LightExpression lightExpression(final PsiVariable $this)
-            = CachedValuesManager.getProjectPsiDependentCache($this, _ -> new LightExpression($this.getManager(), JavaLanguage.INSTANCE, $this, HandlerMarker.EntryPoint.unwrapType($this)));
+            = CachedValuesManager.getProjectPsiDependentCache($this, _ -> new LightExpression($this.getManager(), JavaLanguage.INSTANCE, $this, HandlerSupport.unwrapType($this)));
     
     public static long findReferences(final PsiModifierListOwner tree) = references.stream()
-            .map(annotationType -> HandlerMarker.EntryPoint.getAnnotationsByTypeWithOuter(tree, annotationType))
+            .map(annotationType -> HandlerSupport.getAnnotationsByTypeWithOuter(tree, annotationType))
             .mapToInt(List::size)
             .sum();
     

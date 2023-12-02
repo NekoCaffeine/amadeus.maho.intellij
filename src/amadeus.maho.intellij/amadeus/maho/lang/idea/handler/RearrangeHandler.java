@@ -17,7 +17,7 @@ import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.util.CachedValuesManager;
 
 import amadeus.maho.lang.Rearrange;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.light.LightField;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
@@ -30,7 +30,7 @@ import amadeus.maho.util.tuple.Tuple2;
 public class RearrangeHandler {
     
     public static @Nullable Function<String, PsiField> rearrangeFunction(final PsiClass psiClass) = CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> psiClass.isRecord() ?
-            HandlerMarker.EntryPoint.getAnnotationsByType(it, Rearrange.class).stream().findFirst().map(Tuple2::v1).map(rearrange -> {
+            HandlerSupport.getAnnotationsByType(it, Rearrange.class).stream().findFirst().map(Tuple2::v1).map(rearrange -> {
                 final String alias[] = rearrange.alias();
                 final List<? extends PsiClass> classes = rearrange.accessPsiClasses(Rearrange::adapters).map(PsiClassType::resolve).nonnull().filter(PsiClass::isRecord).toList();
                 final ConcurrentHashMap<String, PsiField> cacheMap = { };

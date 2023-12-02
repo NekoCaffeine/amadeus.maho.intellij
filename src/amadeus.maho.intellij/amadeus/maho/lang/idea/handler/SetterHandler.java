@@ -25,7 +25,8 @@ import amadeus.maho.lang.Setter;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
 import amadeus.maho.lang.idea.handler.base.Handler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
+import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
 import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.idea.light.LightModifierList;
 import amadeus.maho.lang.idea.light.LightParameter;
@@ -42,7 +43,7 @@ public class SetterHandler extends BaseHandler<Setter> {
     @Override
     public void check(final PsiElement tree, final Setter annotation, final PsiAnnotation annotationTree, final ProblemsHolder holder, final QuickFixFactory quickFix) {
         if (tree instanceof PsiField field && field.hasModifierProperty(PsiModifier.FINAL) && annotationTree.getOwner() instanceof PsiElement owner && owner.getParent() instanceof PsiField) {
-            if (HandlerMarker.EntryPoint.unwrapType(field)?.equals(field.getType()) ?? false)
+            if (HandlerSupport.unwrapType(field)?.equals(field.getType()) ?? false)
                 holder.registerProblem(annotationTree, JavaErrorBundle.message("assignment.to.final.variable", field.getName()), ProblemHighlightType.WARNING, quickFix.createDeleteFix(annotationTree));
         }
         if (tree instanceof PsiMethod method) {
@@ -58,7 +59,7 @@ public class SetterHandler extends BaseHandler<Setter> {
     
     @Override
     public void processVariable(final PsiField tree, final Setter annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
-        final @Nullable PsiType unwrapType = HandlerMarker.EntryPoint.unwrapType(tree);
+        final @Nullable PsiType unwrapType = HandlerSupport.unwrapType(tree);
         if (unwrapType != null)
             if (!tree.hasModifierProperty(PsiModifier.FINAL) || !unwrapType.equals(tree.getType())) {
                 final LightMethod methodTree = { tree, tree.getName(), tree, annotationTree };
@@ -108,7 +109,7 @@ public class SetterHandler extends BaseHandler<Setter> {
         case PsiField field   -> {
             final @Nullable PsiClass containingClass = field.getContainingClass();
             if (containingClass != null) {
-                final @Nullable PsiType unwrapType = HandlerMarker.EntryPoint.unwrapType(field);
+                final @Nullable PsiType unwrapType = HandlerSupport.unwrapType(field);
                 if (unwrapType != null)
                     if (!field.hasModifierProperty(PsiModifier.FINAL) && !unwrapType.equals(field.getType())) {
                         final LightMethod methodTree = { field, field.getName(), field };
@@ -135,8 +136,8 @@ public class SetterHandler extends BaseHandler<Setter> {
     };
     
     @Override
-    public boolean isImplicitWrite(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) {
-        if (tree instanceof PsiField field && HandlerMarker.EntryPoint.hasAnnotation(field, this)) {
+    public boolean isImplicitWrite(final PsiElement tree, final ImplicitUsageChecker.RefData refData) {
+        if (tree instanceof PsiField field && HandlerSupport.hasAnnotation(field, this)) {
             final @Nullable PsiClass owner = PsiTreeUtil.getContextOfType(tree, PsiClass.class);
             if (owner != null)
                 return Stream.of(owner.findMethodsByName(field.getName(), false))

@@ -11,7 +11,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import amadeus.maho.lang.ResourceAgent;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.Handler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.Proxy;
 import amadeus.maho.transform.mark.Redirect;
@@ -25,8 +25,8 @@ public class IndirectAgreementHandler<A extends Annotation> extends BaseHandler<
     public static final class TransformProviderHandler extends IndirectAgreementHandler<TransformProvider> {
         
         @Override
-        public boolean isImplicitUsage(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData)
-                = tree instanceof final PsiClass clazz && clazz.hasAnnotation(handler().value().getCanonicalName());
+        public boolean isImplicitUsage(final PsiElement tree, final ImplicitUsageChecker.RefData refData)
+                = tree instanceof PsiClass clazz && clazz.hasAnnotation(handler().value().getCanonicalName());
         
     }
     
@@ -49,11 +49,11 @@ public class IndirectAgreementHandler<A extends Annotation> extends BaseHandler<
     public static final class ListenerHandler extends IndirectAgreementHandler<Listener> { }
     
     @Override
-    public boolean isImplicitUsage(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData)
-            = tree instanceof final PsiMethod method && method.hasAnnotation(handler().value().getCanonicalName()) || isImplicitRead(tree, refData);
+    public boolean isImplicitUsage(final PsiElement tree, final ImplicitUsageChecker.RefData refData)
+            = tree instanceof PsiMethod method && method.hasAnnotation(handler().value().getCanonicalName()) || isImplicitRead(tree, refData);
     
     @Override
-    public boolean isImplicitRead(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData)
+    public boolean isImplicitRead(final PsiElement tree, final ImplicitUsageChecker.RefData refData)
             = !(tree instanceof PsiLocalVariable) && PsiTreeUtil.getContextOfType(tree, PsiMethod.class)?.hasAnnotation(handler().value().getCanonicalName()) ?? false;
     
 }

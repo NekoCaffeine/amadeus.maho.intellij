@@ -54,7 +54,7 @@ public class NullableHandler implements AnnotationPackageSupport {
     
     @Hook(value = AddAnnotationPsiFix.class, isStatic = true)
     public static Hook.Result addPhysicalAnnotationIfAbsent(final String fqn, final PsiNameValuePair pairs[], final PsiAnnotationOwner owner)
-            = Hook.Result.falseToVoid(owner instanceof final PsiModifierList modifierList && NullableNotNullManager.getInstance(modifierList.getProject()).getNotNulls().contains(fqn), null);
+            = Hook.Result.falseToVoid(owner instanceof PsiModifierList modifierList && NullableNotNullManager.getInstance(modifierList.getProject()).getNotNulls().contains(fqn), null);
     
     @Hook(value = PsiJavaCodeReferenceElementImpl.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static JavaResolveResult[] tryClassResult(final JavaResolveResult capture[], final String qualifiedName, final PsiJavaCodeReferenceElement referenceElement) {

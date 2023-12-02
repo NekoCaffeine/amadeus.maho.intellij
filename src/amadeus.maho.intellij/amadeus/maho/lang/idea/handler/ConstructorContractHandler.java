@@ -32,7 +32,7 @@ public class ConstructorContractHandler extends BaseHandler<ConstructorContract>
                 final Predicate<ConstructorContract.Parameters> predicate = parameters -> hasConstructor(extensibleClass, accessPsiClasses(parameters, ConstructorContract.Parameters::value));
                 final Stream<ConstructorContract.Parameters> stream = Stream.of(annotation.value());
                 if (!(annotation.anyMatch() ? stream.anyMatch(predicate) : stream.allMatch(predicate)))
-                    holder.registerProblem(identifier, "Constraints of the constructor contract are not met: %s".formatted(annotationTree.getText()), ProblemHighlightType.GENERIC_ERROR,
+                    holder.registerProblem(identifier, STR."Constraints of the constructor contract are not met: \{annotationTree.getText()}", ProblemHighlightType.GENERIC_ERROR,
                             ConstructorHandler.constructorHandlers.stream()
                                     .map(BaseHandler::handler).map(Handler::value)
                                     .map(annotationType -> new AddAnnotationPsiFix(annotationType.getCanonicalName(), extensibleClass))

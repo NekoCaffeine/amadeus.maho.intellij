@@ -68,8 +68,9 @@ import amadeus.maho.lang.Extension;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.idea.IDEAContext;
+import amadeus.maho.lang.idea.handler.base.ASTTransformer;
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.idea.light.LightParameter;
@@ -140,7 +141,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                 final String args = Stream.concat(Stream.of(expression.getMethodExpression().getQualifierExpression()?.getText() ?? "this"),
                         Stream.of(expression.getArgumentList().getExpressions()).map(PsiElement::getText)).collect(Collectors.joining(", "));
                 expression = (PsiMethodCallExpression) JavaPsiFacade.getElementFactory(expression.getProject())
-                        .createExpressionFromText("%s.%s(%s)".formatted(containing.getQualifiedName(), sourceMethod.getName(), args), expression);
+                        .createExpressionFromText(STR."\{containing.getQualifiedName()}.\{sourceMethod.getName()}(\{args})", expression);
                 return { };
             }
             return Hook.Result.VOID;
@@ -231,7 +232,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         final List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>> tuples = CachedValuesManager.getManager(project).getCachedValue(project, () -> CachedValueProvider.Result.create(
                         new ConcurrentHashMap<GlobalSearchScope, List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>>>(), PsiModificationTracker.getInstance(project)))
                 .computeIfAbsent(resolveScope, scope -> {
-                    final AtomicInteger guard = HandlerMarker.EntryPoint.collectGuard.get();
+                    final AtomicInteger guard = ASTTransformer.collectGuard.get();
                     guard.getAndIncrement();
                     try {
                         return extensionSet(scope).stream()
@@ -359,7 +360,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
     
     public void visitAnnotation(final PsiAnnotation annotation, final ProblemsHolder holder, final QuickFixFactory quickFix) {
         if (Extension.class.getCanonicalName().equals(annotation.getQualifiedName()))
-            if (annotation.getOwner() instanceof PsiModifierList modifierList && modifierList.getParent() instanceof final PsiClass owner) {
+            if (annotation.getOwner() instanceof PsiModifierList modifierList && modifierList.getParent() instanceof PsiClass owner) {
                 if (!checkOwnerPublic(owner))
                     holder.registerProblem(owner, CANNOT_INNER_CLASS, ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotation));
             } else
@@ -377,6 +378,6 @@ public class ExtensionHandler extends BaseSyntaxHandler {
     }
     
     @Override
-    public boolean isImplicitUsage(final PsiElement element, final HandlerMarker.ImplicitUsageChecker.RefData refData) = element instanceof PsiClass psiClass && isProvider(psiClass) || isExtensionMethodOrSource(element);
+    public boolean isImplicitUsage(final PsiElement element, final ImplicitUsageChecker.RefData refData) = element instanceof PsiClass psiClass && isProvider(psiClass) || isExtensionMethodOrSource(element);
     
 }

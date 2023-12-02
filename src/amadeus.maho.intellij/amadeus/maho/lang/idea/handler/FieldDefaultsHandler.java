@@ -27,6 +27,7 @@ import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.Handler;
+import amadeus.maho.lang.idea.light.LightModifierList;
 import amadeus.maho.lang.inspection.Nullable;
 
 import static amadeus.maho.lang.idea.handler.FieldDefaultsHandler.PRIORITY;
@@ -42,7 +43,7 @@ public class FieldDefaultsHandler extends BaseHandler<FieldDefaults> {
     public static final List<String> accessModifiers = Stream.of(AccessLevel.values()).map(Enum::name).map(name -> name.toLowerCase(Locale.ENGLISH)).collect(Collectors.toList());
     
     @Override
-    public void transformModifiers(final PsiElement tree, final FieldDefaults annotation, final PsiAnnotation annotationTree, final HashSet<String> result) {
+    public void transformModifiers(final PsiElement tree, final FieldDefaults annotation, final @Nullable PsiAnnotation annotationTree, final HashSet<String> result) {
         if (tree instanceof PsiField && !result.contains(PsiModifier.STATIC)) {
             if (annotation.makeFinal())
                 result.add(PsiModifier.FINAL);
@@ -50,6 +51,15 @@ public class FieldDefaultsHandler extends BaseHandler<FieldDefaults> {
                 result.remove(PsiModifier.PACKAGE_LOCAL);
                 result.add(annotation.level().name().toLowerCase(Locale.ENGLISH));
             }
+        }
+    }
+    
+    public static void transformModifiers(final LightModifierList modifierList, final FieldDefaults annotation) {
+        if (annotation.makeFinal())
+            modifierList.addModifier(PsiModifier.FINAL);
+        if (annotation.level() != AccessLevel.PACKAGE && modifierList.modifiers().stream().noneMatch(accessModifiers::contains)) {
+            modifierList.removeModifier(PsiModifier.PACKAGE_LOCAL);
+            modifierList.addModifier(annotation.level().name().toLowerCase(Locale.ENGLISH));
         }
     }
     

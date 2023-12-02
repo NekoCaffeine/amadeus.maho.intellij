@@ -20,6 +20,7 @@ import com.intellij.codeInsight.daemon.JavaErrorBundle;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
+import com.intellij.codeInsight.daemon.impl.analysis.JavaModuleGraphUtil;
 import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.java.lexer._JavaLexer;
 import com.intellij.lang.java.parser.BasicStatementParser;
@@ -45,6 +46,7 @@ import com.intellij.psi.PsiEllipsisType;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiIdentifier;
 import com.intellij.psi.PsiIntersectionType;
+import com.intellij.psi.PsiJavaModule;
 import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMember;
@@ -54,6 +56,7 @@ import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.PsiParameter;
 import com.intellij.psi.PsiParameterList;
 import com.intellij.psi.PsiPrimitiveType;
+import com.intellij.psi.PsiRequiresStatement;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeParameter;
@@ -70,11 +73,13 @@ import com.intellij.psi.tree.TokenSet;
 import com.intellij.psi.tree.java.IJavaElementType;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.InheritanceUtil;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.SmartList;
 import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndexEx;
 
+import amadeus.maho.core.Maho;
 import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Privilege;
@@ -574,7 +579,7 @@ public class IDEAContext {
     }
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static String getFullProductName(final String capture, final ApplicationNamesInfo $this) = capture + " with Maho";
+    private static String getFullProductName(final String capture, final ApplicationNamesInfo $this) = STR."\{capture} with Maho";
     
     public static <A extends Annotation> @Nullable PsiClassType accessPsiClass(final A annotation, final Function<A, Class<?>> accessor) {
         try {
@@ -594,5 +599,11 @@ public class IDEAContext {
         }
         return List.of();
     }
+    
+    public static boolean requiresMaho(final @Nullable PsiElement element) = element != null && requiresMaho(PsiTreeUtil.getContextOfType(element, PsiClass.class));
+    
+    public static boolean requiresMaho(final @Nullable PsiClass psiClass) = psiClass != null && CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> requiresMaho(JavaModuleGraphUtil.findDescriptorByElement(psiClass)));
+    
+    public static boolean requiresMaho(final @Nullable PsiJavaModule module) = module != null && module.getRequires().fromIterable().map(PsiRequiresStatement::getModuleName).nonnull().anyMatch(Maho.MODULE_NAME::equals);
     
 }

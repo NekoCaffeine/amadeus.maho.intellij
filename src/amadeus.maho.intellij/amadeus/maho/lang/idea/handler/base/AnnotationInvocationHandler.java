@@ -26,15 +26,19 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiLiteral;
 import com.intellij.psi.PsiNameValuePair;
+import com.intellij.psi.PsiReferenceExpression;
 import com.intellij.psi.impl.JavaConstantExpressionEvaluator;
 
 import amadeus.maho.lang.AccessLevel;
+import amadeus.maho.lang.Default;
 import amadeus.maho.lang.Extension;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.NoArgsConstructor;
+import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.base.TransformProvider;
+import amadeus.maho.util.annotation.AnnotationHandler;
 import amadeus.maho.util.annotation.AnnotationType;
 import amadeus.maho.util.dynamic.ClassLocal;
 import amadeus.maho.util.runtime.ObjectHelper;
@@ -49,7 +53,7 @@ public class AnnotationInvocationHandler implements InvocationHandler {
     @Extension
     public interface Ext {
         
-        static <A extends Annotation> Stream<? extends PsiClassType> accessPsiClass(final A annotation, final Function<A, Class<?>> accessor) = tryAccessPsiClasses(annotation, accessor);
+        static <A extends Annotation> @Nullable PsiClassType accessPsiClass(final A annotation, final Function<A, Class<?>> accessor) = ~tryAccessPsiClasses(annotation, accessor);
         
         static <A extends Annotation> Stream<? extends PsiClassType> accessPsiClasses(final A annotation, final Function<A, Class<?>[]> accessor) = tryAccessPsiClasses(annotation, accessor);
         
@@ -88,7 +92,9 @@ public class AnnotationInvocationHandler implements InvocationHandler {
     
     AnnotationType annotationType = AnnotationType.instance(annotationClass);
     
-    PsiAnnotation annotationTree, annotationTreeCopy = JavaPsiFacade.getElementFactory(annotationTree.getProject()).createAnnotationFromText(annotationTree.getText(), annotationTree);
+    @Default
+    @Nullable PsiAnnotation annotationTree     = null;
+    @Nullable PsiAnnotation annotationTreeCopy = annotationTree == null ? null : JavaPsiFacade.getElementFactory(annotationTree.getProject()).createAnnotationFromText(annotationTree.getText(), annotationTree);
     
     ConcurrentHashMap<String, Object> evaluateCache = { };
     
@@ -108,40 +114,42 @@ public class AnnotationInvocationHandler implements InvocationHandler {
                 if (value instanceof PsiClassesException accessEx)
                     throw accessEx;
                 if (value == null)
-                    throw new IncompletePsiAnnotationException(annotationClass, "key: '%s' (Unable to find attribute in '%s': %s)".formatted(key, annotationTree.getText(), tuple.v2));
+                    throw new IncompletePsiAnnotationException(annotationClass, STR."key: '\{key}' (Unable to find attribute in '\{annotationTree?.getText() ?? STR."@\{annotationClass.getName()}"}': \{tuple.v2})");
                 return value;
             });
         };
     }
     
     public Tuple2<Object, String> attributeValueOrError(final String attributeName) {
-        final PsiNameValuePair attribute = AnnotationUtil.findDeclaredAttribute(annotationTreeCopy, attributeName);
-        final PsiAnnotationMemberValue value = attribute == null ? null : attribute.getValue();
-        if (value != null) {
-            final Method method = annotationType.members()[attributeName];
-            if (Annotation.class.isAssignableFrom(method.getReturnType()) && value instanceof PsiAnnotation valueAnnotation) {
-                final List<? extends Tuple2<? extends Annotation, PsiAnnotation>> result
-                        = HandlerMarker.EntryPoint.getAnnotationsByType(annotationTree.getProject(), (Class<? extends Annotation>) method.getReturnType(), valueAnnotation);
-                if (!result.isEmpty())
-                    return { result[0].v1, null };
+        if (annotationTreeCopy != null) {
+            final PsiNameValuePair attribute = AnnotationUtil.findDeclaredAttribute(annotationTreeCopy, attributeName);
+            final PsiAnnotationMemberValue value = attribute == null ? null : attribute.getValue();
+            if (value != null) {
+                final Method method = annotationType.members()[attributeName];
+                if (Annotation.class.isAssignableFrom(method.getReturnType()) && value instanceof PsiAnnotation valueAnnotation) {
+                    final List<? extends Tuple2<? extends Annotation, PsiAnnotation>> result
+                            = HandlerSupport.getAnnotationsByType(annotationTreeCopy.getProject(), (Class<? extends Annotation>) method.getReturnType(), valueAnnotation);
+                    if (!result.isEmpty())
+                        return { result[0].v1, null };
+                }
+                if (Annotation[].class.isAssignableFrom(method.getReturnType())) {
+                    final List<? extends Tuple2<? extends Annotation, PsiAnnotation>> result
+                            = HandlerSupport.getAnnotationsByType(annotationTreeCopy.getProject(), (Class<? extends Annotation>) method.getReturnType().getComponentType(),
+                            value instanceof PsiAnnotation valueAnnotation ? new PsiAnnotation[]{ valueAnnotation } : value instanceof PsiArrayInitializerMemberValue array ?
+                                    Stream.of(array.getInitializers()).cast(PsiAnnotation.class).toArray(PsiAnnotation.ARRAY_FACTORY::create) : PsiAnnotation.EMPTY_ARRAY);
+                    return { result.stream().map(Tuple2::v1).toArray(TypeHelper.arrayConstructor(method.getReturnType().getComponentType())), null };
+                }
+                // If you use the JavaConstantExpressionEvaluator directly you will not be able to evaluate it due to incorrect caching, which only happens when re-parsing.
+                @Nullable Object result = computeConstant(value, method.getReturnType());
+                if (result instanceof PsiClassesException)
+                    return { result, null };
+                if (result != null && result.getClass() != method.getReturnType() && result.getClass() == method.getReturnType().getComponentType())
+                    result = Stream.of(result).toArray(TypeHelper.arrayConstructor(result.getClass()));
+                if (result == null)
+                    return { null, STR."Unable to evaluate annotation value '\{value.getText()}'" };
+                else
+                    return { result, null };
             }
-            if (Annotation[].class.isAssignableFrom(method.getReturnType())) {
-                final List<? extends Tuple2<? extends Annotation, PsiAnnotation>> result
-                        = HandlerMarker.EntryPoint.getAnnotationsByType(annotationTree.getProject(), (Class<? extends Annotation>) method.getReturnType().getComponentType(),
-                        value instanceof PsiAnnotation valueAnnotation ? new PsiAnnotation[]{ valueAnnotation } : value instanceof PsiArrayInitializerMemberValue array ?
-                                Stream.of(array.getInitializers()).cast(PsiAnnotation.class).toArray(PsiAnnotation.ARRAY_FACTORY::create) : PsiAnnotation.EMPTY_ARRAY);
-                return { result.stream().map(Tuple2::v1).toArray(TypeHelper.arrayConstructor(method.getReturnType().getComponentType())), null };
-            }
-            // If you use the JavaConstantExpressionEvaluator directly you will not be able to evaluate it due to incorrect caching, which only happens when re-parsing.
-            @Nullable Object result = computeConstant(value, method.getReturnType());
-            if (result instanceof PsiClassesException)
-                return { result, null };
-            if (result != null && result.getClass() != method.getReturnType() && result.getClass() == method.getReturnType().getComponentType())
-                result = Stream.of(result).toArray(TypeHelper.arrayConstructor(result.getClass()));
-            if (result == null)
-                return { null, "Unable to evaluate annotation value '%s'".formatted(value.getText()) };
-            else
-                return { result, null };
         }
         try {
             final @Nullable Object defaultValue = annotationType.memberDefaults().get(attributeName);
@@ -159,6 +167,14 @@ public class AnnotationInvocationHandler implements InvocationHandler {
             final @Nullable PsiClassType classType = tryResolvePsiClass(value);
             return classType != null ? new PsiClassesException(List.of(classType)) : null;
         }
+        if (type.isEnum()) {
+            if (value instanceof PsiReferenceExpression expression) {
+                final @Nullable String name = expression.getReferenceName();
+                if (name != null)
+                    return ((Privilege) type.enumConstantDirectory())[name];
+            }
+            return null; // must be enum const
+        }
         return switch (value) {
             case PsiLiteral literal                   -> literal.getValue();
             case PsiArrayInitializerMemberValue array -> Stream.of(array.getInitializers()).map(initializer -> computeConstant(initializer, type.getComponentType())).toArray(TypeHelper.arrayConstructor(type.getComponentType()));
@@ -173,16 +189,18 @@ public class AnnotationInvocationHandler implements InvocationHandler {
     private String toStringImpl() {
         final StringBuilder result = { 1 << 6 };
         result.append('@').append(annotationClass.getName()).append('(');
-        boolean firstMember = true;
-        for (final PsiNameValuePair pair : annotationTree.getParameterList().getAttributes()) {
-            if (firstMember)
-                firstMember = false;
-            else
-                result.append(", ");
-            final @Nullable String name = pair.getName();
-            result.append(name == null ? "value" : name).append('=');
-            final PsiAnnotationMemberValue value = pair.getValue();
-            result.append(value == null ? "null" : value.getText());
+        if (annotationTree != null) {
+            boolean firstMember = true;
+            for (final PsiNameValuePair pair : annotationTree.getParameterList().getAttributes()) {
+                if (firstMember)
+                    firstMember = false;
+                else
+                    result.append(", ");
+                final @Nullable String name = pair.getName();
+                result.append(name == null ? "value" : name).append('=');
+                final PsiAnnotationMemberValue value = pair.getValue();
+                result.append(value == null ? "null" : value.getText());
+            }
         }
         return result.append(')').toString();
     }
@@ -196,7 +214,9 @@ public class AnnotationInvocationHandler implements InvocationHandler {
                     .toList()
     };
     
-    public static <A extends Annotation> @Nullable A make(final Class<A> annotationType, final PsiAnnotation annotation) {
+    public static <A extends Annotation> @Nullable A make(final Class<A> annotationType, final @Nullable PsiAnnotation annotation = null) {
+        if (annotation == null)
+            return AnnotationHandler.defaultInstance(annotationType);
         final AnnotationInvocationHandler handler = { annotationType, annotation };
         final A instance = (A) Proxy.newProxyInstance(annotationType.getClassLoader(), new Class<?>[]{ annotationType }, handler);
         for (final Method method : annotationMethodLocal[annotationType])

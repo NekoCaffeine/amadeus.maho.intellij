@@ -52,10 +52,10 @@ public class BaseSyntaxHandler extends IDEAContext {
     
     public boolean isVariableOut(final PsiVariable variable) = false;
     
-    public boolean isImplicitUsage(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = false;
+    public boolean isImplicitUsage(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = false;
     
-    public boolean isImplicitRead(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = false;
+    public boolean isImplicitRead(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = false;
     
-    public boolean isImplicitWrite(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = false;
+    public boolean isImplicitWrite(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = false;
     
 }

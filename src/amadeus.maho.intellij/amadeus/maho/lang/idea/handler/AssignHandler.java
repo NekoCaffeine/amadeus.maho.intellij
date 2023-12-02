@@ -111,7 +111,7 @@ import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.idea.light.LightElementReference;
 import amadeus.maho.lang.idea.light.LightMethod;
@@ -161,7 +161,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             
             { markChildAs(this, new ReferenceParameterList()); }
             
-            public @Nullable PsiClassType classType() = getParent() instanceof final PsiExpression expression && expression.getType() instanceof final PsiClassType classType ? classType : null;
+            public @Nullable PsiClassType classType() = getParent() instanceof PsiExpression expression && expression.getType() instanceof PsiClassType classType ? classType : null;
             
             @Override
             public String getText() = "";
@@ -181,7 +181,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             @Override
             public JavaResolveResult[] multiResolve(final boolean incompleteCode) {
                 final @Nullable PsiClassType classType = classType();
-                if (classType == null || classType instanceof final PsiClassReferenceType referenceType && referenceType.getReference() == this) // avoid recursion
+                if (classType == null || classType instanceof PsiClassReferenceType referenceType && referenceType.getReference() == this) // avoid recursion
                     return JavaResolveResult.EMPTY_ARRAY;
                 final PsiClassType.ClassResolveResult result = classType.resolveGenerics();
                 final @Nullable PsiClass element = result.getElement();
@@ -247,7 +247,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             
             @Override
             public JavaResolveResult[] resolveInner(final boolean incompleteCode, final PsiFile containingFile) {
-                if (getType() instanceof final PsiClassType classType && getArgumentList() != null) {
+                if (getType() instanceof PsiClassType classType && getArgumentList() != null) {
                     final PsiResolveHelper resolveHelper = JavaPsiFacade.getInstance(containingFile.getProject()).getResolveHelper();
                     final JavaResolveResult constructor = resolveHelper.resolveConstructor(classType, getArgumentList(), it);
                     return constructor != JavaResolveResult.EMPTY ? new JavaResolveResult[]{ constructor } : resolveHelper.getReferencedMethodCandidates(it, true);
@@ -274,7 +274,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             public int hashCode() = getElement().hashCode();
             
             @Override
-            public boolean equals(final Object obj) = obj instanceof final PsiPolyVariantCachingReference reference && getElement() == reference.getElement();
+            public boolean equals(final Object obj) = obj instanceof PsiPolyVariantCachingReference reference && getElement() == reference.getElement();
             
         });
         
@@ -282,7 +282,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     
     @Hook
     private static Hook.Result getReference(final LeafPsiElement $this)
-            = Hook.Result.nullToVoid($this instanceof final PsiJavaToken token && token.getParent() != null && token.getParent().getParent() instanceof final PsiArrayInitializerBackNewExpression expression ?
+            = Hook.Result.nullToVoid($this instanceof PsiJavaToken token && token.getParent() != null && token.getParent().getParent() instanceof PsiArrayInitializerBackNewExpression expression ?
             new LightElementReference(expression, incompleteCode -> (JavaResolveResult[]) expression.getConstructorFakeReference().multiResolve(incompleteCode), expression) : null);
     
     @Hook(value = PsiScopesUtil.class, isStatic = true)
@@ -340,7 +340,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     @Hook
     private static Hook.Result processChild(final AbstractJavaBlock $this, final List<Block> result, final ASTNode child, final AlignmentStrategy alignmentStrategy, final Wrap defaultWrap, final Indent childIndent, final int childOffset) {
         final ASTNode node = $this.getNode();
-        if (child.getElementType() == JavaTokenType.LBRACE && node instanceof final PsiArrayInitializerBackNewExpression.ExpressionList parent) {
+        if (child.getElementType() == JavaTokenType.LBRACE && node instanceof PsiArrayInitializerBackNewExpression.ExpressionList parent) {
             result.addAll(new ArrayInitializerBlocksBuilder(node, (Privilege) $this.myBlockFactory).buildBlocks());
             return { parent.getLastChild() };
         }
@@ -363,8 +363,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     public void transformASTNode(final ASTNode root, final boolean loadingTreeElement) = ASTTraverser.forEach(root, true, PsiArrayInitializerExpressionImpl.class, AssignHandler::transformArrayInitializerExpression);
     
     private static void transformArrayInitializerExpression(final PsiArrayInitializerExpressionImpl expression) {
-        if (type(expression) instanceof final PsiArrayInitializerBackNewExpression backNewExpression) {
-            // expression.putUserData(HandlerMarker.EntryPoint.transformedKey, backNewExpression);
+        if (type(expression) instanceof PsiArrayInitializerBackNewExpression backNewExpression) {
             replaceMarkChild(myParent(expression), expression, backNewExpression);
             final PsiExpressionListImpl argumentList = (PsiExpressionListImpl) backNewExpression.getArgumentList();
             for (TreeElement arg = (TreeElement) argumentList?.getFirstChild()?.getNode() ?? null; arg != null; arg = arg.getTreeNext())
@@ -390,11 +389,11 @@ public class AssignHandler extends BaseSyntaxHandler {
         final PsiElement parent = expression.getParent();
         if (parent instanceof PsiReturnStatement) {
             final PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class);
-            if (owner instanceof final PsiMethod method)
+            if (owner instanceof PsiMethod method)
                 return calculateType(expression, method.getReturnType());
-        } else if (parent instanceof final PsiVariable variable)
+        } else if (parent instanceof PsiVariable variable)
             return calculateType(expression, resolve(variable));
-        else if (parent instanceof final PsiAssignmentExpression assignment)
+        else if (parent instanceof PsiAssignmentExpression assignment)
             return calculateType(expression, assignment.getLExpression().getType());
         final @Nullable PsiVariable variable = DefaultValueHandler.defaultVariable(expression);
         if (variable != null)
@@ -406,13 +405,13 @@ public class AssignHandler extends BaseSyntaxHandler {
         final PsiElement parent = expression.getParent();
         if (parent instanceof PsiReturnStatement) {
             final PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class);
-            if (owner instanceof final PsiMethod method)
+            if (owner instanceof PsiMethod method)
                 return method.getReturnType();
-        } else if (parent instanceof final PsiVariable variable) {
+        } else if (parent instanceof PsiVariable variable) {
             final @Nullable PsiTypeElement typeElement = variable.getTypeElement();
             if (typeElement != null && !typeElement.isInferredType())
                 return variable.getTypeElement().getType();
-        } else if (parent instanceof final PsiAssignmentExpression assignment)
+        } else if (parent instanceof PsiAssignmentExpression assignment)
             return assignment.getLExpression().getType();
         final @Nullable PsiVariable variable = DefaultValueHandler.defaultVariable(expression);
         if (variable != null)
@@ -420,27 +419,59 @@ public class AssignHandler extends BaseSyntaxHandler {
         return null;
     }
     
-    private static @Nullable PsiType resolve(final PsiVariable variable) = HandlerMarker.EntryPoint.unwrapType(variable);
+    private static @Nullable PsiType resolve(final PsiVariable variable) = HandlerSupport.unwrapType(variable);
     
     public static @Nullable Object calculateType(final PsiArrayInitializerExpression expression, final @Nullable PsiType type) {
-        if (type instanceof PsiClassType && expression instanceof final PsiArrayInitializerExpressionImpl impl)
+        if (type instanceof PsiClassType && expression instanceof PsiArrayInitializerExpressionImpl impl)
             return new PsiArrayInitializerBackNewExpression(impl);
         return type instanceof PsiArrayType ? type : null;
     }
     
+    // @Hook
+    // private static void processQuery(final ExtensionReferenceSearcher $this, final ReferencesSearch.SearchParameters parameters, final Processor<? super PsiReference> consumer) {
+    //     if (parameters.getElementToSearch() instanceof PsiMethod method && method.isConstructor()) {
+    //         final @Nullable PsiClass containingClass = method.getContainingClass();
+    //         if (containingClass != null)
+    //             ReferencesSearch.search(containingClass, parameters.getScopeDeterminedByUser(), true).forEach(reference -> {
+    //                 if (reference.getElement() instanceof PsiTypeElement element && element.getType() instanceof PsiClassType classType && containingClass.equals(classType.resolve()))
+    //                     return switch (element.getParent()) {
+    //                         case PsiMethod owner                                                                                                            -> SyntaxTraverser.psiTraverser(element)
+    //                                 .expand(o -> o == element || !(o instanceof PsiMember || o instanceof PsiLambdaExpression))
+    //                                 .filter(PsiReturnStatement.class)
+    //                                 .map(statement -> statement.getReturnValue() instanceof PsiArrayInitializerBackNewExpression expression ? expression.classReference : null)
+    //                                 .filterNotNull()
+    //                                 .processEach(consumer);
+    //                         case PsiParameter owner when DefaultValueHandler.defaultValue(owner) instanceof PsiArrayInitializerBackNewExpression expression -> consumer.process(expression.classReference);
+    //                         case PsiVariable owner when owner.getInitializer() instanceof PsiArrayInitializerBackNewExpression expression                   -> {
+    //                             if (consumer.process(expression.classReference))
+    //                                 SyntaxTraverser.psiTraverser(element.getParent())
+    //                                         .filter(PsiAssignmentExpression.class)
+    //                                         .filter(assignment -> ExpressionUtils.isReferenceTo(expression.getLExpression(), owner))
+    //                                         .map(assignment -> assignment.getRExpression() instanceof PsiArrayInitializerBackNewExpression expression ? expression.classReference : null)
+    //                                         .filterNotNull()
+    //                                         .processEach(consumer);
+    //                         }
+    //                         case PsiAssignmentExpression owner when owner.getRExpression() instanceof PsiArrayInitializerBackNewExpression expression       -> consumer.process(expression.classReference);
+    //                         default                                                                                                                         -> true;
+    //                     };
+    //                 return true;
+    //             });
+    //     }
+    // }
+    //
     @Hook(value = HighlightUtil.class, isStatic = true)
     private static Hook.Result checkArrayInitializerApplicable(final PsiArrayInitializerExpression expression) = Hook.Result.nullToVoid(type(expression), null);
     
     @Hook
     private static Hook.Result getType(final PsiArrayInitializerExpressionImpl $this) {
         final Object type = type($this);
-        return Hook.Result.nullToVoid(type instanceof final PsiNewExpression expression ? expression.getType() : type);
+        return Hook.Result.nullToVoid(type instanceof PsiNewExpression expression ? expression.getType() : type);
     }
     
     @Hook(isStatic = true, value = LambdaUtil.class)
     private static Hook.Result getFunctionalInterfaceType(final PsiElement expression, final boolean tryToSubstitute) {
-        if (expression.getParent() instanceof final PsiArrayInitializerExpression initializer)
-            if (type(initializer) instanceof final PsiNewExpression newExpression) {
+        if (expression.getParent() instanceof PsiArrayInitializerExpression initializer)
+            if (type(initializer) instanceof PsiNewExpression newExpression) {
                 final @Nullable PsiExpressionList expressionList = newExpression.getArgumentList();
                 if (expressionList != null) {
                     final int lambdaIdx = LambdaUtil.getLambdaIdx(expressionList, expression);
@@ -491,8 +522,8 @@ public class AssignHandler extends BaseSyntaxHandler {
         PsiElement bodyElement = body.getFirstBodyElement();
         while (bodyElement != null && !(bodyElement instanceof PsiStatement))
             bodyElement = bodyElement.getNextSibling();
-        final @Nullable PsiExpression expression = bodyElement instanceof final PsiExpressionStatement statement ? statement.getExpression() :
-                bodyElement instanceof final PsiReturnStatement statement ? statement.getReturnValue() : null;
+        final @Nullable PsiExpression expression = bodyElement instanceof PsiExpressionStatement statement ? statement.getExpression() :
+                bodyElement instanceof PsiReturnStatement statement ? statement.getReturnValue() : null;
         return { JavaPsiConstructorUtil.isConstructorCall(expression) ? expression : null };
     }
     
@@ -516,7 +547,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     
     @Hook(value = BlockSupportImpl.class, isStatic = true)
     private static Hook.Result tryReparseNode(final IReparseableElementTypeBase reparseable, final ASTNode node, final CharSequence newTextStr, final PsiManager manager, final Language baseLanguage, final CharTable charTable) {
-        if (node instanceof final PsiCodeBlockImpl codeBlock && PsiTreeUtil.skipWhitespacesAndCommentsBackward(codeBlock) instanceof final PsiJavaToken token && token.getTokenType() == EQ) {
+        if (node instanceof PsiCodeBlockImpl codeBlock && PsiTreeUtil.skipWhitespacesAndCommentsBackward(codeBlock) instanceof PsiJavaToken token && token.getTokenType() == EQ) {
             final ParserDefinition definition = LanguageParserDefinitions.INSTANCE.forLanguage(JavaLanguage.INSTANCE);
             final PsiBuilder builder = PsiBuilderFactory.getInstance().createBuilder(definition, definition.createLexer(codeBlock.getProject()), newTextStr);
             setLanguageLevel(builder, PsiUtil.getLanguageLevel(codeBlock));
@@ -602,15 +633,15 @@ public class AssignHandler extends BaseSyntaxHandler {
         
         @Override
         public void invoke(final Project project, final PsiFile file, final @Nullable Editor editor, final PsiElement startElement, final PsiElement endElement) {
-            if (isAvailable(project, file, editor, startElement, endElement) && startElement instanceof final PsiNewExpressionImpl newExpression && newExpression.getArgumentList() != null)
+            if (isAvailable(project, file, editor, startElement, endElement) && startElement instanceof PsiNewExpressionImpl newExpression && newExpression.getArgumentList() != null)
                 WriteCommandAction.writeCommandAction(project, file).run(() -> {
                     final PsiElementFactory factory = JavaPsiFacade.getElementFactory(project);
-                    if (newExpression.getQualifier() instanceof final PsiReferenceExpressionImpl expression && startElement.getParent() instanceof final PsiLocalVariable variable && variable.getTypeElement().isInferredType()) {
+                    if (newExpression.getQualifier() instanceof PsiReferenceExpressionImpl expression && startElement.getParent() instanceof PsiLocalVariable variable && variable.getTypeElement().isInferredType()) {
                         final @Nullable PsiType type = expression.getType();
                         if (type != null)
                             variable.getTypeElement().replace(factory.createTypeElement(type));
                     }
-                    startElement.replace(factory.createExpressionFromText("{ %s}".formatted(Stream.of(newExpression.getArgumentList().getExpressions()).map(PsiElement::getText).collect(Collectors.joining(", "))), startElement));
+                    startElement.replace(factory.createExpressionFromText(STR."{ \{Stream.of(newExpression.getArgumentList().getExpressions()).map(PsiElement::getText).collect(Collectors.joining(", "))}}", startElement));
                     UndoUtil.markPsiFileForUndo(file);
                 });
         }
@@ -619,7 +650,7 @@ public class AssignHandler extends BaseSyntaxHandler {
         public boolean isAvailable(final Project project, final PsiFile file, final PsiElement startElement, final PsiElement endElement) = check(startElement);
         
         public static boolean check(final PsiElement element) {
-            if (element instanceof final PsiNewExpressionImpl expression && element.getClass() != PsiArrayInitializerBackNewExpression.class) {
+            if (element instanceof PsiNewExpressionImpl expression && element.getClass() != PsiArrayInitializerBackNewExpression.class) {
                 if (expression.getAnonymousClass() != null || expression.getQualifier() != null || expression.getArgumentList() == null)
                     return false;
                 final @Nullable PsiJavaCodeReferenceElement reference = expression.getClassReference();
@@ -631,11 +662,11 @@ public class AssignHandler extends BaseSyntaxHandler {
                 if (type == null)
                     return false;
                 final PsiElement parent = expression.getParent();
-                if (parent instanceof final PsiAssignmentExpression assignment && OperatorOverloadingHandler.expr(assignment) == null)
+                if (parent instanceof PsiAssignmentExpression assignment && OperatorOverloadingHandler.expr(assignment) == null)
                     return type.equals(assignment.getLExpression().getType());
                 if (parent instanceof PsiReturnStatement) {
                     final @Nullable PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class); // PsiMethod | PsiLambdaExpression
-                    if (owner instanceof final PsiMethod method)
+                    if (owner instanceof PsiMethod method)
                         return type.equals(method.getReturnType());
                 } else {
                     final @Nullable PsiVariable variable = parent instanceof PsiLocalVariable || parent instanceof PsiField ? (PsiVariable) parent : DefaultValueHandler.defaultVariable(expression);
@@ -650,7 +681,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     
     @Override
     public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
-        if (SimplifyBodyFix.check(tree) && ((PsiMethod) tree).getBody() instanceof final PsiCodeBlockImpl codeBlock)
+        if (SimplifyBodyFix.check(tree) && ((PsiMethod) tree).getBody() instanceof PsiCodeBlockImpl codeBlock)
             holder.registerProblem(codeBlock, "Body can be simplified", isOnTheFly ? INFORMATION : WARNING, new SimplifyBodyFix(tree));
         if (SimplifyExpressionFix.check(tree))
             holder.registerProblem(tree, "New expression can be simplified", isOnTheFly ? INFORMATION : WARNING, new SimplifyExpressionFix(tree));

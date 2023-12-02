@@ -36,11 +36,13 @@ import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.lang.ToString;
+import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.light.LightBridgeMethod;
 import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.util.function.FunctionHelper;
 
+import static amadeus.maho.lang.idea.IDEAContext.requiresMaho;
 import static com.intellij.psi.PsiModifier.*;
 
 @RequiredArgsConstructor
@@ -145,11 +147,17 @@ public class ExtensibleMembers {
     
     protected void buildMap(final boolean recursive) {
         namespaces().forEach(this::buildNamespace);
-        if (!recursive) {
-            namespaceMap.values().stream().map(List::copyOf).flatMap(Collection::stream).forEach(this::process);
-            process(extensible());
-            namespaces().forEach(this::collectAugments);
-        }
+        if (!recursive)
+            IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+                final PsiExtensibleClass extensible = extensible();
+                final boolean requiresMaho = requiresMaho(extensible);
+                if (requiresMaho) {
+                    namespaceMap.values().stream().map(List::copyOf).flatMap(Collection::stream).forEach(this::process);
+                    process(extensible());
+                }
+                namespaces().forEach(namespace -> collectAugments(namespace, requiresMaho ? (Consumer<? extends PsiMember>) adder(namespace) > this::process : adder(namespace)));
+                return null;
+            });
     }
     
     protected <K, E extends PsiMember> Consumer<E> adder(final Namespace<K, E> namespace, final Function<E, K> keyMapper = recursive ? namespace.recursiveKeyMapper() : namespace.keyMapper(),
@@ -164,11 +172,12 @@ public class ExtensibleMembers {
     
     protected <E extends PsiMember> void process(final E member) {
         final PsiExtensibleClass extensible = extensible();
-        HandlerMarker.EntryPoint.process(member, (handler, target, annotation, annotationTree) -> handler.process(target, annotation, annotationTree, this, extensible));
+        HandlerSupport.process(member, (handler, target, annotation, annotationTree) -> handler.process(target, annotation, annotationTree, this, extensible));
         Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.process(member, this, extensible));
     }
     
-    protected <K, E extends PsiMember> void collectAugments(final Namespace<K, E> namespace) = PsiAugmentProvider.collectAugments(extensible(), namespace.memberType(), null).stream().peek(adder(namespace)).forEach(this::process);
+    protected <K, E extends PsiMember> void collectAugments(final Namespace<K, E> namespace, final Consumer<? extends PsiElement> processor) = PsiAugmentProvider.collectAugments(extensible(), namespace.memberType(), null)
+            .stream().peek(adder(namespace)).forEach(this::process);
     
     public static boolean namedElement(final PsiElement element) = !incompleteElement(element);
     

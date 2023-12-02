@@ -25,7 +25,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.lang.inspection.RegularExpression;
@@ -71,7 +71,7 @@ public class RegularExpressionHandler extends BaseSyntaxHandler {
     }
     
     public void check(final PsiExpression expression, final PsiModifierListOwner owner, final ProblemsHolder holder, final QuickFixFactory quickFix) {
-        final List<Tuple2<RegularExpression, PsiAnnotation>> annotations = HandlerMarker.EntryPoint.getAnnotationsByType(owner, RegularExpression.class);
+        final List<Tuple2<RegularExpression, PsiAnnotation>> annotations = HandlerSupport.getAnnotationsByType(owner, RegularExpression.class);
         if (annotations.size() == 1) {
             final Tuple2<RegularExpression, PsiAnnotation> tuple = annotations[0];
             check(expression, tuple.v1, tuple.v2, holder, quickFix);
@@ -92,7 +92,7 @@ public class RegularExpressionHandler extends BaseSyntaxHandler {
                 return null;
             });
             if (exceptionMessage != null)
-                holder.registerProblem(expression, "Invalid regular expression: %s".formatted(exceptionMessage));
+                holder.registerProblem(expression, STR."Invalid regular expression: \{exceptionMessage}");
         }
     }
     

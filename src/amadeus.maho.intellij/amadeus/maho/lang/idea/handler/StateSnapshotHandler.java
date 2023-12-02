@@ -7,7 +7,7 @@ import com.intellij.psi.PsiVariable;
 import com.intellij.psi.util.TypeConversionUtil;
 
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.mark.StateSnapshot;
 import amadeus.maho.transform.mark.base.TransformProvider;
@@ -27,9 +27,9 @@ public class StateSnapshotHandler extends BaseSyntaxHandler {
     public boolean isVariableOut(final PsiVariable variable) = isStateSnapshot(variable);
     
     @Override
-    public boolean isImplicitUsage(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = tree instanceof PsiVariable variable && isStateSnapshot(variable);
+    public boolean isImplicitUsage(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = tree instanceof PsiVariable variable && isStateSnapshot(variable);
     
     @Override
-    public boolean isImplicitRead(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = isImplicitUsage(tree, refData);
+    public boolean isImplicitRead(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = isImplicitUsage(tree, refData);
     
 }

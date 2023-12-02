@@ -38,7 +38,7 @@ public class ResourceAgentHandler extends BaseHandler<ResourceAgent> {
                 final Map<String, Integer> namedGroupsIndex = pattern.namedGroupsIndex();
                 final List<String> missingKey = Stream.of(method.getParameterList().getParameters()).map(PsiParameter::getName).filterNot(namedGroupsIndex.keySet()::contains).toList();
                 if (!missingKey.isEmpty())
-                    holder.registerProblem(annotationTree, "The following group with the same name as the parameter declared in the method is missing from the resource agent's regular expression: %s".formatted(missingKey),
+                    holder.registerProblem(annotationTree, STR."The following group with the same name as the parameter declared in the method is missing from the resource agent's regular expression: \{missingKey}",
                             ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
             }
         }

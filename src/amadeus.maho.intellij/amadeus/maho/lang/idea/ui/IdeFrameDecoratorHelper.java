@@ -77,6 +77,9 @@ public interface IdeFrameDecoratorHelper {
             at = @At(method = @At.MethodInsn(name = "dispose"), offset = -3), jump = @At(method = @At.MethodInsn(name = "setUndecorated"), offset = 1), exactMatch = false)
     private static Hook.Result invokeSuspend() = shouldEnable() ? new Hook.Result().jump() : Hook.Result.VOID;
     
+    // @Hook
+    // private static boolean
+    
     @Hook
     private static Hook.Result isCustomDecorationAvailable$intellij_platform_ide_impl(final IdeFrameDecorator.Companion $this) = Hook.Result.falseToVoid(shouldEnable());
     
@@ -97,24 +100,26 @@ public interface IdeFrameDecoratorHelper {
     private static void decoration(final Window window) {
         if (!window.isDisplayable() && shouldEnable()) {
             AppUIUtilKt.updateAppWindowIcon(window);
-            if (window instanceof final RootPaneContainer container) {
-                switch (window) {
-                    case Frame frame   -> frame.setUndecorated(true);
-                    case Dialog dialog -> dialog.setUndecorated(true);
-                    default            -> { }
-                }
-                final Border border = outerBorder();
+            if (window instanceof RootPaneContainer container) {
                 final @Nullable JRootPane rootPane = container.getRootPane();
-                rootPane?.setBorder(border);
-                final @Nullable Container contentPane = container.getContentPane();
-                final WindowResizeListener resizeListener = { rootPane, JBUI.insets(10), null };
-                window.addMouseListener(resizeListener);
-                window.addMouseMotionListener(resizeListener);
-                rootPane?.addMouseListener(resizeListener);
-                rootPane?.addMouseMotionListener(resizeListener);
-                contentPane?.addMouseListener(resizeListener);
-                contentPane?.addMouseMotionListener(resizeListener);
-            } else if (window instanceof final Splash splash)
+                if (rootPane != null) {
+                    switch (window) {
+                        case Frame frame   -> frame.setUndecorated(true);
+                        case Dialog dialog -> dialog.setUndecorated(true);
+                        default            -> { }
+                    }
+                    final Border border = outerBorder();
+                    rootPane.setBorder(border);
+                    final WindowResizeListener resizeListener = { rootPane, JBUI.insets(10), null };
+                    window.addMouseListener(resizeListener);
+                    window.addMouseMotionListener(resizeListener);
+                    rootPane.addMouseListener(resizeListener);
+                    rootPane.addMouseMotionListener(resizeListener);
+                    final @Nullable Container contentPane = container.getContentPane();
+                    contentPane?.addMouseListener(resizeListener);
+                    contentPane?.addMouseMotionListener(resizeListener);
+                }
+            } else if (window instanceof Splash splash)
                 splash.setUndecorated(true);
         }
     }

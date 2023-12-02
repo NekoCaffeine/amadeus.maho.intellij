@@ -76,7 +76,7 @@ public interface Build {
         Javac.compile(workspace, module, useModulePath::contains, args -> Javac.addReadsAllUnnamed(args, module));
         final Map<String, Jar.Result> pack = Jar.pack(workspace, module, Jar.manifest(), (a, b) -> {
             if (a.getFileName().toString().equals("plugin.xml"))
-                Files.readString(a).replace("${version}", "%s-%s".formatted(workspace.config().load(new Module.Metadata(), module.name()).version, config.intellijVersion)) >> b;
+                Files.readString(a).replace("${version}", STR."\{workspace.config().load(new Module.Metadata(), module.name()).version}-\{config.intellijVersion}") >> b;
             else
                 a >> b;
         });
@@ -118,8 +118,8 @@ public interface Build {
         it += D_PAIR.formatted("idea.vendor.name", "NekoCaffeine"); // in dev flag
         { // see idea.bat
             it += D_PAIR.formatted("java.system.class.loader", "com.intellij.util.lang.PathClassLoader");
-            it += D_PAIR.formatted("jna.boot.library.path", "%s/lib/jna/amd64".formatted(config.intellijPath));
-            it += D_PAIR.formatted("pty4j.preferred.native.folder", "%s/lib/pty4j".formatted(config.intellijPath));
+            it += D_PAIR.formatted("jna.boot.library.path", STR."\{config.intellijPath}/lib/jna/amd64");
+            it += D_PAIR.formatted("pty4j.preferred.native.folder", STR."\{config.intellijPath}/lib/pty4j");
             it += D_PAIR.formatted("jna.nosys", true);
             it += D_PAIR.formatted("jna.nounpack", true);
         }

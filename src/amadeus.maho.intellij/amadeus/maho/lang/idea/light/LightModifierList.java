@@ -32,7 +32,9 @@ public class LightModifierList extends com.intellij.psi.impl.light.LightModifier
     List<PsiAnnotation> annotations = new LinkedList<>();
     
     @Override
-    public void addModifier(final String modifier) = modifiers().add(modifier);
+    public void addModifier(final String modifier) = modifiers() += modifier;
+    
+    public void removeModifier(final String modifier) = modifiers() -= modifier;
     
     public void copyModifiers(final @Nullable PsiModifierList target) {
         if (target != null)
@@ -43,10 +45,10 @@ public class LightModifierList extends com.intellij.psi.impl.light.LightModifier
     public void clearModifiers() = modifiers().clear();
     
     @Override
-    public boolean hasModifierProperty(final String name) = modifiers().contains(name);
+    public boolean hasModifierProperty(final String name) = modifiers()[name];
     
     @Override
-    public boolean hasExplicitModifier(final String name) = modifiers().contains(name);
+    public boolean hasExplicitModifier(final String name) = modifiers()[name];
     
     @Override
     public @Nullable PsiFile getContainingFile() = getParent()?.getContainingFile() ?? null;
@@ -65,7 +67,7 @@ public class LightModifierList extends com.intellij.psi.impl.light.LightModifier
     public void addAnnotation(final PsiAnnotation annotation) = annotations().add(annotation);
     
     @Override
-    public PsiAnnotation addAnnotation(final String qualifiedName) = PsiElementFactory.getInstance(getProject()).createAnnotationFromText("@" + qualifiedName, this).let(annotations()::add);
+    public PsiAnnotation addAnnotation(final String qualifiedName) = PsiElementFactory.getInstance(getProject()).createAnnotationFromText(STR."@\{qualifiedName}", this).let(annotations()::add);
     
     @Override
     public PsiAnnotation findAnnotation(final String qualifiedName) = annotations().stream().filter(annotation -> annotation.hasQualifiedName(qualifiedName)).findFirst().orElse(null);

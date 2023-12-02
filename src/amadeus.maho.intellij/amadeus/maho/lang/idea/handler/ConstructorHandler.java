@@ -18,6 +18,7 @@ import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInsight.intention.impl.MoveInitializerToConstructorAction;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.codeInspection.dataFlow.java.JavaDfaValueFactory;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
@@ -42,7 +43,8 @@ import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
 import amadeus.maho.lang.idea.handler.base.Handler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
+import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
 import amadeus.maho.lang.idea.light.LightDefaultParameter;
 import amadeus.maho.lang.idea.light.LightElement;
 import amadeus.maho.lang.idea.light.LightMethod;
@@ -84,7 +86,7 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
         protected Stream<PsiField> fields(final List<PsiField> fields) = fields.stream()
                 .filter(field -> !field.hasModifierProperty(PsiModifier.STATIC))
                 .filter(field -> !field.hasModifierProperty(PsiModifier.FINAL) || field.getInitializer() == null || isDefaultField(field))
-                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy() ?? false))
+                .filter(field -> !(HandlerSupport.lookupAnnotation(field, Getter.class)?.lazy() ?? false))
                 .filter(BaseHandler::nonGenerating);
         
     }
@@ -102,7 +104,7 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
         protected Stream<PsiField> fields(final List<PsiField> fields) = fields.stream()
                 .filter(field -> !field.hasModifierProperty(PsiModifier.STATIC))
                 .filter(field -> field.hasModifierProperty(PsiModifier.FINAL) && field.getInitializer() == null || isDefaultField(field))
-                .filter(field -> !(HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy() ?? false))
+                .filter(field -> !(HandlerSupport.lookupAnnotation(field, Getter.class)?.lazy() ?? false))
                 .filter(BaseHandler::nonGenerating);
         
     }
@@ -112,6 +114,9 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
     public static final ArrayList<ConstructorHandler<?>> constructorHandlers = { ConstructorHandler.class.getDeclaredClasses().length };
     
     { constructorHandlers += this; }
+    
+    @Hook(value = JavaDfaValueFactory.class, isStatic = true)
+    private static Hook.Result ignoreInitializer(final PsiVariable variable) = Hook.Result.falseToVoid(variable.hasAnnotation(Default.class.getCanonicalName()));
     
     @Hook(value = HighlightControlFlowUtil.class, isStatic = true)
     private static Hook.Result checkVariableInitializedBeforeUsage(final PsiReferenceExpression expression, final PsiVariable variable,
@@ -207,10 +212,10 @@ public abstract class ConstructorHandler<A extends Annotation> extends BaseHandl
     }
     
     @Override
-    public boolean isImplicitWrite(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) {
+    public boolean isImplicitWrite(final PsiElement tree, final ImplicitUsageChecker.RefData refData) {
         if (tree instanceof PsiField) {
             final @Nullable PsiClass owner = PsiTreeUtil.getContextOfType(tree, PsiClass.class);
-            if (owner != null && HandlerMarker.EntryPoint.hasAnnotation(owner, this))
+            if (owner != null && HandlerSupport.hasAnnotation(owner, this))
                 return fields(List.of(owner.getFields())).anyMatch(field -> field == tree);
         }
         return false;

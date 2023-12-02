@@ -1,6 +1,7 @@
 package amadeus.maho.lang.idea.handler.base;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -30,6 +31,7 @@ import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.RequiredArgsConstructor;
+import amadeus.maho.lang.SneakyThrows;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
@@ -38,6 +40,26 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public abstract class BaseHandler<A extends Annotation> extends IDEAContext implements Comparable<BaseHandler<A>> {
+    
+    @SneakyThrows
+    public interface Methods {
+        
+        Method
+                process                = BaseHandler.class.getMethod("process", PsiElement.class, Annotation.class, PsiAnnotation.class, ExtensibleMembers.class, PsiClass.class),
+                processVariable        = BaseHandler.class.getMethod("processVariable", PsiField.class, Annotation.class, PsiAnnotation.class, ExtensibleMembers.class, PsiClass.class),
+                processMethod          = BaseHandler.class.getMethod("processMethod", PsiMethod.class, Annotation.class, PsiAnnotation.class, ExtensibleMembers.class, PsiClass.class),
+                processClass           = BaseHandler.class.getMethod("processClass", PsiClass.class, Annotation.class, PsiAnnotation.class, ExtensibleMembers.class, PsiClass.class),
+                processRecordComponent = BaseHandler.class.getMethod("processRecordComponent", PsiRecordComponent.class, Annotation.class, PsiAnnotation.class, ExtensibleMembers.class, PsiClass.class);
+        
+        static Method specific(final Method method, final PsiElement element) = process.equals(method) ? switch (element) {
+            case PsiField _           -> processVariable;
+            case PsiMethod _          -> processMethod;
+            case PsiClass _           -> processClass;
+            case PsiRecordComponent _ -> processRecordComponent;
+            default                   -> method;
+        } : method;
+        
+    }
     
     Handler handler;
     
@@ -84,11 +106,11 @@ public abstract class BaseHandler<A extends Annotation> extends IDEAContext impl
     
     // public void renameAccessorSource(final PsiModifierListOwner tree, final A annotation, final PsiAnnotation annotationTree, final String newName, final Map<PsiElement, String> allRenames, final SearchScope scope) { }
     
-    public boolean isImplicitUsage(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = false;
+    public boolean isImplicitUsage(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = false;
     
-    public boolean isImplicitRead(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = false;
+    public boolean isImplicitRead(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = false;
     
-    public boolean isImplicitWrite(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = false;
+    public boolean isImplicitWrite(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = false;
     
     public boolean isVariableOut(final PsiVariable variable) = false;
     

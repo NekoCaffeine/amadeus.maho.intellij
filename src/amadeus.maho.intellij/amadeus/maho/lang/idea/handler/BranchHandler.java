@@ -131,8 +131,8 @@ public class BranchHandler {
             = capture == ChildRoleBase.NONE && NULL_OR_OPS.contains(child.getElementType()) ? ChildRole.OPERATION_SIGN : capture;
     
     public static boolean isSafeAccess(final @Nullable PsiExpression expression) = switch (expression) {
-        case PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof final CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
-        case PsiReferenceExpression referenceExpression -> referenceExpression instanceof final CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
+        case PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
+        case PsiReferenceExpression referenceExpression -> referenceExpression instanceof CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
         case null, default                              -> false;
     };
     
@@ -192,9 +192,9 @@ public class BranchHandler {
     }
     
     private static @Nullable Object mergeConstInt(final @Nullable Object constValue1, final @Nullable Object constValue2) =
-    constValue1 instanceof final Integer integer1 ? constValue2 instanceof final Integer integer2 ? (Integer) Math.max(integer1, integer2) : constValue2 instanceof final Character integer2 ?
-            (Integer) Math.max(integer1, integer2) : null : constValue1 instanceof final Character integer1 ? constValue2 instanceof final Integer integer2 ?
-            (Integer) Math.max(integer1, integer2) : constValue2 instanceof final Character integer2 ? (Integer) Math.max(integer1, integer2) : null : null;
+    constValue1 instanceof Integer integer1 ? constValue2 instanceof Integer integer2 ? (Integer) Math.max(integer1, integer2) : constValue2 instanceof Character integer2 ?
+            (Integer) Math.max(integer1, integer2) : null : constValue1 instanceof Character integer1 ? constValue2 instanceof Integer integer2 ?
+            (Integer) Math.max(integer1, integer2) : constValue2 instanceof Character integer2 ? (Integer) Math.max(integer1, integer2) : null : null;
     
     private static @Nullable PsiType lubType(final PsiExpression context, final @Nullable PsiType type1, final @Nullable PsiType type2, final @Nullable Object constValue1, final @Nullable Object constValue2) {
         if (Objects.equals(type1, type2))
@@ -229,9 +229,9 @@ public class BranchHandler {
             return type1;
         if (isAssignable(type2, type1, false))
             return type2;
-        if (isPrimitiveAndNotNull(type1) && type1 instanceof final PsiPrimitiveType primitiveType1 && primitiveType1.getBoxedType(context) == null)
+        if (isPrimitiveAndNotNull(type1) && type1 instanceof PsiPrimitiveType primitiveType1 && primitiveType1.getBoxedType(context) == null)
             return null;
-        if (isPrimitiveAndNotNull(type2) && type2 instanceof final PsiPrimitiveType primitiveType2 && primitiveType2.getBoxedType(context) == null)
+        if (isPrimitiveAndNotNull(type2) && type2 instanceof PsiPrimitiveType primitiveType2 && primitiveType2.getBoxedType(context) == null)
             return null;
         final @Nullable PsiType leastUpperBound = GenericsUtil.getLeastUpperBound(type1, type2, context.getManager());
         return leastUpperBound != null ? PsiUtil.captureToplevelWildcards(leastUpperBound, context) : null;
@@ -248,9 +248,9 @@ public class BranchHandler {
         final int rTypeRank = getTypeRank(rType);
         if (rType instanceof PsiPrimitiveType && rTypeRank < LONG_RANK) {
             final int value;
-            if (constValue instanceof final Number number)
+            if (constValue instanceof Number number)
                 value = number.intValue();
-            else if (constValue instanceof final Character character)
+            else if (constValue instanceof Character character)
                 value = character;
             else
                 return false;
@@ -289,7 +289,7 @@ public class BranchHandler {
             case DfReferenceType referenceType  -> switch (referenceType.getNullability()) {
                 case NULL     -> arguments[1];
                 case NOT_NULL -> arguments[0];
-                case NULLABLE -> state.getDfType(arguments[1]) instanceof final DfReferenceType otherType && otherType.getNullability() != DfaNullability.NULL ?
+                case NULLABLE -> state.getDfType(arguments[1]) instanceof DfReferenceType otherType && otherType.getNullability() != DfaNullability.NULL ?
                         factory.fromDfType(typedObject(targetType, DfaNullability.toNullability(otherType.getNullability()))) : factory.fromDfType(typedObject(targetType, Nullability.NULLABLE));
                 default       -> factory.fromDfType(typedObject(targetType, Nullability.UNKNOWN));
             };
@@ -325,7 +325,7 @@ public class BranchHandler {
     
     @Hook
     private static Hook.Result evaluateType(final TypeEvaluator $this, final PsiExpression expr) {
-        if (expr instanceof final PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR)
+        if (expr instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR)
             return { condType(polyadicExpression, $this::evaluateType, polyadicExpression.getOperands()) };
         return Hook.Result.VOID;
     }
@@ -340,7 +340,7 @@ public class BranchHandler {
                 final PsiExpression operand = operands[i];
                 value = value ?? (Privilege) $this.getStoredValue(operand);
             }
-            if (value instanceof final String string)
+            if (value instanceof String string)
                 value = ((Privilege) $this.myInterner).intern(string);
             (Privilege) ($this.myResult = value);
             return Hook.Result.NULL;

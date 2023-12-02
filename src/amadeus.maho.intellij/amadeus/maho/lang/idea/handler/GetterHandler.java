@@ -34,7 +34,8 @@ import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
 import amadeus.maho.lang.idea.handler.base.Handler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
+import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
 import amadeus.maho.lang.idea.light.LightField;
 import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.inspection.Nullable;
@@ -79,7 +80,7 @@ public class GetterHandler extends BaseHandler<Getter> {
     
     @Override
     public void processVariable(final PsiField tree, final Getter annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
-        final @Nullable PsiType unwrapType = HandlerMarker.EntryPoint.unwrapType(tree);
+        final @Nullable PsiType unwrapType = HandlerSupport.unwrapType(tree);
         if (unwrapType != null) {
             final LightMethod methodTree = { tree, tree.getName(), tree, annotationTree };
             methodTree.setMethodReturnType(unwrapType);
@@ -125,10 +126,10 @@ public class GetterHandler extends BaseHandler<Getter> {
     
     @Override
     public void collectRelatedTarget(final PsiModifierListOwner tree, final Getter annotation, final PsiAnnotation annotationTree, final Set<PsiNameIdentifierOwner> targets) {
-        if (tree instanceof final PsiField field) {
+        if (tree instanceof PsiField field) {
             final @Nullable PsiClass containingClass = field.getContainingClass();
             if (containingClass != null) {
-                final @Nullable PsiType unwrapType = HandlerMarker.EntryPoint.unwrapType(field);
+                final @Nullable PsiType unwrapType = HandlerSupport.unwrapType(field);
                 if (unwrapType != null)
                     targets += containingClass.findMethodBySignature(new LightMethod(tree, field.getName()).let(it -> it.setMethodReturnType(unwrapType)), false);
                 if (ReferenceHandler.findReferences(tree) > 0)
@@ -138,8 +139,8 @@ public class GetterHandler extends BaseHandler<Getter> {
     }
     
     @Override
-    public boolean isImplicitRead(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) {
-        if (tree instanceof PsiField field && HandlerMarker.EntryPoint.hasAnnotation(field, this)) {
+    public boolean isImplicitRead(final PsiElement tree, final ImplicitUsageChecker.RefData refData) {
+        if (tree instanceof PsiField field && HandlerSupport.hasAnnotation(field, this)) {
             final @Nullable PsiClass owner = PsiTreeUtil.getContextOfType(tree, PsiClass.class);
             if (owner != null)
                 return Stream.concat(Stream.of(owner.findMethodsByName(field.getName(), false)), Stream.of(owner.findMethodsByName(((PsiField) tree).getName() + REFERENCE_GETTER, false)))
@@ -150,7 +151,7 @@ public class GetterHandler extends BaseHandler<Getter> {
     }
     
     @Override
-    public boolean isImplicitWrite(final PsiElement tree, final HandlerMarker.ImplicitUsageChecker.RefData refData) = tree instanceof PsiField field && HandlerMarker.EntryPoint.lookupAnnotation(field, Getter.class)?.lazy() ?? false;
+    public boolean isImplicitWrite(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = tree instanceof PsiField field && HandlerSupport.lookupAnnotation(field, Getter.class)?.lazy() ?? false;
     
     @Hook(value = JavaCodeStyleManagerImpl.class, isStatic = true)
     private static Hook.Result suggestUniqueVariableName(final String baseName, final PsiElement place, final boolean lookForward, final boolean allowShadowing, final Predicate<? super PsiVariable> canBeReused)

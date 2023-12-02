@@ -30,7 +30,7 @@ public interface DebugRenderer {
     private static void addAnnotationRenderers(final NodeRendererSettings $this, final List<NodeRenderer> renderers, final Project project) {
         try {
             visitAnnotatedElements(DebugHelper.Renderer.class.getCanonicalName(), project, (e, annotation) -> {
-                if (e instanceof final PsiClass cls) {
+                if (e instanceof PsiClass cls) {
                     final String expr = getAttributeValue(annotation, "value");
                     final LabelRenderer labelRenderer = StringUtil.isEmpty(expr) ? null : createLabelRenderer(null, expr);
                     final String childrenArray = getAttributeValue(annotation, "childrenArray");

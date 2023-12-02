@@ -16,7 +16,6 @@ import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.project.ProjectKt;
-import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
@@ -27,14 +26,13 @@ import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiParameter;
 import com.intellij.psi.PsiType;
 
-import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.ResourceAgent;
 import amadeus.maho.lang.ResourceBundle;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
 import amadeus.maho.lang.idea.handler.base.Handler;
-import amadeus.maho.lang.idea.handler.base.HandlerMarker;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.light.LightField;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.util.control.LinkedIterator;
@@ -62,8 +60,6 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
             return;
         try {
             final Path location = location(tree, annotation);
-            final FieldDefaultsHandler fieldDefaultsHandler = Handler.Marker.baseHandlers().stream().cast(FieldDefaultsHandler.class).findFirst().orElseThrow();
-            final PsiAnnotation fieldDefaultAnnotationTree = JavaPsiFacade.getElementFactory(tree.getProject()).createAnnotationFromText("@%s".formatted(FieldDefaults.class.getCanonicalName()), context);
             final HashMap<String, AgentMethod> agents = { };
             final boolean itf = tree.isInterface();
             final @Nullable PsiClass stringClass = PsiElementFactory.getInstance(tree.getProject()).createTypeByFQClassName(String.class.getCanonicalName()).resolve();
@@ -77,7 +73,7 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
                     .forEach(method -> {
                         if (!itf || method.hasModifierProperty(PsiModifier.STATIC))
                             if (agentParameters.contains(parameter(method))) {
-                                final List<Tuple2<ResourceAgent, PsiAnnotation>> annotations = HandlerMarker.EntryPoint.getAnnotationsByType(method, ResourceAgent.class);
+                                final List<Tuple2<ResourceAgent, PsiAnnotation>> annotations = HandlerSupport.getAnnotationsByType(method, ResourceAgent.class);
                                 if (annotations.size() == 1) {
                                     final ResourceAgent agentAnnotation = annotations[0].v1;
                                     final @Nullable Pattern pattern = ResourceAgentHandler.pattern(annotations[0].v2);
@@ -111,7 +107,7 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
                                         mark.addModifier(PsiModifier.STATIC);
                                     mark.setNavigationElement(tree);
                                     mark.setContainingClass(tree);
-                                    fieldDefaultsHandler.processVariable(mark, annotation.fieldDefaults(), fieldDefaultAnnotationTree, members, context);
+                                    FieldDefaultsHandler.transformModifiers(mark.getModifierList(), annotation.fieldDefaults());
                                     members.inject(mark);
                                 }
                             }
@@ -152,7 +148,7 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
                                 if (!itf || method.hasModifierProperty(PsiModifier.STATIC)) {
                                     if (Stream.of(method.getParameterList().getParameters()).map(PsiParameter::getType).allMatch(type ->
                                             type instanceof PsiClassType classType && String.class.getCanonicalName().equals(classType.resolve()?.getQualifiedName() ?? null))) {
-                                        final List<Tuple2<ResourceAgent, PsiAnnotation>> annotations = HandlerMarker.EntryPoint.getAnnotationsByType(method, ResourceAgent.class);
+                                        final List<Tuple2<ResourceAgent, PsiAnnotation>> annotations = HandlerSupport.getAnnotationsByType(method, ResourceAgent.class);
                                         if (annotations.size() == 1) {
                                             final ResourceAgent agentAnnotation = annotations[0].v1;
                                             final @Nullable Pattern pattern = ResourceAgentHandler.pattern(annotations[0].v2);
@@ -163,8 +159,8 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
                                                     agents.compute(agentAnnotation.value(), (regex, agentMethod) -> {
                                                         if (agentMethod == null)
                                                             return new AgentMethod(method, pattern, agentAnnotation);
-                                                        holder.registerProblem(annotationTree, "Unexpected duplication of the path regular expression for the method in which the resource agent is located.\n  %s\n  %s"
-                                                                .formatted(annotationTree, method), ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree), quickFix.createDeleteFix(method));
+                                                        holder.registerProblem(annotationTree, STR."Unexpected duplication of the path regular expression for the method in which the resource agent is located.\n\t\{annotationTree}\n\t\{method}",
+                                                                ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree), quickFix.createDeleteFix(method));
                                                         return agentMethod;
                                                     });
                                             }
@@ -185,20 +181,20 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
                                     }
                                 });
                         if (record.values().stream().anyMatch(it -> it.size() > 1))
-                            holder.registerProblem(annotationTree, "The same path is repeatedly matched by multiple regular expressions.\npath: %s\n  %s"
-                                    .formatted(arg, record), ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+                            holder.registerProblem(annotationTree, STR."The same path is repeatedly matched by multiple regular expressions.\npath: \{arg}\n  \{record}",
+                                    ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
                     });
                 }
             } catch (final IOException e) {
-                holder.registerProblem(annotationTree, "An IO exception occurred when visiting the path corresponding to the ResourceBundle: %s"
-                        .formatted(e.getMessage()), ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+                holder.registerProblem(annotationTree, STR."An IO exception occurred when visiting the path corresponding to the ResourceBundle: \{e.getMessage()}",
+                        ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
             }
         }
     }
     
     protected Path location(final PsiElement context, final ResourceBundle annotation) {
         final String value = annotation.value();
-        return value.length() > 0 && value.charAt(0) == '!' ? Path.of(value.substring(1)) : ProjectKt.getStateStore(context.getProject()).getProjectBasePath() / value;
+        return !value.isEmpty() && value.charAt(0) == '!' ? Path.of(value.substring(1)) : ProjectKt.getStateStore(context.getProject()).getProjectBasePath() / value;
     }
     
 }
