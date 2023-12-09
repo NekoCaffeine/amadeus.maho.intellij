@@ -1,5 +1,8 @@
 package amadeus.maho.lang.idea.handler;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -11,10 +14,20 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.RefCountHolder;
 import com.intellij.codeInsight.highlighting.ReadWriteAccessDetector;
 import com.intellij.codeInspection.OverwrittenKeyInspection;
+import com.intellij.codeInspection.dataFlow.jvm.problems.IndexOutOfBoundsProblem;
+import com.intellij.codeInspection.dataFlow.memory.DfaMemoryState;
+import com.intellij.codeInspection.dataFlow.types.DfGenericObjectType;
+import com.intellij.codeInspection.dataFlow.types.DfIntType;
+import com.intellij.codeInspection.dataFlow.value.DfaValue;
 import com.intellij.codeInspection.util.InspectionMessage;
 import com.intellij.debugger.engine.evaluation.expression.EvaluatorBuilderImpl;
+import com.intellij.find.findUsages.FindUsagesOptions;
+import com.intellij.find.findUsages.JavaFindUsagesHelper;
+import com.intellij.find.findUsages.JavaMethodFindUsagesOptions;
 import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.LambdaUtil;
@@ -32,11 +45,12 @@ import com.intellij.psi.PsiExpressionStatement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFunctionalExpression;
 import com.intellij.psi.PsiIntersectionType;
-import com.intellij.psi.PsiInvalidElementAccessException;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
+import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiLambdaParameterType;
+import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiParameter;
@@ -45,15 +59,12 @@ import com.intellij.psi.PsiPolyadicExpression;
 import com.intellij.psi.PsiPostfixExpression;
 import com.intellij.psi.PsiPrefixExpression;
 import com.intellij.psi.PsiPrimitiveType;
-import com.intellij.psi.PsiReference;
 import com.intellij.psi.PsiStatement;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeCastExpression;
 import com.intellij.psi.PsiUnaryExpression;
 import com.intellij.psi.controlFlow.ControlFlowAnalyzer;
-import com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
-import com.intellij.psi.impl.search.MethodUsagesSearcher;
 import com.intellij.psi.impl.source.PsiParameterImpl;
 import com.intellij.psi.impl.source.resolve.JavaResolveCache;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
@@ -68,26 +79,26 @@ import com.intellij.psi.impl.source.tree.java.PsiPolyadicExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiPostfixExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiPrefixExpressionImpl;
 import com.intellij.psi.infos.MethodCandidateInfo;
-import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.search.LocalSearchScope;
-import com.intellij.psi.search.SearchScope;
-import com.intellij.psi.search.searches.MethodReferencesSearch;
+import com.intellij.psi.search.GlobalSearchScopeUtil;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiPrecedenceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.spellchecker.SpellCheckerManager;
+import com.intellij.usageView.UsageInfo;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.Processor;
+import com.intellij.util.indexing.FileBasedIndex;
 
 import amadeus.maho.lang.AccessLevel;
-import amadeus.maho.lang.Extension;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.idea.IDEAContext;
+import amadeus.maho.lang.idea.handler.base.JavaExpressionIndex;
 import amadeus.maho.lang.idea.light.LightElementReference;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
@@ -111,7 +122,7 @@ public class OperatorOverloadingHandler {
     @FieldDefaults(level = AccessLevel.PUBLIC)
     public static class OverloadInfo {
         
-        PsiElement navigation;
+        PsiMethod navigation;
         
         LightElementReference reference;
         
@@ -124,6 +135,16 @@ public class OperatorOverloadingHandler {
         @Nullable OverloadInfo lower;
         
     }
+    
+    public static final Map<String, List<JavaExpressionIndex.IndexType>> indexTypes = operatorName2operatorType.entrySet().stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> operatorName2expressionTypes[entry.getKey()].stream().map(expressionType -> new JavaExpressionIndex.IndexType(entry.getKey(), expressionType, expression -> {
+                final @Nullable PsiJavaToken token = PsiTreeUtil.getChildOfType((PsiExpression) expression, PsiJavaToken.class);
+                return token != null && token.getTokenType() == entry.getValue();
+            })).toList()));
+    
+    JavaExpressionIndex.IndexType<PsiArrayAccessExpressionImpl> GET = { "GET", PsiArrayAccessExpressionImpl.class };
+    
+    JavaExpressionIndex.IndexType<PsiAssignmentExpressionImpl> PUT = { "PUT", PsiAssignmentExpressionImpl.class, assignmentExpression -> assignmentExpression.getLExpression() instanceof PsiArrayAccessExpression };
     
     // # TypeConversionUtil
     
@@ -301,8 +322,10 @@ public class OperatorOverloadingHandler {
                 final PsiExpression assOpExpr = factory.createExpressionFromText(String.format("(%s) = (%s)", expr.getLExpression().getText(), opExpr.getText()), expr);
                 if (assOpExpr.getType() != null) {
                     info = expr(assOpExpr);
-                    if (info != null) info.lower = expr(opExpr);
-                    else info = expr(opExpr);
+                    if (info != null)
+                        info.lower = expr(opExpr);
+                    else
+                        info = expr(opExpr);
                 }
             }
         }
@@ -422,31 +445,57 @@ public class OperatorOverloadingHandler {
     
     // # MethodUsagesSearcher
     
-    @Hook
-    private static void processQuery(final MethodUsagesSearcher $this, final MethodReferencesSearch.SearchParameters parameters, final Processor<PsiReference> consumer) = IDEAContext.runReadActionIgnoreDumbMode(() -> {
-        final PsiMethod target = parameters.getMethod();
-        final @Nullable String symbol = operatorName2operatorSymbol[target.getName()];
-        if (symbol != null || target.hasAnnotation(Extension.Operator.class.getCanonicalName()))
-            try {
-                lookupExpression(consumer, parameters.getProject(), parameters.getMethod(), parameters.getScopeDeterminedByUser());
-            } catch (final PsiInvalidElementAccessException ignored) { }
-    });
-    
-    public static void lookupExpression(final Processor<PsiReference> consumer, final Project project, final PsiMethod method, final SearchScope searchScope) {
-        if (searchScope instanceof GlobalSearchScope globalSearchScope)
-            JavaShortClassNameIndex.getInstance().getAllKeys(project).forEach(name -> JavaShortClassNameIndex.getInstance().getClasses(name, project, globalSearchScope).forEach(psiClass -> lookupExpression(consumer, method, psiClass)));
-        else if (searchScope instanceof LocalSearchScope localSearchScope)
-            Stream.of(localSearchScope.getScope()).forEach(element -> lookupExpression(consumer, method, element));
+    @Hook(value = JavaFindUsagesHelper.class, isStatic = true)
+    private static void processElementUsages(final PsiElement element, final FindUsagesOptions options, final Processor<? super UsageInfo> processor) {
+        if (options instanceof JavaMethodFindUsagesOptions methodOptions) {
+            final PsiMethod target = (PsiMethod) element;
+            if (!target.isConstructor()) {
+                final Project project = PsiUtilCore.getProjectInReadAction(element);
+                final String name = target.getName();
+                final Map<VirtualFile, int[]> mapping = IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+                    final @Nullable String symbol = switch (name) {
+                        case "GET", "PUT" -> name;
+                        default           -> operatorName2expressionTypes[name] != null ? name : null;
+                    };
+                    if (symbol != null) {
+                        final HashMap<VirtualFile, int[]> offsets = { };
+                        FileBasedIndex.getInstance().processValues(JavaExpressionIndex.INDEX_ID, symbol, null, (file, value) -> {
+                            ProgressManager.checkCanceled();
+                            offsets[file] = value;
+                            return true;
+                        }, GlobalSearchScopeUtil.toGlobalSearchScope(options.searchScope, project));
+                        return offsets;
+                    }
+                    return Map.of();
+                });
+                if (!mapping.isEmpty()) {
+                    final @Nullable Set<Class<? extends PsiExpression>> expressionTypes = switch (name) {
+                        case "GET" -> Set.of(PsiArrayAccessExpressionImpl.class);
+                        case "PUT" -> Set.of(PsiAssignmentExpressionImpl.class);
+                        default    -> operatorName2expressionTypes[name];
+                    };
+                    final PsiManager manager = PsiManager.getInstance(project);
+                    manager.runInBatchFilesMode(() -> {
+                        mapping.entrySet().stream().anyMatch(entry -> {
+                            ProgressManager.checkCanceled();
+                            return !IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+                                if (manager.findFile(entry.getKey()) instanceof PsiJavaFile file)
+                                    for (final int offset : entry.getValue())
+                                        for (final Class<? extends PsiExpression> expressionType : expressionTypes) {
+                                            final @Nullable PsiExpression expression = PsiTreeUtil.findElementOfClassAtOffset(file, offset, expressionType, false);
+                                            if (expression != null && element == expr(expression)?.navigation ?? null)
+                                                if (!(Privilege) JavaFindUsagesHelper.addResult(expression, options, processor))
+                                                    return false;
+                                        }
+                                return true;
+                            });
+                        });
+                        return null;
+                    });
+                }
+            }
+        }
     }
-    
-    public static void lookupExpression(final Processor<PsiReference> consumer, final PsiMethod method, final PsiElement element)
-            = PsiTreeUtil.findChildrenOfType(element, PsiExpression.class).stream()
-            .map(expression -> PsiTreeUtil.getChildrenOfType(expression, PsiJavaToken.class))
-            .filter(result -> result != null && result.length > 0)
-            .flatMap(Stream::of).map(PsiElement::getReference)
-            .nonnull()
-            .filter(reference -> reference.isReferenceTo(method))
-            .forEach(consumer::process);
     
     public static @Nullable PsiExpression[] expressions(final PsiElement element) = switch (element) {
         case PsiUnaryExpression unary           -> new PsiExpression[]{ unary.getOperand() };
@@ -545,6 +594,15 @@ public class OperatorOverloadingHandler {
     
     @Hook
     private static Hook.Result visitArrayAccessExpression(final com.intellij.codeInspection.dataFlow.java.ControlFlowAnalyzer $this, final PsiArrayAccessExpression expression) = getResult($this, expression);
+    
+    @Hook
+    private static Hook.Result applyBoundsCheck(final IndexOutOfBoundsProblem $this, final DfaMemoryState state, final DfaValue array, final DfaValue index) {
+        if (array.getDfType() instanceof DfGenericObjectType objectType && !objectType.getConstraint().isArray())
+            return Hook.Result.TRUE;
+        if (!(index.getDfType() instanceof DfIntType))
+            return Hook.Result.TRUE;
+        return Hook.Result.VOID;
+    }
     
     // # PsiPrecedenceUtil
     

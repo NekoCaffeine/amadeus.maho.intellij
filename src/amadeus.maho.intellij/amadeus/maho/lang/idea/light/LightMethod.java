@@ -58,6 +58,8 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     
     PsiCodeBlock body;
     
+    PsiMethod source;
+    
     public LightMethod(final PsiElement context, final String name, final PsiElement... equivalents) = this(context.getManager(), name, equivalents);
     
     public LightMethod(final PsiManager manager, final String name, final PsiElement... equivalents) {
@@ -68,6 +70,7 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     
     public LightMethod(final PsiClass containingClass, final PsiMethod method, final PsiSubstitutor substitutor, final PsiElement... equivalents) {
         this(containingClass.getManager(), method.getName(), equivalents);
+        source = method;
         modifierList.copyModifiers(method.getModifierList());
         modifierList.copyAnnotations(method.getModifierList());
         setContainingClass(containingClass);

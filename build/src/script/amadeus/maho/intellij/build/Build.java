@@ -46,7 +46,7 @@ public interface Build {
     
     IntellijConfig config = workspace.config().load(new IntellijConfig()).let(it -> {
         if (!Files.isDirectory(Path.of(it.replaceVersion().intellijPath)))
-            throw new IllegalArgumentException("IntellijConfig.default.cfg # invalid intellijPath: " + it.intellijPath);
+            throw new IllegalArgumentException(STR."IntellijConfig.default.cfg # invalid intellijPath: \{it.intellijPath}");
     });
     
     // list of built-in plug-ins to be referenced
@@ -80,7 +80,7 @@ public interface Build {
             else
                 a >> b;
         });
-        final Path modulesDir = workspace.output(Jar.MODULES_DIR, module), targetDir = aot ? ~workspace.output("aot-" + Jar.MODULES_DIR, module) : modulesDir;
+        final Path modulesDir = workspace.output(Jar.MODULES_DIR, module), targetDir = aot ? ~workspace.output(STR."aot-\{Jar.MODULES_DIR}", module) : modulesDir;
         if (aot)
             AOTTransformer.transform(modulesDir, targetDir);
         return Distributive.zip(workspace, module, root -> {
@@ -99,7 +99,7 @@ public interface Build {
         buildRun();
     }
     
-    static void pushHost() = build() | root -> libPath(root) >> --~libPath(Path.of(config.intellijPath + ".plugins"));
+    static void pushHost() = build() | root -> libPath(root) >> --~libPath(Path.of(STR."\{config.intellijPath}.plugins"));
     
     static void buildRun() {
         workspace.clean(run);
@@ -143,7 +143,7 @@ public interface Build {
     
     static Process runHost() = switch (Platform.getOSType()) {
         case Platform.WINDOWS -> workspace.run(Path.of(config.intellijPath) / "bin", List.of("idea"));
-        default               -> throw new IllegalStateException("Unexpected OS Type: " + Platform.getOSType());
+        default               -> throw new IllegalStateException(STR."Unexpected OS Type: \{Platform.getOSType()}");
     };
     
 }

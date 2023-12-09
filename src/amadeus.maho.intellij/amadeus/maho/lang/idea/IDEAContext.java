@@ -43,7 +43,9 @@ import com.intellij.psi.PsiDisjunctionType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementFactory;
 import com.intellij.psi.PsiEllipsisType;
+import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiField;
+import com.intellij.psi.PsiFileSystemItem;
 import com.intellij.psi.PsiIdentifier;
 import com.intellij.psi.PsiIntersectionType;
 import com.intellij.psi.PsiJavaModule;
@@ -64,16 +66,21 @@ import com.intellij.psi.PsiTypeVariable;
 import com.intellij.psi.PsiTypeVisitor;
 import com.intellij.psi.PsiTypeVisitorEx;
 import com.intellij.psi.PsiWildcardType;
+import com.intellij.psi.impl.source.JavaDummyHolder;
 import com.intellij.psi.impl.source.PsiExtensibleClass;
 import com.intellij.psi.impl.source.PsiImmediateClassType;
 import com.intellij.psi.impl.source.tree.CompositeElement;
 import com.intellij.psi.impl.source.tree.TreeElement;
+import com.intellij.psi.impl.source.tree.java.PsiAssignmentExpressionImpl;
+import com.intellij.psi.impl.source.tree.java.PsiBinaryExpressionImpl;
+import com.intellij.psi.impl.source.tree.java.PsiPolyadicExpressionImpl;
+import com.intellij.psi.impl.source.tree.java.PsiPostfixExpressionImpl;
+import com.intellij.psi.impl.source.tree.java.PsiPrefixExpressionImpl;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
 import com.intellij.psi.tree.java.IJavaElementType;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.InheritanceUtil;
-import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.SmartList;
 import com.intellij.util.indexing.DumbModeAccessType;
@@ -171,55 +178,58 @@ public class IDEAContext {
         public static final HashMap<IElementType, String> operatorType2operatorName   = { };
         public static final HashMap<IElementType, String> operatorType2operatorSymbol = { };
         
+        public static final HashMap<String, Set<Class<? extends PsiExpression>>> operatorName2expressionTypes = { };
+        
         static {
             // @formatter:off
-            add("PLUS",     PLUS,        "+"   );
-            add("MINUS",    MINUS,       "-"   );
-            add("NOT",      EXCL,        "!"   );
-            add("TILDE",    TILDE,       "~"   );
-            add("POSTINC",  PLUSPLUS,   "_++"  );
-            add("POSTDEC",  MINUSMINUS, "_--"  );
-            add("PREINC",   PLUSPLUS,    "++_" );
-            add("PREDEC",   MINUSMINUS,  "--_" );
-            add("OROR",     OROR,        "||"  );
-            add("ANDAND",   ANDAND,      "&&"  );
-            add("OR",       OR,          "|"   );
-            add("XOR",      XOR,         "^"   );
-            add("AND",      AND,         "&"   );
-            add("EQ",       EQEQ,        "=="  );
-            add("NE",       NE,          "!="  );
-            add("LT",       LT,          "<"   );
-            add("GT",       GT,          ">"   );
-            add("LE",       LE,          "<="  );
-            add("GE",       GE,          ">="  );
-            add("LTLT",     LTLT,        "<<"  );
-            add("GTGT",     GTGT,        ">>"  );
-            add("GTGTGT",   GTGTGT,      ">>>" );
-            add("PLUS",     PLUS,        "+"   );
-            add("MINUS",    MINUS,       "-"   );
-            add("MUL",      ASTERISK,    "*"   );
-            add("DIV",      DIV,         "/"   );
-            add("MOD",      PERC,        "%"   );
-            add("OREQ",     OREQ,        "|="  );
-            add("XOREQ",    XOREQ,       "^="  );
-            add("ANDEQ",    ANDEQ,       "&="  );
-            add("LTLTEQ",   LTLTEQ,      "<<=" );
-            add("GTGTEQ",   GTGTEQ,      ">>=" );
-            add("GTGTGTEQ", GTGTGTEQ,    ">>>=");
-            add("PLUSEQ",   PLUSEQ,      "+="  );
-            add("MINUSEQ",  MINUSEQ,     "-="  );
-            add("MULEQ",    ASTERISKEQ,  "*="  );
-            add("DIVEQ",    DIVEQ,       "/="  );
-            add("MODEQ",    PERCEQ,      "%="  );
+            add("PLUS",     PLUS,        "+"   , PsiPrefixExpressionImpl.class);
+            add("MINUS",    MINUS,       "-"   , PsiPrefixExpressionImpl.class);
+            add("NOT",      EXCL,        "!"   , PsiPrefixExpressionImpl.class);
+            add("TILDE",    TILDE,       "~"   , PsiPrefixExpressionImpl.class);
+            add("POSTINC",  PLUSPLUS,    "_++" , PsiPrefixExpressionImpl.class);
+            add("POSTDEC",  MINUSMINUS,  "_--" , PsiPrefixExpressionImpl.class);
+            add("PREINC",   PLUSPLUS,    "++_" , PsiPostfixExpressionImpl.class);
+            add("PREDEC",   MINUSMINUS,  "--_" , PsiPostfixExpressionImpl.class);
+            add("OROR",     OROR,        "||"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("ANDAND",   ANDAND,      "&&"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("OR",       OR,          "|"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("XOR",      XOR,         "^"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("AND",      AND,         "&"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("EQ",       EQEQ,        "=="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("NE",       NE,          "!="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("LT",       LT,          "<"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("GT",       GT,          ">"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("LE",       LE,          "<="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("GE",       GE,          ">="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("LTLT",     LTLT,        "<<"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("GTGT",     GTGT,        ">>"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("GTGTGT",   GTGTGT,      ">>>" , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("PLUS",     PLUS,        "+"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("MINUS",    MINUS,       "-"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("MUL",      ASTERISK,    "*"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("DIV",      DIV,         "/"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("MOD",      PERC,        "%"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("OREQ",     OREQ,        "|="  , PsiAssignmentExpressionImpl.class);
+            add("XOREQ",    XOREQ,       "^="  , PsiAssignmentExpressionImpl.class);
+            add("ANDEQ",    ANDEQ,       "&="  , PsiAssignmentExpressionImpl.class);
+            add("LTLTEQ",   LTLTEQ,      "<<=" , PsiAssignmentExpressionImpl.class);
+            add("GTGTEQ",   GTGTEQ,      ">>=" , PsiAssignmentExpressionImpl.class);
+            add("GTGTGTEQ", GTGTGTEQ,    ">>>=", PsiAssignmentExpressionImpl.class);
+            add("PLUSEQ",   PLUSEQ,      "+="  , PsiAssignmentExpressionImpl.class);
+            add("MINUSEQ",  MINUSEQ,     "-="  , PsiAssignmentExpressionImpl.class);
+            add("MULEQ",    ASTERISKEQ,  "*="  , PsiAssignmentExpressionImpl.class);
+            add("DIVEQ",    DIVEQ,       "/="  , PsiAssignmentExpressionImpl.class);
+            add("MODEQ",    PERCEQ,      "%="  , PsiAssignmentExpressionImpl.class);
             // @formatter:on
         }
         
-        public static void add(final String name, final IElementType type, final String symbol) {
+        public static void add(final String name, final IElementType type, final String symbol, final Class<? extends PsiExpression>... expressionTypes) {
             operatorSymbol2operatorName[symbol] = name;
             operatorName2operatorSymbol[name] = symbol;
             operatorName2operatorType[name] = type;
             operatorType2operatorName[type] = name;
             operatorType2operatorSymbol[type] = symbol;
+            operatorName2expressionTypes.computeIfAbsent(name, _ -> new HashSet<>()) *= List.of(expressionTypes);
         }
         
     }
@@ -345,11 +355,8 @@ public class IDEAContext {
                 }
                 if (element != null) {
                     final PsiSubstitutor substitutor = resolveResult.getSubstitutor();
-                    for (final PsiTypeParameter parameter : PsiUtil.typeParametersIterable(element)) {
-                        final PsiType psiType = substitutor.substitute(parameter);
-                        if (psiType != null)
-                            psiType.accept(this);
-                    }
+                    for (final PsiTypeParameter parameter : PsiUtil.typeParametersIterable(element))
+                        substitutor.substitute(parameter)?.accept(this);
                 }
             }
             return result;
@@ -518,27 +525,24 @@ public class IDEAContext {
     public static PsiAnnotation copy(final PsiAnnotation annotation) = JavaPsiFacade.getElementFactory(annotation.getProject()).createAnnotationFromText(annotation.getText(), annotation.getParent());
     
     public static void followAnnotation(final @Nullable PsiModifierList target, final LightModifierList follower) {
-        if (target != null) {
+        if (target != null)
             Stream.of(target.getAnnotations())
                     .filter(IDEAContext::shouldFollowAnnotation)
                     .forEach(follower::addAnnotation);
-        }
     }
     
     public static void followAnnotationWithoutNullable(final @Nullable PsiModifierList target, final LightModifierList follower) {
-        if (target != null) {
+        if (target != null)
             Stream.of(target.getAnnotations())
                     .filter(annotation -> shouldFollowAnnotation(annotation) && !Nullable.class.getCanonicalName().equals(annotation.getQualifiedName()))
                     .forEach(follower::addAnnotation);
-        }
     }
     
     public static void followNullable(final @Nullable PsiModifierList target, final LightModifierList follower) {
-        if (target != null) {
+        if (target != null)
             Stream.of(target.getAnnotations())
                     .filter(annotation -> Nullable.class.getCanonicalName().equals(annotation.getQualifiedName()))
                     .forEach(follower::addAnnotation);
-        }
     }
     
     public static final HashSet<Class<? extends Annotation>> followableAnnotationTypes = { List.of(Deprecated.class, Nullable.class, Callback.class, TestOnly.class) };
@@ -549,7 +553,7 @@ public class IDEAContext {
     
     public static Function<String, String> simplify(final String context) {
         final HashSet<String> mark = { };
-        return name -> mark.add(name) ? name : context + "$" + name;
+        return name -> mark.add(name) ? name : STR."\{context}$\{name}";
     }
     
     public static boolean marked(final PsiAnnotation annotation, final String mark) = annotation.resolveAnnotationType()?.hasAnnotation(mark) ?? false;
@@ -601,10 +605,11 @@ public class IDEAContext {
     }
     
     public static boolean requiresMaho(final @Nullable PsiElement element)
-            = element != null && requiresMaho(PsiTreeUtil.getContextOfType(element, PsiClass.class));
+            = element != null && requiresMaho(element.getContainingFile().getOriginalFile());
     
-    public static boolean requiresMaho(final @Nullable PsiClass psiClass)
-            = psiClass != null && CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> requiresMaho(JavaModuleGraphUtil.findDescriptorByElement(psiClass)));
+    public static boolean requiresMaho(final @Nullable PsiFileSystemItem item)
+            = item != null && (item instanceof JavaDummyHolder holder ? requiresMaho(holder.getContext()?.getContainingFile()?.getOriginalFile() ?? null) :
+            CachedValuesManager.getProjectPsiDependentCache(item, it -> requiresMaho(JavaModuleGraphUtil.findDescriptorByElement(item))));
     
     public static boolean requiresMaho(final @Nullable PsiJavaModule module)
             = module != null && (Maho.MODULE_NAME.equals(module.getName()) || module.getRequires().fromIterable().map(PsiRequiresStatement::getModuleName).nonnull().anyMatch(Maho.MODULE_NAME::equals));

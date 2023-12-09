@@ -1,17 +1,23 @@
 package amadeus.maho.lang.idea.handler;
 
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.intellij.codeInsight.daemon.JavaErrorBundle;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
+import com.intellij.codeInsight.daemon.impl.analysis.HighlightVisitorImpl;
 import com.intellij.codeInsight.daemon.impl.quickfix.ImplementAbstractClassMethodsFix;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.LocalQuickFixAndIntentionActionOnPsiElement;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.codeInspection.util.IntentionName;
+import com.intellij.find.findUsages.FindUsagesOptions;
+import com.intellij.find.findUsages.JavaFindUsagesHelper;
+import com.intellij.find.findUsages.JavaMethodFindUsagesOptions;
 import com.intellij.formatting.Alignment;
 import com.intellij.formatting.Block;
 import com.intellij.formatting.FormattingMode;
@@ -30,13 +36,14 @@ import com.intellij.lang.java.parser.JavaParser;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.command.undo.UndoUtil;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.JavaTokenType;
 import com.intellij.psi.LambdaUtil;
-import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiAnonymousClass;
 import com.intellij.psi.PsiArrayInitializerExpression;
 import com.intellij.psi.PsiArrayType;
@@ -53,6 +60,7 @@ import com.intellij.psi.PsiExpressionStatement;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
+import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiLocalVariable;
 import com.intellij.psi.PsiManager;
@@ -78,7 +86,6 @@ import com.intellij.psi.formatter.java.JavaSpacePropertyProcessor;
 import com.intellij.psi.impl.BlockSupportImpl;
 import com.intellij.psi.impl.source.DummyHolderFactory;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
-import com.intellij.psi.impl.source.PsiJavaCodeReferenceElementImpl;
 import com.intellij.psi.impl.source.PsiMethodImpl;
 import com.intellij.psi.impl.source.resolve.reference.impl.PsiPolyVariantCachingReference;
 import com.intellij.psi.impl.source.tree.ChildRole;
@@ -95,14 +102,19 @@ import com.intellij.psi.impl.source.tree.java.PsiReferenceParameterListImpl;
 import com.intellij.psi.infos.ClassCandidateInfo;
 import com.intellij.psi.scope.processor.MethodsProcessor;
 import com.intellij.psi.scope.util.PsiScopesUtil;
+import com.intellij.psi.search.GlobalSearchScopeUtil;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.IReparseableElementTypeBase;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
+import com.intellij.psi.util.PsiUtilCore;
+import com.intellij.usageView.UsageInfo;
 import com.intellij.util.CharTable;
 import com.intellij.util.JavaPsiConstructorUtil;
+import com.intellij.util.Processor;
+import com.intellij.util.indexing.FileBasedIndex;
 
 import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
@@ -112,6 +124,7 @@ import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
 import amadeus.maho.lang.idea.handler.base.HandlerSupport;
+import amadeus.maho.lang.idea.handler.base.JavaExpressionIndex;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.idea.light.LightElementReference;
 import amadeus.maho.lang.idea.light.LightMethod;
@@ -157,11 +170,14 @@ public class AssignHandler extends BaseSyntaxHandler {
         
         @RequiredArgsConstructor
         @FieldDefaults(level = AccessLevel.PUBLIC, makeFinal = true)
-        public static class ReferenceElement extends PsiJavaCodeReferenceElementImpl {
+        public static class ReferenceElement extends PsiReferenceExpressionImpl {
             
             { markChildAs(this, new ReferenceParameterList()); }
             
             public @Nullable PsiClassType classType() = getParent() instanceof PsiExpression expression && expression.getType() instanceof PsiClassType classType ? classType : null;
+            
+            @Override
+            public PsiType getType() = classType();
             
             @Override
             public String getText() = "";
@@ -173,10 +189,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             public String getCanonicalText() = "";
             
             @Override
-            public String getCanonicalText(final boolean annotated, final PsiAnnotation annotations[]) = getCanonicalText();
-            
-            @Override
-            public @Nullable String getReferenceName() = classType()?.getClassName() ?? null;
+            public @Nullable String getReferenceName() = null;
             
             @Override
             public JavaResolveResult[] multiResolve(final boolean incompleteCode) {
@@ -189,12 +202,6 @@ public class AssignHandler extends BaseSyntaxHandler {
                         new ClassCandidateInfo(element, result.getSubstitutor(), PsiResolveHelper.getInstance(getProject()).isAccessible(element, this, null), getContainingFile())
                 };
             }
-            
-            @Override
-            public Kind getKindEnum(final PsiFile containingFile) = Kind.CLASS_NAME_KIND;
-            
-            @Override
-            public void setKindWhenDummy(final Kind kind) { }
             
             @Override
             public void delete() { }
@@ -243,6 +250,9 @@ public class AssignHandler extends BaseSyntaxHandler {
         public PsiExpression getQualifier() = null;
         
         @Override
+        public @Nullable PsiJavaCodeReferenceElement getClassOrAnonymousClassReference() = classReference;
+        
+        @Override
         public PsiPolyVariantCachingReference getConstructorFakeReference() = CachedValuesManager.getProjectPsiDependentCache(this, it -> new PsiPolyVariantCachingReference() {
             
             @Override
@@ -279,6 +289,49 @@ public class AssignHandler extends BaseSyntaxHandler {
         });
         
     }
+    
+    public static final JavaExpressionIndex.IndexType<PsiArrayInitializerBackNewExpression> ASSIGN_NEW = { "assign-new", PsiArrayInitializerBackNewExpression.class };
+    
+    @Hook(value = JavaFindUsagesHelper.class, isStatic = true)
+    private static void processElementUsages(final PsiElement element, final FindUsagesOptions options, final Processor<? super UsageInfo> processor) {
+        if (options instanceof JavaMethodFindUsagesOptions methodOptions) {
+            final PsiMethod target = (PsiMethod) element;
+            if (target.isConstructor()) {
+                final Project project = PsiUtilCore.getProjectInReadAction(element);
+                final Map<VirtualFile, int[]> mapping = IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+                    final HashMap<VirtualFile, int[]> offsets = { };
+                    FileBasedIndex.getInstance().processValues(JavaExpressionIndex.INDEX_ID, ASSIGN_NEW.name(), null, (file, value) -> {
+                        ProgressManager.checkCanceled();
+                        offsets[file] = value;
+                        return true;
+                    }, GlobalSearchScopeUtil.toGlobalSearchScope(options.searchScope, project));
+                    return offsets;
+                });
+                if (!mapping.isEmpty()) {
+                    final PsiManager manager = PsiManager.getInstance(project);
+                    manager.runInBatchFilesMode(() -> {
+                        mapping.entrySet().stream().anyMatch(entry -> {
+                            ProgressManager.checkCanceled();
+                            return !IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+                                if (manager.findFile(entry.getKey()) instanceof PsiJavaFile file)
+                                    for (final int offset : entry.getValue()) {
+                                        final @Nullable PsiArrayInitializerBackNewExpression expression = PsiTreeUtil.findElementOfClassAtOffset(file, offset, ASSIGN_NEW.expressionType(), false);
+                                        if (expression != null && expression.resolveMethod() == element)
+                                            if (!(Privilege) JavaFindUsagesHelper.addResult(expression, options, processor))
+                                                return false;
+                                    }
+                                return true;
+                            });
+                        });
+                        return null;
+                    });
+                }
+            }
+        }
+    }
+    
+    @Hook
+    private static Hook.Result visitExpression(final HighlightVisitorImpl $this, final PsiExpression expression) = Hook.Result.falseToVoid(expression instanceof PsiArrayInitializerBackNewExpression.ReferenceElement, null);
     
     @Hook
     private static Hook.Result getReference(final LeafPsiElement $this)
@@ -427,38 +480,6 @@ public class AssignHandler extends BaseSyntaxHandler {
         return type instanceof PsiArrayType ? type : null;
     }
     
-    // @Hook
-    // private static void processQuery(final ExtensionReferenceSearcher $this, final ReferencesSearch.SearchParameters parameters, final Processor<? super PsiReference> consumer) {
-    //     if (parameters.getElementToSearch() instanceof PsiMethod method && method.isConstructor()) {
-    //         final @Nullable PsiClass containingClass = method.getContainingClass();
-    //         if (containingClass != null)
-    //             ReferencesSearch.search(containingClass, parameters.getScopeDeterminedByUser(), true).forEach(reference -> {
-    //                 if (reference.getElement() instanceof PsiTypeElement element && element.getType() instanceof PsiClassType classType && containingClass.equals(classType.resolve()))
-    //                     return switch (element.getParent()) {
-    //                         case PsiMethod owner                                                                                                            -> SyntaxTraverser.psiTraverser(element)
-    //                                 .expand(o -> o == element || !(o instanceof PsiMember || o instanceof PsiLambdaExpression))
-    //                                 .filter(PsiReturnStatement.class)
-    //                                 .map(statement -> statement.getReturnValue() instanceof PsiArrayInitializerBackNewExpression expression ? expression.classReference : null)
-    //                                 .filterNotNull()
-    //                                 .processEach(consumer);
-    //                         case PsiParameter owner when DefaultValueHandler.defaultValue(owner) instanceof PsiArrayInitializerBackNewExpression expression -> consumer.process(expression.classReference);
-    //                         case PsiVariable owner when owner.getInitializer() instanceof PsiArrayInitializerBackNewExpression expression                   -> {
-    //                             if (consumer.process(expression.classReference))
-    //                                 SyntaxTraverser.psiTraverser(element.getParent())
-    //                                         .filter(PsiAssignmentExpression.class)
-    //                                         .filter(assignment -> ExpressionUtils.isReferenceTo(expression.getLExpression(), owner))
-    //                                         .map(assignment -> assignment.getRExpression() instanceof PsiArrayInitializerBackNewExpression expression ? expression.classReference : null)
-    //                                         .filterNotNull()
-    //                                         .processEach(consumer);
-    //                         }
-    //                         case PsiAssignmentExpression owner when owner.getRExpression() instanceof PsiArrayInitializerBackNewExpression expression       -> consumer.process(expression.classReference);
-    //                         default                                                                                                                         -> true;
-    //                     };
-    //                 return true;
-    //             });
-    //     }
-    // }
-    //
     @Hook(value = HighlightUtil.class, isStatic = true)
     private static Hook.Result checkArrayInitializerApplicable(final PsiArrayInitializerExpression expression) = Hook.Result.nullToVoid(type(expression), null);
     

@@ -332,8 +332,7 @@ public interface HandlerSupport {
             = process(tree, it -> it.handler().value() == annotationType, consumer);
     
     static <T extends PsiModifierListOwner> void process(final T tree, final Predicate<BaseHandler<?>> predicate = _ -> true, final Consumer4<BaseHandler<Annotation>, ? super T, Annotation, PsiAnnotation> consumer)
-            = Handler.Marker.baseHandlers().stream()
-            // = overrideMap[Handler.Marker.baseHandlers()][BaseHandler.Methods.specific(invokeTarget[consumer.getClass()], tree)].stream()
+            = overrideMap[Handler.Marker.baseHandlers()][BaseHandler.Methods.specific(invokeTarget[consumer.getClass()], tree)].stream()
             .filter(predicate)
             .map(baseHandler -> getAnnotationsByTypeWithOuter(tree, baseHandler))
             .nonnull()
@@ -433,7 +432,7 @@ public interface HandlerSupport {
         return importList != null ? Stream.of(importList.getImportStatements()).map(PsiImportStatement::getQualifiedName).collect(Collectors.toSet()) : Set.of();
     }) : Set.of();
     
-    private static boolean checkAnnotationType(final String canonicalName, final String simpleName, final PsiAnnotation annotation) {
+    static boolean checkAnnotationType(final String canonicalName, final String simpleName, final PsiAnnotation annotation) {
         if (annotation.isValid()) {
             final @Nullable PsiJavaCodeReferenceElement reference = annotation.getNameReferenceElement();
             final boolean valid = reference != null && reference.isValid();

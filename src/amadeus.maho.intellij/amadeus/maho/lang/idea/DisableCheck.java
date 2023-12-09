@@ -2,6 +2,9 @@ package amadeus.maho.lang.idea;
 
 import javax.swing.JComponent;
 
+import com.intellij.codeInsight.completion.CompletionAssertions;
+import com.intellij.codeInsight.completion.CompletionPhase;
+import com.intellij.codeInsight.completion.CompletionService;
 import com.intellij.codeInsight.daemon.impl.analysis.AnnotationsHighlightUtil;
 import com.intellij.debugger.impl.InvokeThread;
 import com.intellij.diagnostic.LoadingState;
@@ -11,12 +14,14 @@ import com.intellij.openapi.actionSystem.impl.ActionUpdater;
 import com.intellij.openapi.application.TransactionGuardImpl;
 import com.intellij.openapi.application.impl.ApplicationImpl;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.NoAccessDuringPsiEvents;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Key;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiInvalidElementAccessException;
 import com.intellij.psi.impl.source.PsiFileWithStubSupport;
 import com.intellij.psi.impl.source.tree.LazyParseableElement;
 import com.intellij.psi.impl.source.tree.TreeElement;
@@ -56,6 +61,15 @@ interface DisableCheck {
     
     @Hook(exactMatch = false, forceReturn = true)
     private static void runDiagnostic(final IndexDiagnosticRunner $this) { }
+    
+    @Hook(value = PsiInvalidElementAccessException.class, isStatic = true, forceReturn = true)
+    private static boolean isTrackingInvalidation() = false;
+
+    @Hook(value = CompletionAssertions.class, isStatic = true, forceReturn = true)
+    private static void checkEditorValid(final Editor editor) { }
+
+    @Hook(value = CompletionService.class, isStatic = true, forceReturn = true)
+    private static void assertPhase(final Class<? extends CompletionPhase>... possibilities) { }
     
     @Hook(value = SlowOperations.class, isStatic = true, forceReturn = true)
     private static void assertSlowOperationsAreAllowed() { }

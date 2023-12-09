@@ -52,6 +52,7 @@ import com.intellij.openapi.progress.ProgressIndicatorProvider;
 import com.intellij.openapi.progress.impl.CoreProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
@@ -62,10 +63,12 @@ import com.intellij.openapi.wm.impl.IdeFrameImpl;
 import com.intellij.psi.GenericsUtil;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiAnnotationOwner;
+import com.intellij.psi.PsiAnonymousClass;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementFactory;
+import com.intellij.psi.PsiEllipsisType;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFunctionalExpression;
@@ -74,6 +77,7 @@ import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
+import com.intellij.psi.PsiRecordComponent;
 import com.intellij.psi.PsiRecordHeader;
 import com.intellij.psi.PsiReferenceList;
 import com.intellij.psi.PsiSubstitutor;
@@ -83,11 +87,15 @@ import com.intellij.psi.PsiTypeCastExpression;
 import com.intellij.psi.PsiTypeElement;
 import com.intellij.psi.SyntaxTraverser;
 import com.intellij.psi.controlFlow.ControlFlowUtil;
+import com.intellij.psi.impl.DebugUtil;
 import com.intellij.psi.impl.PsiElementFactoryImpl;
 import com.intellij.psi.impl.PsiShortNamesCacheImpl;
+import com.intellij.psi.impl.RecordAugmentProvider;
 import com.intellij.psi.impl.compiled.ClsParsingUtil;
+import com.intellij.psi.impl.file.impl.FileManagerImpl;
 import com.intellij.psi.impl.java.JavaFunctionalExpressionIndex;
 import com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
+import com.intellij.psi.impl.light.LightRecordCanonicalConstructor;
 import com.intellij.psi.impl.search.AllClassesSearchExecutor;
 import com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
@@ -101,6 +109,7 @@ import com.intellij.psi.scope.conflictResolvers.JavaMethodsConflictResolver;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.ui.IconDeferrerImpl;
 import com.intellij.ui.LightweightHint;
@@ -121,6 +130,7 @@ import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
+import amadeus.maho.util.bytecode.ASMHelper;
 import amadeus.maho.util.bytecode.Bytecodes;
 import amadeus.maho.util.dynamic.CallerContext;
 import amadeus.maho.util.runtime.ArrayHelper;
@@ -164,22 +174,38 @@ interface Fix {
     @Hook(value = TypeConversionUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "getType")), before = false, capture = true)
     private static PsiType areTypesAssignmentCompatible(final PsiType capture, final PsiType lType, final PsiExpression rExpr) = GenericsUtil.getVariableTypeByExpressionType(capture);
     
+    @Hook
+    private static void possiblyInvalidatePhysicalPsi(final FileManagerImpl $this) = ProjectRootManager.getInstance(((Privilege) $this.myManager).getProject()).incModificationCount();
+    
+    @Hook(value = DebugUtil.class, isStatic = true, forceReturn = true)
+    private static @Nullable Object currentInvalidationTrace() = null; // fucking slow
+    
     @Hook(value = SwitchBlockHighlightingModel.PatternsInSwitchBlockHighlightingModel.class, isStatic = true, forceReturn = true)
     private static Collection<PsiClass> getPermittedClasses(final PsiClass psiClass) = CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> {
         final @Nullable PsiReferenceList permitsList = it.getPermitsList();
         if (permitsList == null)
             return SyntaxTraverser.psiTraverser(it.getContainingFile())
                     .expandTypes(type -> type != JavaElementType.TYPE_PARAMETER_LIST)
-                    .traverse()
-                    .toStream()
-                    .cast(PsiClass.class)
+                    .filter(PsiClass.class)
+                    .filter(cls -> !(cls instanceof PsiAnonymousClass || PsiUtil.isLocalClass(cls)))
                     .filter(cls -> cls.isInheritor(it, false))
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
+                    .toList();
         return Stream.of(permitsList.getReferencedTypes())
                 .map(PsiClassType::resolve)
                 .nonnull()
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     });
+    
+    @Redirect(targetClass = RecordAugmentProvider.class, slice = @Slice(@At(method = @At.MethodInsn(name = ASMHelper._INIT_, owner = "com/intellij/psi/impl/light/LightRecordCanonicalConstructor/LightRecordCanonicalConstructor"))))
+    private static LightRecordCanonicalConstructor getCanonicalConstructor(final PsiMethod method, final PsiClass containingClass) {
+        final PsiRecordComponent components[] = containingClass.getRecordComponents();
+        if (components.length > 0 && components[components.length - 1].getType() instanceof PsiEllipsisType)
+            return new LightRecordCanonicalConstructor(method, containingClass) {
+                @Override
+                public boolean isVarArgs() = true;
+            };
+        return new LightRecordCanonicalConstructor(method, containingClass);
+    }
     
     // Remove useless checks
     @Hook
@@ -191,8 +217,7 @@ interface Fix {
     }
     
     private static ProgressIndicator getOrCreateIndicator() {
-        @Nullable ProgressIndicator progress = ProgressIndicatorProvider.getGlobalProgressIndicator();
-        if (progress == null) progress = new EmptyProgressIndicator();
+        final ProgressIndicator progress = ProgressIndicatorProvider.getGlobalProgressIndicator() ?? new EmptyProgressIndicator();
         progress.setIndeterminate(false);
         return progress;
     }
@@ -307,7 +332,8 @@ interface Fix {
                 final Path directory = Path.of(directoryName.substring(0, index));
                 if (Files.isDirectory(directory)) {
                     final Path src = directory / "lib" / "src.zip";
-                    if (Files.isRegularFile(src)) model.setDirectoryName(src + directoryName.substring(index));
+                    if (Files.isRegularFile(src))
+                        model.setDirectoryName(src + directoryName.substring(index));
                 }
             }
         }
@@ -319,7 +345,7 @@ interface Fix {
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "subSequence")), before = false, capture = true)
     private static CharSequence createMemberCopyFromText(final CharSequence capture, final PsiMember member, final TextRange range)
-            = member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? field.getTypeElement().getText() + " " + capture : capture;
+            = member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? STR."\{field.getTypeElement().getText()} \{capture}" : capture;
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "findPsiByAST")), capture = true)
     private static int getNonPhysicalCopy(final int capture, final Map<TextRange, PsiFile> fragmentCache, final JavaFunctionalExpressionIndex.IndexEntry entry, final PsiFunctionalExpression expression) {
@@ -367,6 +393,6 @@ interface Fix {
     // IllegalArgumentException: focusOwner == null
     @Hook(at = @At(var = @At.VarInsn(opcode = Bytecodes.ASTORE, var = 3)), capture = true)
     private static JComponent guessBestPopupLocation(final @Nullable JComponent capture, final PopupFactoryImpl $this, final DataContext dataContext)
-            = capture ?? (PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(dataContext) instanceof IdeFrameImpl frame ? frame.getComponent() : null);
+    = capture ?? (PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(dataContext) instanceof IdeFrameImpl frame ? frame.getComponent() : null);
     
 }

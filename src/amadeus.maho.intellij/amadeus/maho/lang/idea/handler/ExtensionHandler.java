@@ -22,13 +22,11 @@ import com.intellij.debugger.engine.evaluation.expression.EvaluatorBuilderImpl;
 import com.intellij.openapi.project.Project;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.JavaPsiFacade;
-import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
-import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
@@ -70,6 +68,7 @@ import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.handler.base.ASTTransformer;
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
+import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.idea.light.LightMethod;
@@ -175,8 +174,8 @@ public class ExtensionHandler extends BaseSyntaxHandler {
             return false;
         if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList && psiClass.getModifierList() == last || visited != null && visited.contains(psiClass))
             return true;
-        if (!(processor instanceof MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
-            final ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
+        if (!(processor instanceof MethodResolverProcessor methodResolverProcessor && methodResolverProcessor.isConstructor()) && requiresMaho(place)) {
+            final @Nullable ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
             if (classHint == null || classHint.shouldProcess(ElementClassHint.DeclarationKind.METHOD)) {
                 final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
                 final @Nullable String name = nameHint == null ? null : nameHint.getName(state);
@@ -186,7 +185,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                 // Elimination of duplicate signature methods.
                 // The purpose of differentiating providers is to report errors when multiple providers provide the same signature.
                 final HashMap<PsiClass, Collection<PsiMethod>> providerRecord = { };
-                PsiType type = null;
+                @Nullable PsiType type = null;
                 // Try to determine the caller type by context.
                 // The reason for getting caller types is the need to distinguish between array types or to infer generics.
                 // There's scope for improving the extrapolation process here.
@@ -261,6 +260,8 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         } finally { collection.add(methodTree); }
     }
     
+    private static final String canonicalName = Extension.class.getCanonicalName(), simpleName = Extension.class.getSimpleName();
+    
     public static Collection<PsiClass> extensionSet(final GlobalSearchScope resolveScope) {
         final @Nullable Project project = resolveScope.getProject();
         if (project == null)
@@ -274,18 +275,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         if (project == null)
             return List.of();
         return JavaAnnotationIndex.getInstance().getAnnotations(Extension.class.getSimpleName(), project, resolveScope).stream()
-                .filter(annotation -> {
-                    if (Extension.class.getCanonicalName().equals(annotation.getQualifiedName()))
-                        return true;
-                    final @Nullable PsiJavaCodeReferenceElement reference = annotation.getNameReferenceElement();
-                    if (reference != null) {
-                        final JavaResolveResult result = reference.advancedResolve(true);
-                        final @Nullable PsiElement element = result.getElement();
-                        if (element instanceof PsiClass psiClass)
-                            return Extension.class.getCanonicalName().equals(psiClass.getQualifiedName());
-                    }
-                    return false;
-                })
+                .filter(annotation -> HandlerSupport.checkAnnotationType(canonicalName, simpleName, annotation))
                 .map(PsiElement::getParent)
                 .map(PsiElement::getParent)
                 .cast(PsiClass.class)
