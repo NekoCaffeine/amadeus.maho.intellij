@@ -8,18 +8,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.intellij.codeInsight.daemon.JavaErrorBundle;
-import com.intellij.codeInsight.daemon.impl.HighlightInfo;
-import com.intellij.codeInsight.daemon.impl.HighlightInfoType;
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.JavaModuleGraphUtil;
 import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.java.lexer._JavaLexer;
@@ -29,7 +21,6 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.util.ThrowableComputable;
-import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.Bottom;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiAnnotation;
@@ -46,17 +37,13 @@ import com.intellij.psi.PsiEllipsisType;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiFileSystemItem;
-import com.intellij.psi.PsiIdentifier;
 import com.intellij.psi.PsiIntersectionType;
 import com.intellij.psi.PsiJavaModule;
-import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiModifierListOwner;
-import com.intellij.psi.PsiParameter;
-import com.intellij.psi.PsiParameterList;
 import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiRequiresStatement;
 import com.intellij.psi.PsiSubstitutor;
@@ -349,8 +336,8 @@ public class IDEAContext {
             if (visited.add(classType)) {
                 final PsiClassType.ClassResolveResult resolveResult = classType.resolveGenerics();
                 final PsiClass element = resolveResult.getElement();
-                if (element instanceof PsiTypeParameter) {
-                    result.add((PsiTypeParameter) element);
+                if (element instanceof PsiTypeParameter parameter) {
+                    result += parameter;
                     Stream.of(element.getExtendsListTypes()).forEach(type -> type.accept(this));
                 }
                 if (element != null) {
@@ -364,20 +351,10 @@ public class IDEAContext {
         
         @Override
         public Set<PsiTypeParameter> visitWildcardType(final PsiWildcardType wildcardType) {
-            final PsiType bound = wildcardType.getBound();
-            if (bound != null)
-                bound.accept(this);
+            wildcardType.getBound()?.accept(this);
             return result;
         }
         
-    }
-    
-    @Hook(value = HighlightUtil.class, isStatic = true)
-    static Hook.Result checkUnderscore(final PsiIdentifier identifier, final LanguageLevel languageLevel) {
-        if ("_".equals(identifier.getText()) && !(identifier.getParent() instanceof PsiParameter parameter && parameter.getNameIdentifier() == identifier &&
-                                                  parameter.getParent() instanceof PsiParameterList parameterList && parameterList.getParent() instanceof PsiLambdaExpression))
-            return { HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(identifier).descriptionAndTooltip(JavaErrorBundle.message("underscore.identifier.error")) };
-        return Hook.Result.NULL;
     }
     
     @Proxy(GETFIELD)
@@ -466,14 +443,6 @@ public class IDEAContext {
             lastChild(holder, element);
         myParent(element, holder);
     }
-    
-    public static String atomicReferenceName(final PsiType type) = (type instanceof PsiPrimitiveType primitiveType ?
-            switch (primitiveType.getKind().getName()) {
-                case "boolean" -> AtomicBoolean.class;
-                case "int"     -> AtomicInteger.class;
-                case "long"    -> AtomicLong.class;
-                default        -> AtomicReference.class;
-            } : AtomicReference.class).getCanonicalName();
     
     public static PsiClassType typeWithGenerics(final PsiClass psiClass) {
         final PsiElementFactory factory = JavaPsiFacade.getElementFactory(psiClass.getProject());
