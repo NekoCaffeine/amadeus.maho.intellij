@@ -53,7 +53,7 @@ public interface Build {
     Set<String> plugins = Set.of("java");
     
     // avoid analyzing unnecessary libraries, thereby improving compilation speed
-    List<String> shouldInCompile = Stream.of("app", "app-client", "platform-api", "platform-impl", "platform-loader", "lib", "lib-client", "util", "util-8", "util_rt", "spellchecker", "java-api", "java-impl")
+    List<String> shouldInCompile = Stream.of("app", "app-client", "platform-loader", "lib", "lib-client", "util", "util-8", "util_rt", "spellchecker", "java-frontback", "java-impl")
             .map(name -> name + Jar.SUFFIX).collect(Collectors.toList());
     
     Module.DependencySet ddlc = { "DDLC", Files.list(workspace.root() / "ddlc").filter(path -> path.getFileName().toString().endsWith(Jar.SUFFIX)).map(Path::toAbsolutePath).map(Module.SingleDependency::new).collect(Collectors.toSet()) };

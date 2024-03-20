@@ -21,6 +21,8 @@ import amadeus.maho.lang.idea.handler.base.Handler;
 import amadeus.maho.lang.inspection.ConstructorContract;
 import amadeus.maho.lang.inspection.Nullable;
 
+import static amadeus.maho.lang.idea.IDEAContext.accessPsiClasses;
+
 @Handler(ConstructorContract.class)
 public class ConstructorContractHandler extends BaseHandler<ConstructorContract> {
     

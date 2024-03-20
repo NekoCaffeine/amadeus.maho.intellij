@@ -32,6 +32,7 @@ import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.util.dynamic.LookupHelper;
 import amadeus.maho.util.serialization.BinaryMapper;
 
+import static amadeus.maho.lang.idea.IDEAContext.followAnnotation;
 import static com.intellij.psi.PsiModifier.*;
 
 public abstract class PlaceholderHandler<A extends Annotation> extends BaseHandler<A> {

@@ -18,6 +18,7 @@ import com.intellij.psi.impl.source.resolve.graphInference.constraints.CheckedEx
 import com.intellij.psi.impl.source.resolve.graphInference.constraints.ConstraintFormula;
 
 import amadeus.maho.lang.SneakyThrows;
+import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.Redirect;
 import amadeus.maho.transform.mark.base.At;
@@ -27,11 +28,11 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 @TransformProvider
 public class SneakyThrowsHandler {
     
-    @Hook(value = HighlightUtil.class, isStatic = true)
-    public static Hook.Result checkSimpleCatchParameter(final PsiParameter parameter, final Collection<? extends PsiClassType> thrownTypes, final PsiClassType caughtType) = Hook.Result.NULL;
+    @Hook(value = HighlightUtil.class, isStatic = true, forceReturn = true)
+    public static @Nullable HighlightInfo.Builder checkSimpleCatchParameter(final PsiParameter parameter, final Collection<? extends PsiClassType> thrownTypes, final PsiClassType caughtType) = null;
     
-    @Hook(value = HighlightUtil.class, isStatic = true)
-    public static Hook.Result checkMultiCatchParameter(final PsiParameter parameter, final Collection<? extends PsiClassType> thrownTypes, final Consumer<? super HighlightInfo.Builder> errorSink) = Hook.Result.NULL;
+    @Hook(value = HighlightUtil.class, isStatic = true, forceReturn = true)
+    public static void checkMultiCatchParameter(final PsiParameter parameter, final Collection<? extends PsiClassType> thrownTypes, final Consumer<? super HighlightInfo.Builder> errorSink) { }
     
     public static boolean isHandled(PsiElement element) {
         while (element != null && !(element instanceof PsiFile)) {

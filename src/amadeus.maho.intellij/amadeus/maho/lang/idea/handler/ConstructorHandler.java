@@ -54,6 +54,8 @@ import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
+import static amadeus.maho.lang.idea.IDEAContext.*;
+
 @TransformProvider
 public abstract class ConstructorHandler<A extends Annotation> extends BaseHandler<A> {
     

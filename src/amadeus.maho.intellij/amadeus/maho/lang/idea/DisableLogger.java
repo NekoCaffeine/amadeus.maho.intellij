@@ -6,10 +6,10 @@ import com.intellij.analysis.AnalysisScope;
 import com.intellij.codeInsight.javadoc.JavaDocInfoGenerator;
 import com.intellij.ide.actions.searcheverywhere.WaitForContributorsListenerWrapper;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.diagnostic.ThrottledLogger;
 import com.intellij.openapi.vfs.newvfs.persistent.PersistentFSImpl;
 import com.intellij.psi.impl.source.tree.java.PsiMethodCallExpressionImpl;
 import com.intellij.ui.popup.AbstractPopup;
-import com.intellij.util.xmlb.BeanBinding;
 import com.intellij.workspaceModel.ide.impl.jps.serialization.JpsGlobalModelSynchronizerImpl;
 
 import amadeus.maho.lang.AccessLevel;
@@ -64,6 +64,7 @@ public interface DisableLogger {
     @Hook(value = WaitForContributorsListenerWrapper.class, forceReturn = true, exactMatch = false)
     private static void logNonFinished() { }
     
+    @SuppressWarnings("Hook")
     @Hook(target = "org.jetbrains.java.decompiler.IdeaLogger", forceReturn = true, exactMatch = false)
     private static void writeMessage() { }
     
@@ -79,11 +80,8 @@ public interface DisableLogger {
     @Redirect(target = "com.intellij.featureStatistics.fusCollectors.WSLInstallationsCollector", selector = "getMetrics", slice = @Slice(@At(method = @At.MethodInsn(name = "warn"))))
     private static void warn_$TerminalTextBuffer(final Logger logger, final String msg) { }
     
-    @Hook(value = BeanBinding.class, isStatic = true, forceReturn = true)
-    private static boolean isAssertBindings(final Class<?> owner) = true;
-    
     @Redirect(targetClass = PersistentFSImpl.class, selector = "cacheMissedRootFromPersistence", slice = @Slice(@At(method = @At.MethodInsn(name = "warn"))))
-    private static void warn_$PersistentFSImpl(final Logger logger, final String msg) { }
+    private static void warn_$PersistentFSImpl(final ThrottledLogger logger, final String msg) { }
     
     @Redirect(targetClass = PsiMethodCallExpressionImpl.TypeEvaluator.class, selector = "fun", slice = @Slice(@At(method = @At.MethodInsn(name = "error"))))
     private static void error_$PsiMethodCallExpressionImp$TypeEvaluator(final Logger logger, final String msg) { }

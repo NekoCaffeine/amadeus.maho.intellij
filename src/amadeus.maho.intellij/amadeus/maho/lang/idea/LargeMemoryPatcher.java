@@ -19,12 +19,17 @@ import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.impl.PsiManagerEx;
 import com.intellij.psi.impl.file.impl.FileManagerImpl;
+import com.intellij.psi.impl.source.FileTrees;
 import com.intellij.psi.impl.source.PsiFileImpl;
+import com.intellij.psi.impl.source.tree.FileElement;
 import com.intellij.psi.stubs.StubStringInterner;
+import com.intellij.psi.stubs.StubTree;
+import com.intellij.psi.stubs.StubTreeLoader;
 import com.intellij.ui.ClickListener;
 import com.intellij.util.ConcurrencyUtil;
 
 import amadeus.maho.lang.Privilege;
+import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.InvisibleType;
 import amadeus.maho.transform.mark.base.TransformProvider;
@@ -39,6 +44,10 @@ public interface LargeMemoryPatcher {
         
         @Hook(forceReturn = true)
         private static boolean isKeepTreeElementByHardReference(final PsiFileImpl $this) = true;
+        
+        @Hook(forceReturn = true)
+        private static FileTrees withStub(final FileTrees $this, final StubTree stub, final @Nullable FileElement ast) throws StubTreeLoader.StubTreeAndIndexUnmatchCoarseException
+                = (Privilege) ((Privilege) new FileTrees((Privilege) $this.myFile, new StrongReference<>(stub), (Privilege) $this.myTreeElementPointer, (Privilege) $this.myRefToPsi)).reconcilePsi(stub, ast, false);
         
         @Hook(forceReturn = true)
         private static ConcurrentMap<VirtualFile, FileViewProvider> getVFileToViewProviderMap(final FileManagerImpl $this) {

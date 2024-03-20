@@ -44,6 +44,7 @@ import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.InvisibleType;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
+import static amadeus.maho.lang.idea.IDEAContext.*;
 import static amadeus.maho.lang.idea.handler.GetterHandler.PRIORITY;
 import static com.intellij.psi.PsiModifier.*;
 

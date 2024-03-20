@@ -80,7 +80,7 @@ public class NullableHandler implements AnnotationPackageSupport {
         final Project project = expression.getProject();
         if (capture.getAnnotations().length == 0 && NullabilityUtil.getExpressionNullability(expression, true) == Nullability.NULLABLE)
             return capture.annotate(TypeAnnotationProvider.Static.create(new PsiAnnotation[]{
-                    JavaPsiFacade.getElementFactory(project).createAnnotationFromText("@" + NullableNotNullManager.getInstance(project).getDefaultNullable(), expression)
+                    JavaPsiFacade.getElementFactory(project).createAnnotationFromText(STR."@\{NullableNotNullManager.getInstance(project).getDefaultNullable()}", expression)
             }));
         return capture;
     }

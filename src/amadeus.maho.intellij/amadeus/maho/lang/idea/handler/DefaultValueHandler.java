@@ -16,7 +16,7 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightVisitorImpl;
 import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.PsiBuilderUtil;
-import com.intellij.lang.java.parser.DeclarationParser;
+import com.intellij.lang.java.parser.BasicDeclarationParser;
 import com.intellij.lang.java.parser.JavaParserUtil;
 import com.intellij.openapi.util.Key;
 import com.intellij.pom.java.LanguageLevel;
@@ -77,6 +77,7 @@ import amadeus.maho.util.runtime.ArrayHelper;
 import amadeus.maho.util.tuple.Tuple;
 import amadeus.maho.util.tuple.Tuple2;
 
+import static amadeus.maho.lang.idea.IDEAContext.*;
 import static amadeus.maho.lang.idea.handler.DefaultValueHandler.PRIORITY;
 import static amadeus.maho.util.bytecode.Bytecodes.INSTANCEOF;
 import static com.intellij.psi.JavaTokenType.*;
@@ -171,7 +172,7 @@ public class DefaultValueHandler extends BaseSyntaxHandler {
     
     // The default value after trying to parse the parameter.
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static PsiBuilder.Marker parseParameterOrRecordComponent(final PsiBuilder.Marker capture, final DeclarationParser $this, final PsiBuilder builder, final boolean ellipsis, final boolean disjunctiveType,
+    private static PsiBuilder.Marker parseParameterOrRecordComponent(final PsiBuilder.Marker capture, final BasicDeclarationParser $this, final PsiBuilder builder, final boolean ellipsis, final boolean disjunctiveType,
             final boolean varType, final boolean isParameter) {
         if (PsiBuilderUtil.expect(builder, EQ)) {
             final PsiBuilder.Marker marker = ((Privilege) $this.myParser).getExpressionParser().parse(builder);

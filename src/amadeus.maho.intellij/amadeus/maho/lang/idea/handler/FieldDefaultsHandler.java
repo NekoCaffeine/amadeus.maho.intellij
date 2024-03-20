@@ -80,7 +80,7 @@ public class FieldDefaultsHandler extends BaseHandler<FieldDefaults> {
                             final @Nullable String name = keywordMap()[elementType];
                             if (name != null) {
                                 if (level.equals(name) || makeFinal && elementType == JavaTokenType.FINAL_KEYWORD)
-                                    holder.registerProblem(astNode.getPsi(), "Duplicate modifier: " + name, ProblemHighlightType.WARNING, quickFix.createDeleteFix(astNode.getPsi()));
+                                    holder.registerProblem(astNode.getPsi(), STR."Duplicate modifier: \{name}", ProblemHighlightType.WARNING, quickFix.createDeleteFix(astNode.getPsi()));
                             }
                         }));
             }

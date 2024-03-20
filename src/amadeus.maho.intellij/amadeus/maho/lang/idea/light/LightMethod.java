@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
+import com.intellij.codeInsight.daemon.impl.analysis.HighlightMethodUtil;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.JavaResolveResult;
@@ -56,9 +57,11 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     
     boolean virtual, fieldInitialized;
     
-    PsiCodeBlock body;
+    @Nullable PsiCodeBlock body;
     
-    PsiMethod source;
+    @Nullable PsiMethod source;
+    
+    @Nullable PsiElement navigationElement;
     
     public LightMethod(final PsiElement context, final String name, final PsiElement... equivalents) = this(context.getManager(), name, equivalents);
     
@@ -86,6 +89,12 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     
     @Override
     public LightMethod setMethodReturnType(final PsiType returnType) = (LightMethod) super.setMethodReturnType(returnType);
+    
+    @Override
+    public void setNavigationElement(final PsiElement navigationElement) = this.navigationElement = navigationElement;
+    
+    @Override
+    public PsiElement getNavigationElement() = navigationElement?.getNavigationElement() ?? navigationElement;
     
     @Override
     public boolean isEquivalentTo(final PsiElement another) = LightElement.equivalentTo(this, another) || super.isEquivalentTo(another);
@@ -192,7 +201,7 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     @Override
     public int hashCode() = 1;
     
-    @Hook
+    @Hook(value = HighlightMethodUtil.class, isStatic = true)
     private static Hook.Result registerChangeMethodSignatureFromUsageIntention(final PsiExpression expressions[], final HighlightInfo.Builder builder, final TextRange fixRange,
             final JavaResolveResult candidate, final PsiElement context) = Hook.Result.falseToVoid(!(candidate.getElement() instanceof LightElement), null);
     

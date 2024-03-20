@@ -1,15 +1,23 @@
 package amadeus.maho.lang.idea.handler.base;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
 import com.intellij.codeHighlighting.HighlightDisplayLevel;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.AbstractBaseJavaLocalInspectionTool;
-import com.intellij.codeInspection.InspectionToolProvider;
 import com.intellij.codeInspection.InspectionsBundle;
-import com.intellij.codeInspection.LocalInspectionTool;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemDescriptorBase;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.codeInspection.ex.InspectionToolRegistrar;
+import com.intellij.codeInspection.ex.InspectionToolWrapper;
+import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.JavaElementVisitor;
@@ -34,19 +42,50 @@ import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.bytecode.ASMHelper;
+import amadeus.maho.util.dynamic.LookupHelper;
+
+import kotlin.jvm.functions.Function0;
 
 import static amadeus.maho.lang.idea.IDEAContext.requiresMaho;
 import static amadeus.maho.util.bytecode.Bytecodes.ATHROW;
 
 @TransformProvider
-public class InspectionTool implements InspectionToolProvider {
+public interface InspectionTool {
     
-    public static class Handler extends AbstractBaseJavaLocalInspectionTool {
+    sealed interface Checker permits BaseSyntaxHandler, BaseHandler { }
+    
+    @TransformProvider
+    interface Provider {
+        
+        Method
+                annotationCheck = LookupHelper.<BaseHandler, PsiElement, Annotation, PsiAnnotation, ProblemsHolder, QuickFixFactory>methodV6(BaseHandler::check),
+                syntaxCheck     = LookupHelper.<BaseSyntaxHandler, PsiElement, ProblemsHolder, QuickFixFactory, Boolean>methodV5(BaseSyntaxHandler::check);
+        
+        private static Collection<Checker> checkers() = Stream.concat(
+                HandlerSupport.overrideMap[Handler.Marker.baseHandlers()][annotationCheck].stream(),
+                HandlerSupport.overrideMap[List.copyOf(Syntax.Marker.syntaxHandlers().values())][syntaxCheck].stream()
+        ).toList();
+        
+        @Hook
+        private static void registerToolProviders(final InspectionToolRegistrar $this, final Map<Object, List<Function0<InspectionToolWrapper<?, ?>>>> factories)
+                = factories[Provider.class] = checkers().stream().map(checker -> (Function0<InspectionToolWrapper<?, ?>>) () -> new LocalInspectionToolWrapper(new MahoLocalInspectionTool(checker)) {
+            @Override
+            public LocalInspectionToolWrapper createCopy() = { new MahoLocalInspectionTool(checker) };
+        }).toList();
+        
+    }
+    
+    @Getter
+    @RequiredArgsConstructor
+    @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+    class MahoLocalInspectionTool extends AbstractBaseJavaLocalInspectionTool {
         
         @Getter
         @RequiredArgsConstructor
         @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
         public static class Checker extends JavaElementVisitor {
+            
+            InspectionTool.Checker checker;
             
             ProblemsHolder holder;
             
@@ -60,20 +99,24 @@ public class InspectionTool implements InspectionToolProvider {
             @Override
             public void visitElement(final PsiElement element) {
                 super.visitElement(element);
-                if (requiresMaho(element)) {
-                    Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.check(element, holder, quickFix, isOnTheFly));
-                    if (element instanceof PsiModifierListOwner owner)
-                        HandlerSupport.process(owner, (handler, target, annotation, annotationTree) -> handler.check(element, annotation, annotationTree, holder, quickFix));
-                }
+                if (requiresMaho(element))
+                    if (checker instanceof BaseSyntaxHandler syntaxHandler)
+                        syntaxHandler.check(element, holder, quickFix, isOnTheFly);
+                    else if (element instanceof PsiModifierListOwner owner && checker instanceof BaseHandler annotationHandler)
+                        HandlerSupport.getAnnotationsByType(owner, annotationHandler.handler().value()).forEach(tuple -> annotationHandler.check(element, tuple.v1, tuple.v2, holder, quickFix));
             }
             
         }
         
-        @Override
-        public String getDisplayName() = "Maho annotations inspection";
+        InspectionTool.Checker checker;
+        
+        String name = checker.getClass().getSimpleName().replaceLast("Handler", "");
         
         @Override
-        public String getShortName() = "MahoAnnotationsInspection";
+        public String getDisplayName() = name;
+        
+        @Override
+        public String getShortName() = name;
         
         @Override
         public HighlightDisplayLevel getDefaultLevel() = HighlightDisplayLevel.ERROR;
@@ -88,12 +131,11 @@ public class InspectionTool implements InspectionToolProvider {
         public boolean isEnabledByDefault() = true;
         
         @Override
-        public Handler.Checker buildVisitor(final ProblemsHolder holder, final boolean isOnTheFly) = { holder, isOnTheFly };
+        public MahoLocalInspectionTool.Checker buildVisitor(final ProblemsHolder holder, final boolean isOnTheFly) = { checker, holder, isOnTheFly };
         
     }
     
     // The following code should probably be removed in the future
-    
     @Redirect(target = "com.intellij.codeInspection.dataFlow.DataFlowInstructionVisitor", selector = "beforeExpressionPush", slice = @Slice(@At(insn = @At.Insn(opcode = ATHROW))))
     private static void beforeExpressionPush(final Throwable throwable) { }
     
@@ -140,9 +182,6 @@ public class InspectionTool implements InspectionToolProvider {
         }
         return element;
     }
-    
-    @Override
-    public Class<? extends LocalInspectionTool>[] getInspectionClasses() = new Class[]{ Handler.class };
     
     @Hook
     private static Hook.Result getTokenizer(final JavaSpellcheckingStrategy $this, final PsiElement element)

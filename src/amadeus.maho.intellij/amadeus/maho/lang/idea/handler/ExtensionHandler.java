@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -79,9 +80,11 @@ import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.function.FunctionHelper;
+import amadeus.maho.util.runtime.DebugHelper;
 import amadeus.maho.util.tuple.Tuple;
 import amadeus.maho.util.tuple.Tuple2;
 
+import static amadeus.maho.lang.idea.IDEAContext.*;
 import static amadeus.maho.lang.idea.handler.ExtensionHandler.PRIORITY;
 
 @TransformProvider
@@ -178,7 +181,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
             final @Nullable ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
             if (classHint == null || classHint.shouldProcess(ElementClassHint.DeclarationKind.METHOD)) {
                 final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
-                final @Nullable String name = nameHint == null ? null : nameHint.getName(state);
+                final @Nullable String name = nameHint == null ? null : nameHint.getName(state); // TODO check name if non null
                 // Skip existing method signatures of that type.
                 final List<PsiClass> supers = supers(psiClass);
                 final Collection<PsiMethod> collect = supers.stream().map(IDEAContext::methods).flatMap(Collection::stream).collect(Collectors.toSet());
@@ -225,6 +228,8 @@ public class ExtensionHandler extends BaseSyntaxHandler {
     }
     
     public static Collection<ExtensionMethod> memberCache(final GlobalSearchScope resolveScope, final PsiClass psiClass, final PsiType type, final List<PsiClass> supers, final PsiSubstitutor substitutor) {
+        if (ASTTransformer.collectGuard.get().get() != 0 || ASTTransformer.loadTreeGuard.get().get() != 0)
+            DebugHelper.breakpoint();
         final @Nullable Project project = resolveScope.getProject();
         if (project == null)
             return List.of();
@@ -240,13 +245,13 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                                 .collect(Collectors.toList());
                     } finally { guard.getAndDecrement(); }
                 });
-        return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<String, Collection<ExtensionMethod>>>())
-                .computeIfAbsent(resolveScope, _ -> new ConcurrentHashMap<>()).computeIfAbsent(type.getCanonicalText(), it -> supers.stream().flatMap(node -> {
+        return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<String, Supplier<Collection<ExtensionMethod>>>>())
+                .computeIfAbsent(resolveScope, _ -> new ConcurrentHashMap<>()).computeIfAbsent(type.getCanonicalText(), it -> FunctionHelper.lazy(() -> supers.stream().flatMap(node -> {
                     final PsiType contextType = psiClass == node ? type : new PsiImmediateClassType(node, TypeConversionUtil.getSuperClassSubstitutor(node, psiClass, substitutor));
                     return tuples.stream()
                             .filter(tuple -> tuple.v1.test(contextType))
                             .map(tuple -> tuple.v2.apply(psiClass, contextType));
-                }).collect(Collectors.toList()));
+                }).collect(Collectors.toList()))).get();
     }
     
     private static boolean checkMethod(final Collection<PsiMethod> members, final Map<PsiClass, Collection<PsiMethod>> record, final PsiMethod methodTree) {
@@ -305,7 +310,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                     final BiFunction<PsiClass, PsiType, ExtensionMethod> function = (injectNode, injectType) -> {
                         // Type parameters that are successfully inferred from the first parameter need to be discarded, as the first parameter is eliminated so that no type constraints can be imposed on the caller.
                         // Since this leads to potential type safety issues, the type corresponding to these type parameters needs to be replaced with the inferred type.
-                        final Set<PsiTypeParameter> dropTypeParameters = type.accept(new TypeParameterSearcher());
+                        final Set<PsiTypeParameter> dropTypeParameters = type.accept(new IDEAContext.TypeParameterSearcher());
                         // Type parameters are inferred from the actual types(rightTypes) and the original types(leftTypes).
                         final PsiSubstitutor substitutor = resolveHelper.inferTypeArguments(dropTypeParameters.toArray(PsiTypeParameter[]::new), leftTypes, new PsiType[]{ injectType }, languageLevel);
                         final ExtensionMethod lightMethod = { methodNode.getManager(), methodNode.getName(), methodNode };
@@ -330,10 +335,10 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                         lightMethod.setMethodKind(Extension.class.getCanonicalName());
                         return lightMethod;
                     };
-                    final ConcurrentHashMap<PsiClass, Map<PsiType, ExtensionMethod>> cache = { };
+                    final ConcurrentHashMap<PsiClass, Map<PsiType, Supplier<ExtensionMethod>>> cache = { };
                     result.add(Tuple.tuple(
                             injectType -> TypeConversionUtil.isAssignable(resolveHelper.inferTypeArguments(typeParameters, leftTypes, new PsiType[]{ injectType }, languageLevel).substitute(type), injectType),
-                            (injectNode, injectType) -> cache.computeIfAbsent(injectNode, _ -> new ConcurrentHashMap<>()).computeIfAbsent(injectType, _ -> function.apply(injectNode, injectType))));
+                            (injectNode, injectType) -> cache.computeIfAbsent(injectNode, _ -> new ConcurrentHashMap<>()).computeIfAbsent(injectType, _ -> FunctionHelper.lazy(() -> function.apply(injectNode, injectType))).get()));
                 });
         return result;
     }

@@ -73,6 +73,7 @@ public interface IdeFrameDecoratorHelper {
     private static Hook.Result getCustomWindowDecoration() = Hook.Result.falseToVoid(shouldEnable(), WithoutJBRWindowDecoration.instance());
     
     // #IC-233.9102.97 2023.3 EAP
+    @SuppressWarnings("Hook")
     @Hook(target = "com.intellij.openapi.wm.impl.WinMainFrameDecorator$toggleFullScreen$2",
             at = @At(method = @At.MethodInsn(name = "dispose"), offset = -3), jump = @At(method = @At.MethodInsn(name = "setUndecorated"), offset = 1), exactMatch = false)
     private static Hook.Result invokeSuspend() = shouldEnable() ? new Hook.Result().jump() : Hook.Result.VOID;

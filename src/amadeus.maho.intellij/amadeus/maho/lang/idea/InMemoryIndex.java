@@ -40,6 +40,9 @@ public interface InMemoryIndex {
         public InitializationResult initialize(final @Nullable("null if default") String indexLayoutId) = InitializationResult.INDEX_REBUILD_REQUIRED;
         
         @Override
+        public void attachData(final Project project) { }
+        
+        @Override
         public void resetPersistentState() { }
         
         @Override

@@ -28,6 +28,8 @@ public enum HookResultInjector implements Injector {
 
     @Getter
     instance;
+    
+    public static final String HOOK_RESULT_NAME = "amadeus.maho.transform.mark.Hook$Result";
 
     @Override
     public @Nullable byte[] transform(final @Nullable Module module, final @Nullable ClassLoader loader, final @Nullable String className,
@@ -41,7 +43,7 @@ public enum HookResultInjector implements Injector {
                 if (methodNode.name.equals("tryLoadingClass") && methodNode.desc.equals("(Ljava/lang/String;Z)Ljava/lang/Class;")) {
                     Maho.debug("HookResultInjector -> com.intellij.ide.plugins.cl.PluginClassLoader::tryLoadingClass");
                     final InsnList instructions = {};
-                    instructions.add(new LdcInsnNode("amadeus.maho.transform.mark.Hook$Result"));
+                    instructions.add(new LdcInsnNode(HOOK_RESULT_NAME));
                     instructions.add(new VarInsnNode(ALOAD, 1));
                     instructions.add(new MethodInsnNode(INVOKEVIRTUAL, "java/lang/Object", "equals", "(Ljava/lang/Object;)Z"));
                     final LabelNode label = {};

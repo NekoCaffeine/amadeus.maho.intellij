@@ -22,6 +22,7 @@ import com.intellij.psi.impl.source.tree.LazyParseableElement;
 import com.intellij.psi.impl.source.tree.java.ClassElement;
 import com.intellij.psi.impl.source.tree.java.JavaFileElement;
 import com.intellij.psi.stubs.LightStubBuilder;
+import com.intellij.util.indexing.FileBasedIndexImpl;
 
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.SneakyThrows;
@@ -50,13 +51,21 @@ public interface ASTTransformer {
         return astNode;
     }
     
-    ThreadLocal<AtomicInteger> collectGuard = ThreadLocal.withInitial(AtomicInteger::new), loadTreeGuard = ThreadLocal.withInitial(AtomicInteger::new);
+    ThreadLocal<AtomicInteger>
+            collectGuard = ThreadLocal.withInitial(AtomicInteger::new),
+            loadTreeGuard = ThreadLocal.withInitial(AtomicInteger::new);
     
     @Hook(exactMatch = false)
     private static void buildStubTree_$Enter(final LightStubBuilder $this) = collectGuard.get().getAndIncrement();
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.FINALLY)), exactMatch = false)
     private static void buildStubTree_$Exit(final LightStubBuilder $this) = collectGuard.get().getAndDecrement();
+    
+    @Hook(exactMatch = false)
+    private static void indexFileContent_$Enter(final FileBasedIndexImpl $this) = collectGuard.get().getAndIncrement();
+    
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.FINALLY)), exactMatch = false)
+    private static void indexFileContent_$Exit(final FileBasedIndexImpl $this) = collectGuard.get().getAndDecrement();
     
     @Hook
     private static void loadTreeElement_$Enter(final PsiFileImpl $this) = loadTreeGuard.get().getAndIncrement();
@@ -111,9 +120,7 @@ public interface ASTTransformer {
                         default                    -> throw new IllegalStateException(STR."Unexpected value: \{element}");
                     }, true));
                     element.putUserData(transformedKey, Boolean.TRUE);
-                } finally {
-                    objects--;
-                }
+                } finally { objects--; }
             }
         }
     }

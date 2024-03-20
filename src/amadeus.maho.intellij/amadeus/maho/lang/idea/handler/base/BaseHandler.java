@@ -32,14 +32,13 @@ import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.lang.SneakyThrows;
-import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
 @Getter
 @TransformProvider
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public abstract class BaseHandler<A extends Annotation> extends IDEAContext implements Comparable<BaseHandler<A>> {
+public abstract non-sealed class BaseHandler<A extends Annotation> implements Comparable<BaseHandler<A>>, InspectionTool.Checker {
     
     @SneakyThrows
     public interface Methods {

@@ -32,6 +32,7 @@ import amadeus.maho.lang.idea.light.LightModifierList;
 import amadeus.maho.lang.idea.light.LightParameter;
 import amadeus.maho.lang.inspection.Nullable;
 
+import static amadeus.maho.lang.idea.IDEAContext.*;
 import static amadeus.maho.lang.idea.handler.SetterHandler.PRIORITY;
 import static com.intellij.psi.PsiModifier.STATIC;
 
@@ -64,7 +65,7 @@ public class SetterHandler extends BaseHandler<Setter> {
             if (!tree.hasModifierProperty(PsiModifier.FINAL) || !unwrapType.equals(tree.getType())) {
                 final LightMethod methodTree = { tree, tree.getName(), tree, annotationTree };
                 methodTree.setMethodReturnType(PsiTypes.voidType());
-                methodTree.addParameter(tree.getName() + "$value", unwrapType, false);
+                methodTree.addParameter(STR."\{tree.getName()}$value", unwrapType, false);
                 if (members.shouldInject(methodTree)) {
                     methodTree.setNavigationElement(tree);
                     methodTree.setContainingClass(context);
@@ -114,7 +115,7 @@ public class SetterHandler extends BaseHandler<Setter> {
                     if (!field.hasModifierProperty(PsiModifier.FINAL) && !unwrapType.equals(field.getType())) {
                         final LightMethod methodTree = { field, field.getName(), field };
                         methodTree.setMethodReturnType(PsiTypes.voidType());
-                        methodTree.addParameter(field.getName() + "$value", unwrapType, false);
+                        methodTree.addParameter(STR."\{field.getName()}$value", unwrapType, false);
                         targets += containingClass.findMethodBySignature(methodTree, false);
                     }
             }

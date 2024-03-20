@@ -104,7 +104,7 @@ public class ExternalAnnotationsHandler {
         if (comment.length() < 2)
             return factory.smallText("");
         final String text = comment.substring(1, comment.length() - 1), comments[] = text.split("_\\\\n_");
-        return comments.length == 1 ? factory.text("// " + text) :
+        return comments.length == 1 ? factory.text(STR."// \{text}") :
                 new VerticalListInlayPresentation(Stream.concat(Stream.concat(Stream.of("/*"), Stream.of(comments).map("    "::concat)), Stream.of("*/")).map(factory::text).collect(Collectors.toList()));
     }
     

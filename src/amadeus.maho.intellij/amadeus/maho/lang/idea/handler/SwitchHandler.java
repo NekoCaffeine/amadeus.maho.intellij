@@ -8,9 +8,10 @@ import com.intellij.formatting.Spacing;
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiBinaryExpression;
+import com.intellij.psi.PsiCaseLabelElementList;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiExpressionList;
 import com.intellij.psi.PsiExpressionStatement;
+import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiParenthesizedExpression;
 import com.intellij.psi.PsiReturnStatement;
@@ -22,7 +23,6 @@ import com.intellij.psi.PsiWhiteSpace;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
 import com.intellij.psi.formatter.java.AbstractJavaBlock;
 import com.intellij.psi.formatter.java.JavaSpacePropertyProcessor;
-import com.intellij.psi.impl.source.tree.ChildRole;
 import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 
@@ -74,7 +74,7 @@ public class SwitchHandler {
     @Hook
     private static Hook.Result createChildAlignment(final AbstractJavaBlock $this) {
         final ASTNode node = $this.getNode();
-        if (node.getElementType() == JavaElementType.EXPRESSION_LIST) {
+        if (node.getElementType() == JavaElementType.CASE_LABEL_ELEMENT_LIST) {
             final @Nullable ASTNode parent = node.getTreeParent();
             if (parent != null && parent.getElementType() == JavaElementType.SWITCH_LABELED_RULE)
                 return { AbstractJavaBlock.createAlignment(true, null) };
@@ -96,8 +96,8 @@ public class SwitchHandler {
             }
     */
     @Hook
-    private static Hook.Result visitExpressionList(final JavaSpacePropertyProcessor $this, final PsiExpressionList list) {
-        if (list.getParent() instanceof PsiSwitchLabeledRuleStatement && (Privilege) $this.myRole1 == ChildRole.COMMA) {
+    private static Hook.Result visitCaseLabelElementList(final JavaSpacePropertyProcessor $this, final PsiCaseLabelElementList list) {
+        if (list.getParent() instanceof PsiSwitchLabeledRuleStatement && (Privilege) $this.myChild1 instanceof PsiJavaToken) {
             final CommonCodeStyleSettings mySettings = (Privilege) $this.mySettings;
             (Privilege) ($this.myResult = Spacing.createSpacing(0, 0, 1, mySettings.KEEP_LINE_BREAKS, mySettings.KEEP_BLANK_LINES_IN_CODE));
             return Hook.Result.NULL;

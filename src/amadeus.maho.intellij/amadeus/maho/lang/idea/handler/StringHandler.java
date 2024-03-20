@@ -8,11 +8,14 @@ import java.util.stream.Stream;
 
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType;
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightMethodUtil;
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.daemon.impl.quickfix.ReplaceExpressionAction;
+import com.intellij.codeInsight.intention.QuickFixFactory;
+import com.intellij.codeInspection.LocalQuickFixAndIntentionActionOnPsiElement;
+import com.intellij.codeInspection.ProblemHighlightType;
+import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.openapi.projectRoots.JavaSdkVersion;
 import com.intellij.pom.java.LanguageLevel;
+import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiExpressionList;
 import com.intellij.psi.PsiFile;
@@ -20,19 +23,25 @@ import com.intellij.psi.PsiLiteralExpression;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiResolveHelper;
-import com.intellij.psi.PsiTemplateExpression;
 import com.intellij.psi.impl.ConstantExpressionVisitor;
 import com.intellij.psi.impl.IsConstantExpressionVisitor;
 
 import amadeus.maho.lang.Privilege;
+import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
+import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.runtime.ObjectHelper;
 
+import static amadeus.maho.lang.idea.handler.RegularExpressionHandler.PRIORITY;
+
 @TransformProvider
-public interface StringHandler {
+@Syntax(priority = PRIORITY)
+public class StringHandler extends BaseSyntaxHandler {
+    
+    public static final int PRIORITY = 1 << 24;
     
     static boolean isFormatted(final @Nullable PsiMethod method) = method?.getName()?.equals("formatted") ?? false && String.class.getCanonicalName().equals(method?.getContainingClass()?.getQualifiedName() ?? null);
     
@@ -60,16 +69,42 @@ public interface StringHandler {
     private static boolean visitExpression(final boolean capture, final IsConstantExpressionVisitor $this, final PsiExpression expression)
             = capture || expression instanceof PsiMethodCallExpression callExpression && isFormatted(callExpression.resolveMethod());
     
-    @Hook(value = HighlightUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "descriptionAndTooltip"), ordinal = 0), before = false, capture = true)
-    private static void checkTemplateExpression(final HighlightInfo.Builder capture, final PsiTemplateExpression expression) {
-        final String string = expression.getTemplate().getText(), replaced = STR."STR.\{string}";
-        final ReplaceExpressionAction fix = { expression, replaced, replaced };
-        capture.registerFix(fix, null, null, null, null);
+    @Override
+    public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
+        if (tree instanceof PsiMethodCallExpression methodCall && methodCall.getMethodExpression().getQualifierExpression() instanceof PsiLiteralExpression expression && isFormatted(methodCall.resolveMethod())) {
+            final String string = expression.getText();
+            final Matcher matcher = CONVERSION_SPECIFIER_PATTERN.matcher(string);
+            final PsiExpressionList argumentList = methodCall.getArgumentList();
+            if (matcher.results().count() == argumentList.getExpressionCount()) {
+                final StringBuilder builder = { "STR." };
+                final int p_offset[] = { 0 }, p_index[] = { 0 };
+                final PsiExpression expressions[] = argumentList.getExpressions();
+                matcher.reset().results().forEach(result -> {
+                    builder.append(string, p_offset[0], result.start());
+                    final PsiExpression arg = expressions[p_index[0]++];
+                    if (arg instanceof PsiLiteralExpression literalExpression)
+                        builder.append(literalExpression.getValue()?.toString() ?? "null");
+                    else
+                        builder.append('\\').append('{').append(arg.getText()).append('}');
+                    p_offset[0] = result.end();
+                });
+                final String replaced = builder.append(string.substring(p_offset[0])).toString();
+                final ReplaceExpressionAction fix = { methodCall, replaced, replaced };
+                holder.registerProblem(methodCall, "`formatted` call can be replaced with template", ProblemHighlightType.WEAK_WARNING, LocalQuickFixAndIntentionActionOnPsiElement.from(fix, methodCall));
+            }
+        }
     }
     
-    Pattern CONVERSION_SPECIFIER_PATTERN = Pattern.compile("(?<!%)%s");
+    // @Hook(value = HighlightUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "descriptionAndTooltip"), ordinal = 0), before = false, capture = true)
+    // private static void checkTemplateExpression(final HighlightInfo.Builder capture, final PsiTemplateExpression expression) {
+    //     final String string = expression.getTemplate().getText(), replaced = STR."STR.\{string}";
+    //     final ReplaceExpressionAction fix = { expression, replaced, replaced };
+    //     capture.registerFix(fix, null, null, null, null);
+    // }
     
-    @Hook(value = HighlightMethodUtil.class, isStatic = true)
+    private static final Pattern CONVERSION_SPECIFIER_PATTERN = Pattern.compile("(?<!%)%s");
+    
+    // @Hook(value = HighlightMethodUtil.class, isStatic = true)
     private static void checkMethodCall(final PsiMethodCallExpression methodCall, final PsiResolveHelper resolveHelper, final LanguageLevel languageLevel,
             final JavaSdkVersion javaSdkVersion, final PsiFile file, final Consumer<? super HighlightInfo.Builder> errorSink) {
         if (methodCall.getMethodExpression().getQualifierExpression() instanceof PsiLiteralExpression expression && isFormatted(methodCall.resolveMethod())) {
@@ -82,7 +117,11 @@ public interface StringHandler {
                 final PsiExpression expressions[] = argumentList.getExpressions();
                 matcher.reset().results().forEach(result -> {
                     builder.append(string, p_offset[0], result.start());
-                    builder.append('\\').append('{').append(expressions[p_index[0]++].getText()).append('}');
+                    final PsiExpression arg = expressions[p_index[0]++];
+                    if (arg instanceof PsiLiteralExpression literalExpression)
+                        builder.append(literalExpression.getValue()?.toString() ?? "null");
+                    else
+                        builder.append('\\').append('{').append(arg.getText()).append('}');
                     p_offset[0] = result.end();
                 });
                 final String replaced = builder.append(string.substring(p_offset[0])).toString();

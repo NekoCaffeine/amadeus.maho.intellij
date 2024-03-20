@@ -8,7 +8,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.swing.JComponent;
@@ -28,7 +27,6 @@ import com.intellij.codeInspection.InspectionManager;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.redundantCast.RedundantCastInspection;
 import com.intellij.concurrency.JobLauncher;
-import com.intellij.configurationStore.schemeManager.SchemeManagerBase;
 import com.intellij.find.FindModel;
 import com.intellij.find.impl.FindInProjectUtil;
 import com.intellij.ide.actions.CopyTBXReferenceProvider;
@@ -44,7 +42,6 @@ import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.options.ex.ConfigurableWrapper;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -77,6 +74,7 @@ import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
+import com.intellij.psi.PsiPackageAccessibilityStatement;
 import com.intellij.psi.PsiRecordComponent;
 import com.intellij.psi.PsiRecordHeader;
 import com.intellij.psi.PsiReferenceList;
@@ -91,10 +89,12 @@ import com.intellij.psi.impl.DebugUtil;
 import com.intellij.psi.impl.PsiElementFactoryImpl;
 import com.intellij.psi.impl.PsiShortNamesCacheImpl;
 import com.intellij.psi.impl.RecordAugmentProvider;
+import com.intellij.psi.impl.compiled.ClsClassImpl;
 import com.intellij.psi.impl.compiled.ClsParsingUtil;
 import com.intellij.psi.impl.file.impl.FileManagerImpl;
 import com.intellij.psi.impl.java.JavaFunctionalExpressionIndex;
 import com.intellij.psi.impl.java.stubs.index.JavaShortClassNameIndex;
+import com.intellij.psi.impl.light.LightJavaModule;
 import com.intellij.psi.impl.light.LightRecordCanonicalConstructor;
 import com.intellij.psi.impl.search.AllClassesSearchExecutor;
 import com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher;
@@ -108,6 +108,7 @@ import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.scope.conflictResolvers.JavaMethodsConflictResolver;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.CachedValuesManager;
+import com.intellij.psi.util.ClassUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
@@ -132,7 +133,6 @@ import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.bytecode.ASMHelper;
 import amadeus.maho.util.bytecode.Bytecodes;
-import amadeus.maho.util.dynamic.CallerContext;
 import amadeus.maho.util.runtime.ArrayHelper;
 
 import com.siyeh.ig.BaseInspectionVisitor;
@@ -196,7 +196,7 @@ interface Fix {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     });
     
-    @Redirect(targetClass = RecordAugmentProvider.class, slice = @Slice(@At(method = @At.MethodInsn(name = ASMHelper._INIT_, owner = "com/intellij/psi/impl/light/LightRecordCanonicalConstructor/LightRecordCanonicalConstructor"))))
+    @Redirect(targetClass = RecordAugmentProvider.class, slice = @Slice(@At(method = @At.MethodInsn(name = ASMHelper._INIT_, owner = "com/intellij/psi/impl/light/LightRecordCanonicalConstructor"))))
     private static LightRecordCanonicalConstructor getCanonicalConstructor(final PsiMethod method, final PsiClass containingClass) {
         final PsiRecordComponent components[] = containingClass.getRecordComponents();
         if (components.length > 0 && components[components.length - 1].getType() instanceof PsiEllipsisType)
@@ -205,6 +205,15 @@ interface Fix {
                 public boolean isVarArgs() = true;
             };
         return new LightRecordCanonicalConstructor(method, containingClass);
+    }
+    
+    @Hook(value = ClassUtil.class, isStatic = true)
+    private static Hook.Result findSubClass(final String name, @Hook.Reference PsiClass parent, final boolean jvmCompatible) {
+        if (parent instanceof ClsClassImpl clsClass && clsClass.getMirror() instanceof PsiClass psiClass) {
+            parent = psiClass;
+            return { };
+        }
+        return Hook.Result.VOID;
     }
     
     // Remove useless checks
@@ -234,19 +243,15 @@ interface Fix {
         return { names.stream().map(resultMap::get).allMatch(collection -> collection.stream().peek(it -> ProgressIndicatorProvider.checkCanceled()).allMatch(processor::process)) };
     }
     
+    @Hook(forceReturn = true)
+    private static List<PsiPackageAccessibilityStatement> findExports(final LightJavaModule $this) = List.of(); // slow, unnecessary, see also: AccessibleHandler
+    
     @Hook(value = ClsParsingUtil.class, isStatic = true)
     private static Hook.Result isPreviewLevel(final int minor) = Hook.Result.TRUE;
     
     // Fix buggy source code mismatch check
     @Hook
     private static Hook.Result differs(final LibrarySourceNotificationProvider $this, final PsiClass src) = Hook.Result.FALSE;
-    
-    AtomicInteger setCurrentCounter = { };
-    
-    // Fix the color scheme selected by users being overwritten by the default color scheme of the current theme due to inconsistent initialization order
-    @Hook
-    private static Hook.Result setCurrent(final SchemeManagerBase $this, final Object scheme, final boolean notify, final boolean processChangeSynchronously)
-    = Hook.Result.falseToVoid(scheme instanceof EditorColorsScheme && CallerContext.Stack.walker().walk(stream -> stream.anyMatch(frame -> frame.getMethodName().equals("initScheme"))) && setCurrentCounter.getAndIncrement() == 0);
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static boolean isDumbAware(final boolean capture, final CustomFoldingBuilder $this) = capture || !($this instanceof JavaFoldingBuilderBase);

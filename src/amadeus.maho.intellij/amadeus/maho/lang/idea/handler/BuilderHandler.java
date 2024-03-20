@@ -15,6 +15,7 @@ import amadeus.maho.lang.idea.light.LightClass;
 import amadeus.maho.lang.idea.light.LightField;
 import amadeus.maho.lang.idea.light.LightMethod;
 
+import static amadeus.maho.lang.idea.IDEAContext.*;
 import static amadeus.maho.lang.idea.handler.BuilderHandler.PRIORITY;
 
 @Handler(value = Builder.class, priority = PRIORITY)

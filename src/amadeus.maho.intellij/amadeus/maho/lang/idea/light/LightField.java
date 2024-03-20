@@ -29,6 +29,8 @@ public class LightField extends LightFieldBuilder implements LightElement {
     @Setter
     @Nullable String mark;
     
+    @Nullable PsiElement navigationElement;
+    
     public LightField(final PsiElement context, final String name, final String type, final PsiElement... equivalents) {
         super(name, type, context);
         this.equivalents = List.of(equivalents);
@@ -38,6 +40,12 @@ public class LightField extends LightFieldBuilder implements LightElement {
         super(name, type, context);
         this.equivalents = List.of(equivalents);
     }
+    
+    @Override
+    public void setNavigationElement(final PsiElement navigationElement) = this.navigationElement = navigationElement;
+    
+    @Override
+    public PsiElement getNavigationElement() = navigationElement?.getNavigationElement() ?? navigationElement;
     
     @Override
     public boolean isEquivalentTo(final PsiElement another) = LightElement.equivalentTo(this, another) || super.isEquivalentTo(another);

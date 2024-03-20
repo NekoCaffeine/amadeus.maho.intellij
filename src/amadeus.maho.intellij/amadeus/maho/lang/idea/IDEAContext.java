@@ -67,6 +67,7 @@ import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
 import com.intellij.psi.tree.java.IJavaElementType;
 import com.intellij.psi.util.CachedValuesManager;
+import com.intellij.psi.util.ClassUtil;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.SmartList;
@@ -524,6 +525,12 @@ public class IDEAContext {
         final HashSet<String> mark = { };
         return name -> mark.add(name) ? name : STR."\{context}$\{name}";
     }
+    
+    public static @Nullable PsiClass lookupClass(final PsiElement context, final @Nullable String name)
+            = name == null ? null : ClassUtil.findPsiClass(context.getManager(), name);
+    
+    public static @Nullable PsiClassType lookupClassType(final PsiElement context, final @Nullable String name)
+            = lookupClass(context, name) instanceof PsiClass psiClass ? new PsiImmediateClassType(psiClass, PsiSubstitutor.EMPTY) : null;
     
     public static boolean marked(final PsiAnnotation annotation, final String mark) = annotation.resolveAnnotationType()?.hasAnnotation(mark) ?? false;
     

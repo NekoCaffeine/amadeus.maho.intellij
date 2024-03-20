@@ -50,6 +50,7 @@ import amadeus.maho.util.reference.Reference;
 import amadeus.maho.util.runtime.StringHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
+import static amadeus.maho.lang.idea.IDEAContext.*;
 import static amadeus.maho.lang.idea.handler.GetterHandler.REFERENCE_GETTER;
 
 @TransformProvider
@@ -82,7 +83,6 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
     public void check(final PsiElement tree, final A annotation, final PsiAnnotation annotationTree, final ProblemsHolder holder, final QuickFixFactory quickFix) {
         if (tree instanceof PsiModifierListOwner owner && findReferences(owner) > 1)
             holder.registerProblem(annotationTree, "There can only be one reference mark.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
-        
     }
     
     @Override
@@ -99,9 +99,9 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
     }
     
     protected void doWrapperType(final PsiTypeElement tree, final A annotation, final PsiAnnotation annotationTree, final PsiType result[]) {
-        final String type = Reference.class.getPackageName() + "." + annotation.annotationType().getSimpleName();
+        final String type = STR."\{Reference.class.getPackageName()}.\{annotation.annotationType().getSimpleName()}";
         if (result[0] instanceof PsiPrimitiveType) {
-            result[0] = PsiType.getTypeByName(type + "." + StringHelper.upper(result[0].getCanonicalText(), 0), tree.getProject(), tree.getResolveScope());
+            result[0] = PsiType.getTypeByName(STR."\{type}.\{StringHelper.upper(result[0].getCanonicalText(), 0)}", tree.getProject(), tree.getResolveScope());
         } else {
             final PsiClass refClass = JavaPsiFacade.getInstance(tree.getProject()).findClass(type, tree.getResolveScope());
             if (refClass != null)
@@ -117,7 +117,7 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
         final @Nullable PsiTypeElement typeElement = tree.getReturnTypeElement();
         final @Nullable PsiType returnType = tree.getReturnType();
         if (typeElement != null && returnType != null && !annotations.isEmpty() && context.isInterface() && !tree.hasModifierProperty(PsiModifier.STATIC) && tree.getParameterList().getParametersCount() == 0) {
-            final Tuple2<Getter, PsiAnnotation> getter = annotations.get(0);
+            final Tuple2<Getter, PsiAnnotation> getter = annotations.getFirst();
             final PsiType p_type[] = { returnType };
             doWrapperType(typeElement, annotation, annotationTree, p_type);
             final LightMethod refMethodTree = { tree, tree.getName() + REFERENCE_GETTER, tree, annotationTree };

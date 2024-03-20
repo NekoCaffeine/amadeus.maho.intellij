@@ -5,8 +5,6 @@
 /build/compiled-script/
 /build/IntellijConfig.default.cfg
 /build/GithubConfig.default.cfg
-hs_err*
-*.iml
 /intellij.run/config/
 /intellij.run/dump/
 /intellij.run/log/
@@ -17,3 +15,7 @@ hs_err*
 /intellij.run/dokiThemeAssets/
 /intellij.run/build/
 /intellij.run/Project_Default.xml
+/intellij.run/tmp/
+/ddlc/
+hs_err*
+*.iml

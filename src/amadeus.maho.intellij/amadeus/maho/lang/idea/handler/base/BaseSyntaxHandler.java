@@ -17,9 +17,7 @@ import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeElement;
 import com.intellij.psi.PsiVariable;
 
-import amadeus.maho.lang.idea.IDEAContext;
-
-public class BaseSyntaxHandler extends IDEAContext {
+public non-sealed class BaseSyntaxHandler implements InspectionTool.Checker {
     
     public void transformASTNode(final ASTNode root, final boolean loadingTreeElement) { }
     

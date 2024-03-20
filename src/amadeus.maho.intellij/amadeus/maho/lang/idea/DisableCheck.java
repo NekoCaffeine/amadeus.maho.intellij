@@ -4,7 +4,7 @@ import javax.swing.JComponent;
 
 import com.intellij.codeInsight.completion.CompletionAssertions;
 import com.intellij.codeInsight.completion.CompletionPhase;
-import com.intellij.codeInsight.completion.CompletionService;
+import com.intellij.codeInsight.completion.impl.CompletionServiceImpl;
 import com.intellij.codeInsight.daemon.impl.analysis.AnnotationsHighlightUtil;
 import com.intellij.debugger.impl.InvokeThread;
 import com.intellij.diagnostic.LoadingState;
@@ -32,7 +32,6 @@ import com.intellij.util.CachedValueStabilityChecker;
 import com.intellij.util.IdempotenceChecker;
 import com.intellij.util.SlowOperations;
 import com.intellij.util.concurrency.ThreadingAssertions;
-import com.intellij.util.indexing.FileBasedIndexImpl;
 import com.intellij.util.indexing.ID;
 import com.intellij.util.ui.EDT;
 import com.intellij.vcs.log.data.index.IndexDiagnosticRunner;
@@ -64,11 +63,11 @@ interface DisableCheck {
     
     @Hook(value = PsiInvalidElementAccessException.class, isStatic = true, forceReturn = true)
     private static boolean isTrackingInvalidation() = false;
-
+    
     @Hook(value = CompletionAssertions.class, isStatic = true, forceReturn = true)
     private static void checkEditorValid(final Editor editor) { }
-
-    @Hook(value = CompletionService.class, isStatic = true, forceReturn = true)
+    
+    @Hook(value = CompletionServiceImpl.class, isStatic = true, forceReturn = true)
     private static void assertPhase(final Class<? extends CompletionPhase>... possibilities) { }
     
     @Hook(value = SlowOperations.class, isStatic = true, forceReturn = true)
@@ -79,9 +78,6 @@ interface DisableCheck {
     
     @Hook(forceReturn = true)
     private static void assertTextLengthIntact(final LazyParseableElement $this, final CharSequence text, final TreeElement child) { }
-    
-    @Hook(forceReturn = true)
-    private static void setUpHealthCheck(final FileBasedIndexImpl $this) { }
     
     @Hook(isStatic = true, value = IdempotenceChecker.class, forceReturn = true)
     private static <T> void checkEquivalence(final @Nullable T existing, final @Nullable T fresh, final Class<?> providerClass, final @Nullable Computable<? extends T> recomputeValue) { }
@@ -101,8 +97,8 @@ interface DisableCheck {
     @Hook(forceReturn = true)
     private static void assertReadAccessAllowed(final ApplicationImpl $this) { }
     
-    @Hook(value = TransactionGuardImpl.class, isStatic = true)
-    private static Hook.Result areAssertionsEnabled() = Hook.Result.FALSE;
+    @Hook(value = TransactionGuardImpl.class, isStatic = true, forceReturn = true)
+    private static boolean areAssertionsEnabled() = false;
     
     @Hook(value = NoAccessDuringPsiEvents.class, isStatic = true, forceReturn = true)
     private static void checkCallContext(final ID<?, ?> indexId) { }

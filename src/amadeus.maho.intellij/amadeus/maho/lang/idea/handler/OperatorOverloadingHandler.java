@@ -1,7 +1,6 @@
 package amadeus.maho.lang.idea.handler;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -32,9 +31,11 @@ import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.LambdaUtil;
 import com.intellij.psi.PsiArrayAccessExpression;
+import com.intellij.psi.PsiArrayType;
 import com.intellij.psi.PsiAssignmentExpression;
 import com.intellij.psi.PsiBinaryExpression;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiCodeBlock;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementFactory;
@@ -59,12 +60,15 @@ import com.intellij.psi.PsiPolyadicExpression;
 import com.intellij.psi.PsiPostfixExpression;
 import com.intellij.psi.PsiPrefixExpression;
 import com.intellij.psi.PsiPrimitiveType;
+import com.intellij.psi.PsiReturnStatement;
 import com.intellij.psi.PsiStatement;
 import com.intellij.psi.PsiSubstitutor;
+import com.intellij.psi.PsiThrowStatement;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeCastExpression;
 import com.intellij.psi.PsiUnaryExpression;
 import com.intellij.psi.controlFlow.ControlFlowAnalyzer;
+import com.intellij.psi.impl.compiled.ClsMethodImpl;
 import com.intellij.psi.impl.source.PsiParameterImpl;
 import com.intellij.psi.impl.source.resolve.JavaResolveCache;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
@@ -82,6 +86,7 @@ import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.search.GlobalSearchScopeUtil;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.CachedValuesManager;
+import com.intellij.psi.util.MethodSignatureUtil;
 import com.intellij.psi.util.PsiPrecedenceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
@@ -90,7 +95,6 @@ import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.spellchecker.SpellCheckerManager;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.Processor;
 import com.intellij.util.indexing.FileBasedIndex;
 
@@ -136,24 +140,14 @@ public class OperatorOverloadingHandler {
         
     }
     
-    public static final Map<String, List<JavaExpressionIndex.IndexType>> indexTypes = operatorName2operatorType.entrySet().stream()
-            .collect(Collectors.toMap(Map.Entry::getKey, entry -> operatorName2expressionTypes[entry.getKey()].stream().map(expressionType -> new JavaExpressionIndex.IndexType(entry.getKey(), expressionType, expression -> {
-                final @Nullable PsiJavaToken token = PsiTreeUtil.getChildOfType((PsiExpression) expression, PsiJavaToken.class);
-                return token != null && token.getTokenType() == entry.getValue();
-            })).toList()));
-    
-    JavaExpressionIndex.IndexType<PsiArrayAccessExpressionImpl> GET = { "GET", PsiArrayAccessExpressionImpl.class };
-    
-    JavaExpressionIndex.IndexType<PsiAssignmentExpressionImpl> PUT = { "PUT", PsiAssignmentExpressionImpl.class, assignmentExpression -> assignmentExpression.getLExpression() instanceof PsiArrayAccessExpression };
-    
     // # TypeConversionUtil
     
     @Hook(value = TypeConversionUtil.class, isStatic = true)
-    private static Hook.Result isLValue(final PsiExpression expression) = Hook.Result.falseToVoid(checkLValue(expression));
+    private static Hook.Result isLValue(final PsiExpression expression) = Hook.Result.falseToVoid(specialLValue(expression));
     
-    public static boolean checkLValue(final PsiExpression expression) = CachedValuesManager.getProjectPsiDependentCache(expression, it -> switch (it) {
+    public static boolean specialLValue(final PsiExpression expression) = CachedValuesManager.getProjectPsiDependentCache(expression, it -> switch (it) {
         case PsiMethodCallExpression callExpression when callExpression.getArgumentList().isEmpty() -> hasSetter(callExpression);
-        case PsiArrayAccessExpression accessExpression when expr(accessExpression) != null          -> hasPutter(accessExpression);
+        case PsiArrayAccessExpression accessExpression when overloadInfo(accessExpression) != null  -> hasPutter(accessExpression);
         default                                                                                     -> false;
     });
     
@@ -168,11 +162,9 @@ public class OperatorOverloadingHandler {
     }
     
     private static boolean hasPutter(final PsiArrayAccessExpression expression) {
-        final String text = expression.getText();
-        try {
-            final PsiExpression assign = PsiElementFactory.getInstance(expression.getProject()).createExpressionFromText(String.format("%s = %s + 1", text, text), expression);
-            return expr(assign) != null;
-        } catch (final IncorrectOperationException e) { DebugHelper.breakpoint(); }
+        final PsiElement parent = PsiUtil.skipParenthesizedExprUp(expression);
+        if (parent instanceof PsiAssignmentExpression || parent instanceof PsiUnaryExpression)
+            return overloadInfo((PsiExpression) parent) != null;
         return false;
     }
     
@@ -180,8 +172,17 @@ public class OperatorOverloadingHandler {
     private static boolean prohibitCaching(final PsiExpression expression) = expression instanceof PsiJavaCodeReferenceElement || PsiPolyExpressionUtil.isPolyExpression(expression);
     
     @Hook(forceReturn = true)
-    private static boolean isValueCompatible(final PsiLambdaExpressionImpl $this) = CachedValuesManager.getProjectPsiDependentCache($this,
-            lambda -> !(lambda.getBody() instanceof PsiCodeBlock block) || Stream.of(PsiUtil.findReturnStatements(block)).anyMatch(statement -> statement.getReturnValue() != null));
+    private static boolean isValueCompatible(final PsiLambdaExpressionImpl $this) = CachedValuesManager.getProjectPsiDependentCache($this, lambda -> !(lambda.getBody() instanceof PsiCodeBlock block) || isValueCompatible(block));
+    
+    private static boolean isValueCompatible(final PsiCodeBlock block) {
+        boolean hasReturn = false;
+        for (final PsiReturnStatement statement : PsiUtil.findReturnStatements(block)) {
+            if (statement.getReturnValue() != null)
+                return true;
+            hasReturn = true;
+        }
+        return !hasReturn && PsiTreeUtil.getPrevSiblingOfType(block.getLastBodyElement(), PsiStatement.class) instanceof PsiThrowStatement;
+    }
     
     @Hook(value = PsiUtil.class, isStatic = true)
     private static Hook.Result isStatement(final PsiElement element) = avoid(element, true);
@@ -219,12 +220,12 @@ public class OperatorOverloadingHandler {
     @Hook(value = HighlightUtil.class, isStatic = true)
     private static Hook.Result checkPolyadicOperatorApplicable(final PsiPolyadicExpression expr) = avoid(expr);
     
-    public static Hook.Result avoid(final PsiElement element, final @Nullable Object result = null) = Hook.Result.falseToVoid(element instanceof PsiExpression expression && expr(expression) != null, result);
+    public static Hook.Result avoid(final PsiElement element, final @Nullable Object result = null) = Hook.Result.falseToVoid(element instanceof PsiExpression expression && overloadInfo(expression) != null, result);
     
     // # HighlightControlFlowUtil
     
     @Hook(value = HighlightControlFlowUtil.class, isStatic = true)
-    private static Hook.Result checkCannotWriteToFinal(final PsiExpression expr, final PsiFile containingFile) = Hook.Result.falseToVoid(expr(expr) != null, null);
+    private static Hook.Result checkCannotWriteToFinal(final PsiExpression expr, final PsiFile containingFile) = Hook.Result.falseToVoid(overloadInfo(expr) != null, null);
     
     // # RefCountHolder
     
@@ -250,7 +251,7 @@ public class OperatorOverloadingHandler {
     private static Hook.Result visitArrayAccessExpression(final EvaluatorBuilderImpl.Builder $this, final PsiArrayAccessExpression expression) = evaluator($this, expression);
     
     public static Hook.Result evaluator(final PsiElementVisitor visitor, final PsiExpression expr) {
-        final @Nullable PsiMethodCallExpression expression = expr(expr)?.expression ?? null;
+        final @Nullable PsiMethodCallExpression expression = overloadInfo(expr)?.expression ?? null;
         if (expression != null) {
             expression.accept(visitor);
             return Hook.Result.NULL;
@@ -278,9 +279,9 @@ public class OperatorOverloadingHandler {
     @Hook
     private static Hook.Result getType(final PsiArrayAccessExpressionImpl $this) = typeResult($this);
     
-    public static Hook.Result typeResult(final PsiExpression expr) = Hook.Result.nullToVoid(expr(expr)?.returnType ?? null);
+    public static Hook.Result typeResult(final PsiExpression expr) = Hook.Result.nullToVoid(overloadInfo(expr)?.returnType ?? null);
     
-    private static final Set<IElementType> cannotOverload = Set.of(ANDAND, OROR);
+    private static final Set<IElementType> cannotOverload = Set.of(ANDAND, OROR, EQEQ, NE);
     
     public static boolean cannotOverload(final IElementType tag) = cannotOverload.contains(tag);
     
@@ -292,7 +293,12 @@ public class OperatorOverloadingHandler {
     }
     
     public static @Nullable OverloadInfo calculateBinaryType(final PsiBinaryExpression expr) {
-        if (cannotOverload(expr.getOperationTokenType()) || expr.getROperand() == null)
+        if (cannotOverload(expr.getOperationTokenType()) ||
+            expr.getROperand() == null ||
+            expr.getOperationTokenType() == PLUS &&
+            expr.getLOperand().getType() instanceof PsiClassType classType &&
+            classType.resolve() instanceof PsiClass psiClass &&
+            String.class.getCanonicalName().equals(psiClass.getQualifiedName()))
             return null;
         final @Nullable String name = operatorType2operatorName[expr.getOperationTokenType()];
         return name == null ? null : calculateExprType(expr, expr.getLOperand(), name, expr.getROperand());
@@ -306,7 +312,7 @@ public class OperatorOverloadingHandler {
     }
     
     public static @Nullable OverloadInfo calculateAssignmentType(final PsiAssignmentExpression expr) {
-        if (expr.getRExpression() == null)
+        if (expr.getRExpression() == null || PsiUtil.skipParenthesizedExprDown(expr.getLExpression()) instanceof PsiArrayAccessExpression access && access.getArrayExpression().getType() instanceof PsiArrayType)
             return null;
         final IElementType token = expr.getOperationTokenType();
         @Nullable OverloadInfo info;
@@ -321,11 +327,11 @@ public class OperatorOverloadingHandler {
             if (opExpr.getType() != null) {
                 final PsiExpression assOpExpr = factory.createExpressionFromText(String.format("(%s) = (%s)", expr.getLExpression().getText(), opExpr.getText()), expr);
                 if (assOpExpr.getType() != null) {
-                    info = expr(assOpExpr);
+                    info = overloadInfo(assOpExpr);
                     if (info != null)
-                        info.lower = expr(opExpr);
+                        info.lower = overloadInfo(opExpr);
                     else
-                        info = expr(opExpr);
+                        info = overloadInfo(opExpr);
                 }
             }
         }
@@ -351,7 +357,7 @@ public class OperatorOverloadingHandler {
     }
     
     public static @Nullable OverloadInfo calculateAccessType(final PsiArrayAccessExpression expr)
-            = expr.getIndexExpression() == null ? null : calculateExprType(expr, expr.getArrayExpression(), "GET", expr.getIndexExpression());
+            = expr.getIndexExpression() == null ? null : expr.getArrayExpression().getType() instanceof PsiArrayType ? null : calculateExprType(expr, expr.getArrayExpression(), "GET", expr.getIndexExpression());
     
     public static @Nullable OverloadInfo resolveExprType(final PsiElement element) = switch (element) {
         case PsiUnaryExpression unary           -> calculateUnaryType(unary);
@@ -367,7 +373,7 @@ public class OperatorOverloadingHandler {
             .map(expr -> expr?.getType() ?? null)
             .noneMatch(type -> type == null || type instanceof PsiLambdaParameterType);
     
-    public static @Nullable OverloadInfo expr(final @Nullable PsiExpression expr) = expr == null || !canResolve(expr) ? null :
+    public static @Nullable OverloadInfo overloadInfo(final @Nullable PsiExpression expr) = expr == null || !canResolve(expr) ? null :
             CachedValuesManager.getProjectPsiDependentCache(expr, OperatorOverloadingHandler::resolveExprType);
     
     private static @Nullable PsiMethod resolveMethod(final @Nullable PsiMethodCallExpression expression)
@@ -375,8 +381,8 @@ public class OperatorOverloadingHandler {
               (info.isValidResult() || info.getElement() instanceof ExtensionHandler.ExtensionMethod extensionMethod &&
                                        isFakeCallExpression(extensionMethod, expression)) && info.getInferenceErrorMessage() == null ? info.getElement() : null;
     
-    private static boolean isFakeCallExpression(final ExtensionHandler.ExtensionMethod extensionMethod,
-            final PsiMethodCallExpression callExpression) = callExpression.getArgumentList().getExpressionCount() != extensionMethod.sourceMethod().getParameterList().getParametersCount();
+    private static boolean isFakeCallExpression(final ExtensionHandler.ExtensionMethod extensionMethod, final PsiMethodCallExpression callExpression)
+            = callExpression.getArgumentList().getExpressionCount() != extensionMethod.sourceMethod().getParameterList().getParametersCount();
     
     public static @Nullable OverloadInfo calculateExprType(final PsiExpression element, final @Nullable PsiExpression expression, final @Nullable String name, final PsiExpression... expressions)
             = IDEAContext.computeReadActionIgnoreDumbMode(() -> {
@@ -389,13 +395,13 @@ public class OperatorOverloadingHandler {
         @Nullable PsiMethod method = null;
         if (expressionType instanceof PsiPrimitiveType) {
             for (final PsiClass ext : ExtensionHandler.extensionSet(element.getResolveScope())) {
-                overloadCall = expr(element, ext.getQualifiedName(), name, Stream.concat(Stream.of(expression), Stream.of(expressions)).map(PsiExpression::getText).collect(Collectors.joining(", ")));
+                overloadCall = createCallExpression(element, ext.getQualifiedName(), name, Stream.concat(Stream.of(expression), Stream.of(expressions)).map(PsiExpression::getText).collect(Collectors.joining(", ")));
                 method = resolveMethod(overloadCall);
                 if (method != null)
                     break;
             }
         } else {
-            overloadCall = expr(element, String.format("(%s)", expression.getText()), name, Stream.of(expressions).map(PsiExpression::getText).collect(Collectors.joining(", ")));
+            overloadCall = createCallExpression(element, String.format("(%s)", expression.getText()), name, Stream.of(expressions).map(PsiExpression::getText).collect(Collectors.joining(", ")));
             method = resolveMethod(overloadCall);
         }
         if (overloadCall == null || method == null)
@@ -409,7 +415,7 @@ public class OperatorOverloadingHandler {
             final PsiMethod navigation = extensionMethod.sourceMethod();
             final @Nullable PsiClass owner = PsiTreeUtil.getContextOfType(navigation, PsiClass.class);
             if (owner != null) {
-                overloadCall = expr(element, owner.getQualifiedName(), name, Stream.concat(Stream.of(expression), Stream.of(expressions)).map(PsiExpression::getText).collect(Collectors.joining(", ")));
+                overloadCall = createCallExpression(element, owner.getQualifiedName(), name, Stream.concat(Stream.of(expression), Stream.of(expressions)).map(PsiExpression::getText).collect(Collectors.joining(", ")));
                 if (overloadCall == null)
                     return null;
             }
@@ -423,7 +429,7 @@ public class OperatorOverloadingHandler {
         return result;
     });
     
-    public static @Nullable PsiMethodCallExpression expr(final PsiElement element, final Object... expressions) {
+    public static @Nullable PsiMethodCallExpression createCallExpression(final PsiElement element, final Object... expressions) {
         try {
             final PsiElement result = PsiElementFactory.getInstance(element.getProject()).createExpressionFromText(String.format("%s.%s(%s)", expressions), element);
             return result instanceof PsiMethodCallExpression expression ? expression : null;
@@ -447,21 +453,23 @@ public class OperatorOverloadingHandler {
     
     @Hook(value = JavaFindUsagesHelper.class, isStatic = true)
     private static void processElementUsages(final PsiElement element, final FindUsagesOptions options, final Processor<? super UsageInfo> processor) {
-        if (options instanceof JavaMethodFindUsagesOptions methodOptions) {
-            final PsiMethod target = (PsiMethod) element;
+        // System.out.println(element);
+        if (options instanceof JavaMethodFindUsagesOptions methodOptions && element instanceof PsiMethod method) {
+            final PsiMethod target = element instanceof ClsMethodImpl clsMethod ? clsMethod.getSourceMirrorMethod() ?? method : method;
             if (!target.isConstructor()) {
                 final Project project = PsiUtilCore.getProjectInReadAction(element);
                 final String name = target.getName();
                 final Map<VirtualFile, int[]> mapping = IDEAContext.computeReadActionIgnoreDumbMode(() -> {
                     final @Nullable String symbol = switch (name) {
-                        case "GET", "PUT" -> name;
-                        default           -> operatorName2expressionTypes[name] != null ? name : null;
+                        case "GET",
+                             "PUT" -> name;
+                        default    -> operatorName2expressionTypes[name] != null ? name : null;
                     };
                     if (symbol != null) {
                         final HashMap<VirtualFile, int[]> offsets = { };
                         FileBasedIndex.getInstance().processValues(JavaExpressionIndex.INDEX_ID, symbol, null, (file, value) -> {
                             ProgressManager.checkCanceled();
-                            offsets[file] = value;
+                            offsets[file] = value.array();
                             return true;
                         }, GlobalSearchScopeUtil.toGlobalSearchScope(options.searchScope, project));
                         return offsets;
@@ -482,10 +490,16 @@ public class OperatorOverloadingHandler {
                                 if (manager.findFile(entry.getKey()) instanceof PsiJavaFile file)
                                     for (final int offset : entry.getValue())
                                         for (final Class<? extends PsiExpression> expressionType : expressionTypes) {
-                                            final @Nullable PsiExpression expression = PsiTreeUtil.findElementOfClassAtOffset(file, offset, expressionType, false);
-                                            if (expression != null && element == expr(expression)?.navigation ?? null)
-                                                if (!(Privilege) JavaFindUsagesHelper.addResult(expression, options, processor))
-                                                    return false;
+                                            final @Nullable PsiJavaToken token = PsiTreeUtil.findElementOfClassAtOffset(file, offset, PsiJavaToken.class, false);
+                                            if (token != null) {
+                                                if (token.getParent() instanceof PsiExpression expression) {
+                                                    final @Nullable OverloadInfo info = overloadInfo(expression);
+                                                    if (info != null && (info.navigation == target || MethodSignatureUtil.isSuperMethod(target, info.navigation)))
+                                                        if (!(Privilege) JavaFindUsagesHelper.addResult(expression, options, processor))
+                                                            return false;
+                                                }
+                                            } else
+                                                DebugHelper.breakpoint();
                                         }
                                 return true;
                             });
@@ -516,7 +530,7 @@ public class OperatorOverloadingHandler {
     @Hook(isStatic = true, value = LambdaUtil.class)
     private static Hook.Result getFunctionalInterfaceType(final PsiElement element, final boolean tryToSubstitute) {
         if (element.getParent() instanceof PsiExpression expression) {
-            final @Nullable OverloadInfo info = expr(expression);
+            final @Nullable OverloadInfo info = overloadInfo(expression);
             if (info != null) {
                 final PsiExpression expressions[] = info.expression.getArgumentList().getExpressions();
                 final @Nullable PsiExpression operatorExpressions[] = expressions(expression);
@@ -536,21 +550,21 @@ public class OperatorOverloadingHandler {
     @Hook
     private static Hook.Result getReference(final LeafPsiElement $this)
             = $this instanceof PsiJavaTokenImpl token ? Hook.Result.nullToVoid(Optional.ofNullable(PsiTreeUtil.getContextOfType(token, PsiExpression.class))
-            .map(OperatorOverloadingHandler::expr)
+            .map(OperatorOverloadingHandler::overloadInfo)
             .map(data -> data.reference.dup(token))
             .orElse(null)) : Hook.Result.VOID;
     
     // # com.intellij.psi.controlFlow.ControlFlowAnalyzer
     
     public static Hook.Result getResult(final ControlFlowAnalyzer $this, final PsiExpression expression) {
-        final @Nullable OverloadInfo data = expr(expression);
-        if (data == null)
+        final @Nullable OverloadInfo info = overloadInfo(expression);
+        if (info == null)
             return Hook.Result.VOID;
         (Privilege) $this.startElement(expression);
-        for (final PsiExpression arg : data.args)
+        for (final PsiExpression arg : info.args)
             arg.accept($this);
         (Privilege) $this.emitEmptyInstruction();
-        (Privilege) $this.generateExceptionJumps(expression, ExceptionUtil.getUnhandledExceptions(data.expression, expression.getParent()));
+        (Privilege) $this.generateExceptionJumps(expression, ExceptionUtil.getUnhandledExceptions(info.expression, expression.getParent()));
         (Privilege) $this.finishElement(expression);
         return Hook.Result.NULL;
     }
@@ -573,10 +587,10 @@ public class OperatorOverloadingHandler {
     // # com.intellij.psi.controlFlow.ControlFlowAnalyzer
     
     public static Hook.Result getResult(final com.intellij.codeInspection.dataFlow.java.ControlFlowAnalyzer $this, final PsiExpression expression) {
-        final @Nullable OverloadInfo data = expr(expression);
-        if (data == null)
+        final @Nullable OverloadInfo info = overloadInfo(expression);
+        if (info == null)
             return Hook.Result.VOID;
-        (data.lower?.expression ?? data.expression).accept($this);
+        (info.lower?.expression ?? info.expression).accept($this);
         return Hook.Result.NULL;
     }
     
@@ -614,8 +628,8 @@ public class OperatorOverloadingHandler {
     // # Checker
     
     @Hook
-    private static Hook.Result visitPrefixExpression(final SimplifiableBooleanExpressionInspection.SimplifiableBooleanExpressionVisitor $this,
-            final PsiPrefixExpression expression) = Hook.Result.falseToVoid(expr(expression) != null || expr(PsiUtil.skipParenthesizedExprDown(expression.getOperand())) != null, null);
+    private static Hook.Result visitPrefixExpression(final SimplifiableBooleanExpressionInspection.SimplifiableBooleanExpressionVisitor $this, final PsiPrefixExpression expression)
+            = Hook.Result.falseToVoid(overloadInfo(expression) != null || overloadInfo(PsiUtil.skipParenthesizedExprDown(expression.getOperand())) != null, null);
     
     @Hook(value = ExpressionUtils.class, isStatic = true)
     private static Hook.Result isStringConcatenation(final PsiElement element) = Hook.Result.falseToVoid(element instanceof PsiPolyadicExpression expression && expression.getOperationTokenType() != PLUS, false);
@@ -650,14 +664,14 @@ public class OperatorOverloadingHandler {
     
     @Hook
     private static Hook.Result visitPrefixExpression(final UnaryPlusInspection.UnaryPlusVisitor $this, final PsiPrefixExpression expression)
-            = Hook.Result.falseToVoid(expr(expression) != null, null);
+            = Hook.Result.falseToVoid(overloadInfo(expression) != null, null);
     
     @Hook
     private static Hook.Result visitPrefixExpression(final UnnecessaryUnaryMinusInspection.UnnecessaryUnaryMinusVisitor $this, final PsiPrefixExpression expression)
-            = Hook.Result.falseToVoid(expr(expression) != null, null);
+            = Hook.Result.falseToVoid(overloadInfo(expression) != null, null);
     
     @Hook
-    private static Hook.Result processArraySequence(final OverwrittenKeyInspection.OverwrittenKeyVisitor $this, final PsiAssignmentExpression assignment, final PsiExpressionStatement statement, @InspectionMessage final String message)
-            = Hook.Result.falseToVoid(expr(assignment) != null, statement);
+    private static Hook.Result processArraySequence(final OverwrittenKeyInspection.OverwrittenKeyVisitor $this, final PsiAssignmentExpression assignment, final PsiExpressionStatement statement, final @InspectionMessage String message)
+            = Hook.Result.falseToVoid(overloadInfo(assignment) != null, statement);
     
 }

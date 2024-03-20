@@ -17,6 +17,9 @@
             <implementation-class>amadeus.maho.lang.idea.MahoIDEA</implementation-class>
         </component>
     </application-components>
+    <applicationListeners>
+        <listener class="amadeus.maho.lang.idea.MahoIDEA" topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
 
     <extensions defaultExtensionNs="com.intellij">
         <fileBasedIndex implementation="amadeus.maho.lang.idea.handler.base.JavaExpressionIndex"/>
@@ -25,12 +28,12 @@
         <lang.psiAugmentProvider implementation="amadeus.maho.lang.idea.handler.base.HandlerSupport$Augmenter"/>
         <renamePsiElementProcessor implementation="amadeus.maho.lang.idea.handler.base.RenameLightElementProcessor" order="first"/>
         <!--        <renamePsiElementProcessor implementation="amadeus.maho.lang.idea.handler.base.RenameFieldAccessorProcessor" order="first"/>-->
-        <lang.structureViewExtension implementation="amadeus.maho.lang.idea.handler.base.StructureInjecter"/>
+        <lang.structureViewExtension implementation="amadeus.maho.lang.idea.handler.base.StructureInjector"/>
         <implicitUsageProvider implementation="amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker"/>
         <canBeFinal implementation="amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker"/>
         <java.elementFinder implementation="amadeus.maho.lang.idea.handler.base.ElementFinder" order="last"/>
         <renameHandler implementation="amadeus.maho.lang.idea.handler.base.InplaceRenameHandler" order="first"/>
-        <inspectionToolProvider implementation="amadeus.maho.lang.idea.handler.base.InspectionTool"/>
+<!--        <inspectionToolProvider implementation="amadeus.maho.lang.idea.handler.base.InspectionTool$Provider"/>-->
         <referencesSearch implementation="amadeus.maho.lang.idea.handler.SelfHandler$SelfReferenceSearcher"/>
         <lang.jvm.annotationPackageSupport implementation="amadeus.maho.lang.idea.handler.NullableHandler" order="first"/>
         <intentionAction>

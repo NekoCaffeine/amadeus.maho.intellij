@@ -32,6 +32,7 @@ import com.intellij.psi.PsiConstantEvaluationHelper;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiJavaToken;
+import com.intellij.psi.PsiLiteral;
 import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiPolyadicExpression;
 import com.intellij.psi.PsiPrimitiveType;
@@ -133,7 +134,8 @@ public class BranchHandler {
     public static boolean isSafeAccess(final @Nullable PsiExpression expression) = switch (expression) {
         case PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
         case PsiReferenceExpression referenceExpression -> referenceExpression instanceof CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
-        case null, default                              -> false;
+        case null,
+             default                              -> false;
     };
     
     @Hook
@@ -145,6 +147,10 @@ public class BranchHandler {
         }
         return Hook.Result.VOID;
     }
+    
+    @Hook(value = PsiPrecedenceUtil.class, isStatic = true)
+    private static Hook.Result areParenthesesNeeded(final PsiExpression expression, final PsiExpression parentExpression, final boolean ignoreClarifyingParentheses)
+            = Hook.Result.falseToVoid(expression instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR);
     
     @Hook
     private static Hook.Result isUnboxingNecessary(final UnnecessaryUnboxingInspection.UnnecessaryUnboxingVisitor $this, final PsiExpression expression, final PsiExpression unboxedExpression)
@@ -336,10 +342,13 @@ public class BranchHandler {
         if (tokenType == NULL_OR && !(expression.getType() instanceof PsiPrimitiveType)) {
             final PsiExpression operands[] = expression.getOperands();
             @Nullable Object value = (Privilege) $this.getStoredValue(operands[0]);
-            for (int i = 1; i < operands.length; i++) {
-                final PsiExpression operand = operands[i];
-                value = value ?? (Privilege) $this.getStoredValue(operand);
-            }
+            if (value != null || operands[0] instanceof PsiLiteral)
+                for (int i = 1; i < operands.length; i++) {
+                    final PsiExpression operand = operands[i];
+                    value = value ?? (Privilege) $this.getStoredValue(operand);
+                    if (value == null && !(operands[0] instanceof PsiLiteral))
+                        break;
+                }
             if (value instanceof String string)
                 value = ((Privilege) $this.myInterner).intern(string);
             (Privilege) ($this.myResult = value);

@@ -9,6 +9,7 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.RefCountHolder;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.dataFlow.java.ControlFlowAnalyzer;
+import com.intellij.debugger.engine.evaluation.expression.EvaluatorBuilderImpl;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.LambdaUtil;
@@ -25,8 +26,10 @@ import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiJvmMember;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
+import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.PsiNewExpression;
+import com.intellij.psi.PsiParenthesizedExpression;
 import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiResolveHelper;
 import com.intellij.psi.PsiStatement;
@@ -121,6 +124,26 @@ public class PrivilegeHandler {
     }
     
     @Hook(at = @At(type = @At.TypeInsn(opcode = INSTANCEOF, type = PsiPrimitiveType.class)), before = false, capture = true, branchReversal = true)
-    private static boolean visitTypeCastExpression(final boolean capture, final ControlFlowAnalyzer $this, final PsiTypeCastExpression castExpression) = capture || isPrivilegeTypeCast(castExpression);
+    private static boolean visitTypeCastExpression(final boolean capture, final ControlFlowAnalyzer $this, final PsiTypeCastExpression expression) = capture || isPrivilegeTypeCast(expression);
+    
+    @Hook
+    private static Hook.Result visitTypeCastExpression(final EvaluatorBuilderImpl.Builder $this, final PsiTypeCastExpression expression) {
+        if (isPrivilegeTypeCast(expression)) {
+            expression.getOperand()?.accept($this);
+            return Hook.Result.NULL;
+        }
+        return Hook.Result.VOID;
+    }
+    
+    @Hook(value = RedundantCastUtil.class, isStatic = true)
+    private static Hook.Result isTypeCastSemantic(final PsiTypeCastExpression expression) {
+        PsiElement parent = expression.getParent();
+        while (parent.getParent() instanceof PsiParenthesizedExpression parenthesizedExpression)
+            parent = parenthesizedExpression;
+        if (parent.getParent() instanceof PsiJavaCodeReferenceElement referenceElement && referenceElement.getQualifier() == parent && referenceElement.getParent() instanceof PsiMethodCallExpression callExpression &&
+            callExpression.getMethodExpression() == referenceElement && callExpression.resolveMethod().hasModifierProperty(PsiModifier.PRIVATE))
+            return Hook.Result.TRUE;
+        return Hook.Result.VOID;
+    }
     
 }

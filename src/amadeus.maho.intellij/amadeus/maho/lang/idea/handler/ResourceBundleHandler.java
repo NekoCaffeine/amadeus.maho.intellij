@@ -40,6 +40,7 @@ import amadeus.maho.util.function.FunctionHelper;
 import amadeus.maho.util.runtime.ArrayHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
+import static amadeus.maho.lang.idea.IDEAContext.supers;
 import static amadeus.maho.lang.javac.handler.ResourceBundleHandler.PRIORITY;
 
 @Handler(value = ResourceBundle.class, priority = PRIORITY)
@@ -78,7 +79,7 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
                                     final ResourceAgent agentAnnotation = annotations[0].v1;
                                     final @Nullable Pattern pattern = ResourceAgentHandler.pattern(annotations[0].v2);
                                     if (pattern != null) {
-                                        final Map<String, Integer> namedGroupsIndex = pattern.namedGroupsIndex();
+                                        final Map<String, Integer> namedGroupsIndex = pattern.namedGroups();
                                         final List<String> missingKey = Stream.of(method.getParameterList().getParameters()).map(PsiParameter::getName).filterNot(namedGroupsIndex.keySet()::contains).toList();
                                         if (missingKey.isEmpty())
                                             agents.computeIfAbsent(agentAnnotation.value(), _ -> new AgentMethod(method, pattern, agentAnnotation));
@@ -119,7 +120,7 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
     protected boolean shouldHandle(final Path path, final ResourceAgent agentAnnotation) = ArrayHelper.contains(agentAnnotation.types(), Files.isDirectory(path) ? ResourceAgent.Type.DIRECTORY : ResourceAgent.Type.FILE);
     
     protected String name(final String format, final Matcher matcher, final Path location, final Path path) {
-        final Map<String, Integer> map = matcher.pattern().namedGroupsIndex();
+        final Map<String, Integer> map = matcher.pattern().namedGroups();
         final @Nullable String group = map.containsKey("name") ? matcher.group("name") : null, name = format.formatted(group ?? defaultName(location, path));
         final int p_index[] = { -1 };
         return name.codePoints().map(c -> (++p_index[0] == 0 ? Character.isJavaIdentifierStart(c) : Character.isJavaIdentifierPart(c)) ? c : '_').collectCodepoints();
@@ -153,7 +154,7 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
                                             final ResourceAgent agentAnnotation = annotations[0].v1;
                                             final @Nullable Pattern pattern = ResourceAgentHandler.pattern(annotations[0].v2);
                                             if (pattern != null) {
-                                                final Map<String, Integer> namedGroupsIndex = pattern.namedGroupsIndex();
+                                                final Map<String, Integer> namedGroupsIndex = pattern.namedGroups();
                                                 final List<String> missingKey = Stream.of(method.getParameterList().getParameters()).map(PsiParameter::getName).filterNot(namedGroupsIndex.keySet()::contains).toList();
                                                 if (missingKey.isEmpty())
                                                     agents.compute(agentAnnotation.value(), (regex, agentMethod) -> {

@@ -103,7 +103,7 @@ public class SelfHandler extends BaseSyntaxHandler {
     }
     
     @NoArgsConstructor
-    public class ReplaceSelfWithInferredTypeAction extends LocalQuickFixAndIntentionActionOnPsiElement {
+    public static class ReplaceSelfWithInferredTypeAction extends LocalQuickFixAndIntentionActionOnPsiElement {
         
         @Override
         public String getText() = CommonQuickFixBundle.message("fix.replace.x.with.y", self, ((PsiTypeElement) getStartElement()).getType().getCanonicalText());
@@ -145,7 +145,7 @@ public class SelfHandler extends BaseSyntaxHandler {
         
         @Override
         public void renderElement(final LookupElementPresentation presentation) {
-            presentation.setItemText("self " + UIUtil.rightArrow() + " " + new PsiImmediateClassType(context, PsiSubstitutor.EMPTY).getPresentableText());
+            presentation.setItemText(STR."self \{UIUtil.rightArrow()} \{new PsiImmediateClassType(context, PsiSubstitutor.EMPTY).getPresentableText()}");
             presentation.setItemTextBold(true);
         }
         
@@ -270,7 +270,7 @@ public class SelfHandler extends BaseSyntaxHandler {
             registerProblem(tree, holder);
     }
     
-    private boolean inStaticContext(final PsiElement tree) {
+    private static boolean inStaticContext(final PsiElement tree) {
         final @Nullable PsiMember context = PsiTreeUtil.getContextOfType(tree, PsiClassImpl.class, PsiField.class, PsiMethod.class, PsiClassInitializer.class);
         if (context != null && !(context instanceof PsiClass))
             return context.hasModifierProperty(PsiModifier.STATIC);

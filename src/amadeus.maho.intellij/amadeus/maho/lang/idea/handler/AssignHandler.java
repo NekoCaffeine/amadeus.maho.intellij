@@ -1,7 +1,6 @@
 package amadeus.maho.lang.idea.handler;
 
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -38,6 +37,7 @@ import com.intellij.openapi.command.undo.UndoUtil;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.RecursionManager;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.JavaPsiFacade;
@@ -121,19 +121,21 @@ import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.NoArgsConstructor;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.RequiredArgsConstructor;
-import amadeus.maho.lang.idea.IDEAContext;
+import amadeus.maho.lang.idea.handler.base.ASTTraverser;
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
 import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.handler.base.JavaExpressionIndex;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.idea.light.LightElementReference;
 import amadeus.maho.lang.idea.light.LightMethod;
-import amadeus.maho.lang.idea.util.ASTTraverser;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.TransformProvider;
+import amadeus.maho.util.runtime.DebugHelper;
 
+import static amadeus.maho.lang.idea.IDEAContext.*;
 import static amadeus.maho.lang.idea.handler.AssignHandler.PRIORITY;
+import static amadeus.maho.lang.idea.handler.base.JavaExpressionIndex.IndexTypes.ASSIGN_NEW;
 import static com.intellij.codeInspection.ProblemHighlightType.*;
 import static com.intellij.lang.java.parser.JavaParserUtil.*;
 import static com.intellij.psi.JavaTokenType.EQ;
@@ -241,7 +243,7 @@ public class AssignHandler extends BaseSyntaxHandler {
         }
         
         @Override
-        public @Nullable PsiType getType() = IDEAContext.computeReadActionIgnoreDumbMode(() -> lookupType(this));
+        public @Nullable PsiType getType() = computeReadActionIgnoreDumbMode(() -> lookupType(this));
         
         @Override
         public PsiReferenceParameterList getTypeArgumentList() = parameterList;
@@ -290,19 +292,16 @@ public class AssignHandler extends BaseSyntaxHandler {
         
     }
     
-    public static final JavaExpressionIndex.IndexType<PsiArrayInitializerBackNewExpression> ASSIGN_NEW = { "assign-new", PsiArrayInitializerBackNewExpression.class };
-    
     @Hook(value = JavaFindUsagesHelper.class, isStatic = true)
     private static void processElementUsages(final PsiElement element, final FindUsagesOptions options, final Processor<? super UsageInfo> processor) {
-        if (options instanceof JavaMethodFindUsagesOptions methodOptions) {
-            final PsiMethod target = (PsiMethod) element;
+        if (options instanceof JavaMethodFindUsagesOptions methodOptions && element instanceof PsiMethod target)
             if (target.isConstructor()) {
                 final Project project = PsiUtilCore.getProjectInReadAction(element);
-                final Map<VirtualFile, int[]> mapping = IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+                final Map<VirtualFile, int[]> mapping = computeReadActionIgnoreDumbMode(() -> {
                     final HashMap<VirtualFile, int[]> offsets = { };
                     FileBasedIndex.getInstance().processValues(JavaExpressionIndex.INDEX_ID, ASSIGN_NEW.name(), null, (file, value) -> {
                         ProgressManager.checkCanceled();
-                        offsets[file] = value;
+                        offsets[file] = value.array();
                         return true;
                     }, GlobalSearchScopeUtil.toGlobalSearchScope(options.searchScope, project));
                     return offsets;
@@ -312,13 +311,18 @@ public class AssignHandler extends BaseSyntaxHandler {
                     manager.runInBatchFilesMode(() -> {
                         mapping.entrySet().stream().anyMatch(entry -> {
                             ProgressManager.checkCanceled();
-                            return !IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+                            return !computeReadActionIgnoreDumbMode(() -> {
                                 if (manager.findFile(entry.getKey()) instanceof PsiJavaFile file)
                                     for (final int offset : entry.getValue()) {
-                                        final @Nullable PsiArrayInitializerBackNewExpression expression = PsiTreeUtil.findElementOfClassAtOffset(file, offset, ASSIGN_NEW.expressionType(), false);
-                                        if (expression != null && expression.resolveMethod() == element)
-                                            if (!(Privilege) JavaFindUsagesHelper.addResult(expression, options, processor))
-                                                return false;
+                                        final @Nullable PsiJavaToken token = PsiTreeUtil.findElementOfClassAtOffset(file, offset, PsiJavaToken.class, false);
+                                        if (token != null) {
+                                            if (token.getParent() instanceof PsiArrayInitializerBackNewExpression.ExpressionList list &&
+                                                list.getParent() instanceof PsiArrayInitializerBackNewExpression expression &&
+                                                expression.getManager().areElementsEquivalent(expression.resolveMethod(), element))
+                                                if (!(Privilege) JavaFindUsagesHelper.addResult(expression, options, processor))
+                                                    return false;
+                                        } else
+                                            DebugHelper.breakpoint();
                                     }
                                 return true;
                             });
@@ -327,7 +331,6 @@ public class AssignHandler extends BaseSyntaxHandler {
                     });
                 }
             }
-        }
     }
     
     @Hook
@@ -413,7 +416,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     
     // There is also room for optimization, by limiting the traversal depth and skipping nested expressions
     @Override
-    public void transformASTNode(final ASTNode root, final boolean loadingTreeElement) = ASTTraverser.forEach(root, true, PsiArrayInitializerExpressionImpl.class, AssignHandler::transformArrayInitializerExpression);
+    public void transformASTNode(final ASTNode root, final boolean loadingTreeElement) = ASTTraverser.forEach(root, loadingTreeElement, PsiArrayInitializerExpressionImpl.class, AssignHandler::transformArrayInitializerExpression);
     
     private static void transformArrayInitializerExpression(final PsiArrayInitializerExpressionImpl expression) {
         if (type(expression) instanceof PsiArrayInitializerBackNewExpression backNewExpression) {
@@ -424,18 +427,10 @@ public class AssignHandler extends BaseSyntaxHandler {
         }
     }
     
-    private static final ThreadLocal<LinkedList<PsiArrayInitializerExpression>> calculateTypeContextLocal = ThreadLocal.withInitial(LinkedList::new);
-    
     public static @Nullable Object type(final PsiArrayInitializerExpression expression) {
         if (expression == null || expression.getClass() != PsiArrayInitializerExpressionImpl.class)
             return null;
-        final LinkedList<PsiArrayInitializerExpression> context = calculateTypeContextLocal.get();
-        if (context.stream().anyMatch(it -> it == expression))
-            return null;
-        context.addLast(expression);
-        try {
-            return IDEAContext.computeReadActionIgnoreDumbMode(() -> CachedValuesManager.getProjectPsiDependentCache(expression, AssignHandler::syncType));
-        } finally { context.removeLast(); }
+        return CachedValuesManager.getProjectPsiDependentCache(expression, it -> RecursionManager.doPreventingRecursion(expression, false, () -> computeReadActionIgnoreDumbMode(() -> syncType(expression))));
     }
     
     private static @Nullable Object syncType(final PsiArrayInitializerExpression expression) {
@@ -606,7 +601,8 @@ public class AssignHandler extends BaseSyntaxHandler {
                     final @Nullable PsiExpression expression = switch (PsiTreeUtil.skipWhitespacesAndCommentsForward(lBrace)) {
                         case PsiReturnStatement returnStatement         -> returnStatement.getReturnValue();
                         case PsiExpressionStatement expressionStatement -> expressionStatement.getExpression();
-                        case null, default                              -> null;
+                        case null,
+                             default                                    -> null;
                     };
                     if (expression != null) {
                         final PsiExpression copy = (PsiExpression) expression.copy();
@@ -683,7 +679,7 @@ public class AssignHandler extends BaseSyntaxHandler {
                 if (type == null)
                     return false;
                 final PsiElement parent = expression.getParent();
-                if (parent instanceof PsiAssignmentExpression assignment && OperatorOverloadingHandler.expr(assignment) == null)
+                if (parent instanceof PsiAssignmentExpression assignment && OperatorOverloadingHandler.overloadInfo(assignment) == null)
                     return type.equals(assignment.getLExpression().getType());
                 if (parent instanceof PsiReturnStatement) {
                     final @Nullable PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class); // PsiMethod | PsiLambdaExpression
