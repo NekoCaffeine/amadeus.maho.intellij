@@ -38,14 +38,14 @@ public interface Build {
         
         String appendArgs = "";
         
-        public self replaceVersion() = intellijPath = intellijPath.replace("${version}", intellijVersion);
+        public String intellijVersion() = IDEA.DevKit.inferInstanceMetadata(Path.of(intellijPath)).v2;
         
     }
     
     Workspace workspace = Workspace.here();
     
     IntellijConfig config = workspace.config().load(new IntellijConfig()).let(it -> {
-        if (!Files.isDirectory(Path.of(it.replaceVersion().intellijPath)))
+        if (!Files.isDirectory(Path.of(it.intellijPath)))
             throw new IllegalArgumentException(STR."IntellijConfig.default.cfg # invalid intellijPath: \{it.intellijPath}");
     });
     
@@ -53,12 +53,14 @@ public interface Build {
     Set<String> plugins = Set.of("java");
     
     // avoid analyzing unnecessary libraries, thereby improving compilation speed
-    List<String> shouldInCompile = Stream.of("app", "app-client", "platform-loader", "lib", "lib-client", "util", "util-8", "util_rt", "spellchecker", "java-frontback", "java-impl")
+    List<String> shouldInCompile = Stream.of("platform-loader", "app", "app-client", "platform-loader", "lib", "lib-client", "util", "util-8", "util_rt", "spellchecker", "java-frontback", "java-impl")
             .map(name -> name + Jar.SUFFIX).collect(Collectors.toList());
     
-    Module.DependencySet ddlc = { "DDLC", Files.list(workspace.root() / "ddlc").filter(path -> path.getFileName().toString().endsWith(Jar.SUFFIX)).map(Path::toAbsolutePath).map(Module.SingleDependency::new).collect(Collectors.toSet()) };
+    Module.DependencySet
+            ddlc = { "DDLC", Files.list(workspace.root() / "ddlc").filter(path -> path.getFileName().toString().endsWith(Jar.SUFFIX)).map(Path::toAbsolutePath).map(Module.SingleDependency::new).collect(Collectors.toSet()) },
+            copilot = { "Copilot", Files.list(workspace.root() / "copilot").filter(path -> path.getFileName().toString().endsWith(Jar.SUFFIX)).map(Path::toAbsolutePath).map(Module.SingleDependency::new).collect(Collectors.toSet()) };
     
-    static Set<Module.Dependency> dependencies() = IDEA.DevKit.attachLocalInstance(Path.of(config.intellijPath), plugins, path -> shouldInCompile.contains(path.getFileName().toString())) *= List.of(Module.DependencySet.maho(), ddlc);
+    static Set<Module.Dependency> dependencies() = IDEA.DevKit.attachLocalInstance(Path.of(config.intellijPath), plugins, path -> shouldInCompile.contains(path.getFileName().toString())) *= List.of(Module.DependencySet.maho(), ddlc, copilot);
     
     Module module = { "amadeus.maho.intellij", dependencies() }, run = IDEA.DevKit.run(Path.of(config.intellijPath));
     
@@ -76,7 +78,7 @@ public interface Build {
         Javac.compile(workspace, module, useModulePath::contains, args -> Javac.addReadsAllUnnamed(args, module));
         final Map<String, Jar.Result> pack = Jar.pack(workspace, module, Jar.manifest(), (a, b) -> {
             if (a.getFileName().toString().equals("plugin.xml"))
-                Files.readString(a).replace("${version}", STR."\{workspace.config().load(new Module.Metadata(), module.name()).version}-\{config.intellijVersion}") >> b;
+                Files.readString(a).replace("${version}", STR."\{workspace.config().load(new Module.Metadata(), module.name()).version}-\{config.intellijVersion()}") >> b;
             else
                 a >> b;
         });
@@ -118,8 +120,8 @@ public interface Build {
         it += D_PAIR.formatted("idea.vendor.name", "NekoCaffeine"); // in dev flag
         { // see idea.bat
             it += D_PAIR.formatted("java.system.class.loader", "com.intellij.util.lang.PathClassLoader");
-            it += D_PAIR.formatted("jna.boot.library.path", STR."\{config.intellijPath}/lib/jna/amd64");
-            it += D_PAIR.formatted("pty4j.preferred.native.folder", STR."\{config.intellijPath}/lib/pty4j");
+            it += D_PAIR.formatted("jna.boot.library.path", W_QUOTES.formatted(STR."\{config.intellijPath}/lib/jna/amd64"));
+            it += D_PAIR.formatted("pty4j.preferred.native.folder", W_QUOTES.formatted(STR."\{config.intellijPath}/lib/pty4j"));
             it += D_PAIR.formatted("jna.nosys", true);
             it += D_PAIR.formatted("jna.nounpack", true);
         }

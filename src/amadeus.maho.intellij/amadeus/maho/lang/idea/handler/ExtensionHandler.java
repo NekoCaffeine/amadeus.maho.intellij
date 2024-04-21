@@ -350,10 +350,10 @@ public class ExtensionHandler extends BaseSyntaxHandler {
     @Override
     public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
         if (tree instanceof PsiAnnotation annotation)
-            visitAnnotation(annotation, holder, quickFix);
+            check(annotation, holder, quickFix);
     }
     
-    public void visitAnnotation(final PsiAnnotation annotation, final ProblemsHolder holder, final QuickFixFactory quickFix) {
+    private void check(final PsiAnnotation annotation, final ProblemsHolder holder, final QuickFixFactory quickFix) {
         if (Extension.class.getCanonicalName().equals(annotation.getQualifiedName()))
             if (annotation.getOwner() instanceof PsiModifierList modifierList && modifierList.getParent() instanceof PsiClass owner) {
                 if (!checkOwnerPublic(owner))

@@ -30,8 +30,6 @@ import com.intellij.concurrency.JobLauncher;
 import com.intellij.find.FindModel;
 import com.intellij.find.impl.FindInProjectUtil;
 import com.intellij.ide.actions.CopyTBXReferenceProvider;
-import com.intellij.ide.actions.RevealFileAction;
-import com.intellij.jna.JnaLoader;
 import com.intellij.lang.folding.CompositeFoldingBuilder;
 import com.intellij.lang.folding.CustomFoldingBuilder;
 import com.intellij.lang.parameterInfo.ParameterInfoHandlerWithTabActionSupport;
@@ -53,7 +51,6 @@ import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
-import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.wm.impl.IdeFrameImpl;
@@ -87,6 +84,7 @@ import com.intellij.psi.SyntaxTraverser;
 import com.intellij.psi.controlFlow.ControlFlowUtil;
 import com.intellij.psi.impl.DebugUtil;
 import com.intellij.psi.impl.PsiElementFactoryImpl;
+import com.intellij.psi.impl.PsiImplUtil;
 import com.intellij.psi.impl.PsiShortNamesCacheImpl;
 import com.intellij.psi.impl.RecordAugmentProvider;
 import com.intellij.psi.impl.compiled.ClsClassImpl;
@@ -100,7 +98,6 @@ import com.intellij.psi.impl.search.AllClassesSearchExecutor;
 import com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.intellij.psi.impl.source.PsiFieldImpl;
-import com.intellij.psi.impl.source.PsiJavaFileBaseImpl;
 import com.intellij.psi.impl.source.resolve.ParameterTypeInferencePolicy;
 import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.infos.CandidateInfo;
@@ -120,7 +117,6 @@ import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndexEx;
 import com.intellij.util.indexing.UnindexedFilesUpdater;
 
-import amadeus.maho.lang.NoArgsConstructor;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.SneakyThrows;
 import amadeus.maho.lang.inspection.Fixed;
@@ -142,20 +138,6 @@ import static amadeus.maho.util.bytecode.Bytecodes.*;
 
 @TransformProvider
 interface Fix {
-    
-    @NoArgsConstructor
-    class OpenThread extends Thread { }
-    
-    @Hook(value = RevealFileAction.class, isStatic = true)
-    private static Hook.Result doOpen(final Path dir, final Path toSelect) { // fucking slow, EDT
-        if (!(SystemInfo.isWindows && JnaLoader.isLoaded()) || Thread.currentThread() instanceof OpenThread)
-            return Hook.Result.VOID;
-        new OpenThread(() -> (Privilege) RevealFileAction.doOpen(dir, toSelect)).start();
-        return Hook.Result.NULL;
-    }
-    
-    @Redirect(targetClass = RevealFileAction.class, slice = @Slice(@At(method = @At.MethodInsn(name = "error"))))
-    private static Hook.Result openViaShellApi(final String message) = Hook.Result.NULL;
     
     @Fixed(domain = "JetBrains", shortName = "IDEA-255878", url = "https://youtrack.jetbrains.com/issue/IDEA-255878/UI-thread-deadlock-application-freeze-upon-com.intellij.ui.IconDeferrerImpl.clearCache")
     @Hook
@@ -383,7 +365,7 @@ interface Fix {
     }
     
     // fucking slow: createImportStaticStatement => reformat
-    @Redirect(targetClass = PsiJavaFileBaseImpl.class, selector = "lambda$getEnumeratedDeclarations$2", slice = @Slice(@At(method = @At.MethodInsn(name = "createImportStaticStatement"))))
+    @Redirect(targetClass = PsiImplUtil.class, selector = "getImplicitStaticImports", slice = @Slice(@At(method = @At.MethodInsn(name = "createImportStaticStatement"))))
     private static PsiImportStaticStatement createImportStaticStatement(final PsiElementFactory factory, final PsiClass owner, final String member) {
         final PsiJavaFile dummy = (Privilege) ((PsiElementFactoryImpl) factory).createDummyJavaFile(STR."import static \{owner.getQualifiedName()}.\{member};");
         return (PsiImportStaticStatement) (Privilege) PsiElementFactoryImpl.extractImport(dummy, true);

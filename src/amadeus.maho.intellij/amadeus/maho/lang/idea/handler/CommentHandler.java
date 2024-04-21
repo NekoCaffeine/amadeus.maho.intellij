@@ -13,7 +13,7 @@ public interface CommentHandler {
     @Hook(value = SuppressionUtil.class, isStatic = true)
     private static Hook.Result createComment(final Project project, @Hook.Reference String commentText, final Language language) {
         if (!commentText.startsWith(" ")) {
-            commentText = " " + commentText;
+            commentText = STR." \{commentText}";
             return { };
         }
         return Hook.Result.VOID;

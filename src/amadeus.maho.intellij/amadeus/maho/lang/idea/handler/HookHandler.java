@@ -51,10 +51,10 @@ public class HookHandler extends BaseHandler<Hook> {
                     holder.registerProblem(returnTypeElement, STR."@\{Hook.Reference.class.getSimpleName()} needs to pass the result by returning value type \{Hook.Result.class.getSimpleName()}.", ProblemHighlightType.GENERIC_ERROR,
                             quickFix.createMethodReturnFix(method, JavaPsiFacade.getElementFactory(method.getProject()).createTypeByFQClassName(Hook.Result.class.getCanonicalName(), method.getResolveScope()), false));
             }
-            final String name = annotation.selector().isEmpty() ? switch (method.getName()) {
-                case "_init_"   -> ASMHelper._INIT_;
-                case "_clinit_" -> ASMHelper._CLINIT_;
-                default         -> At.Lookup.dropInvalidPart(method.getName());
+            final String name = annotation.selector().isEmpty() ? switch (At.Lookup.dropInvalidPart(method.getName())) {
+                case "_init_"      -> ASMHelper._INIT_;
+                case "_clinit_"    -> ASMHelper._CLINIT_;
+                case String string -> string;
             } : annotation.selector();
             if (!At.Lookup.WILDCARD.equals(name) && !ASMHelper._CLINIT_.equals(name)) {
                 final List<PsiType> types = Stream.of(parameters)
