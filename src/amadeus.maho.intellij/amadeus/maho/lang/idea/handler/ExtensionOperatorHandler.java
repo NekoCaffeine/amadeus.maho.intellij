@@ -55,10 +55,8 @@ public class ExtensionOperatorHandler extends BaseHandler<Extension.Operator> {
     @Override
     public void collectRelatedTarget(final PsiModifierListOwner tree, final Extension.Operator annotation, final PsiAnnotation annotationTree, final Set<PsiNameIdentifierOwner> targets) = derivedMethods(tree).forEach(targets::add);
     
-    private static Stream<? extends PsiMethod> derivedMethods(final PsiModifierListOwner tree) = tree instanceof PsiMethod method ?
-            Stream.of(method.getContainingClass().getAllMethods())
-                    .cast(DerivedMethod.class)
-                    .filter(derived -> derived.source() == method) : Stream.empty();
+    private static Stream<? extends PsiMethod> derivedMethods(final PsiModifierListOwner tree) = tree instanceof PsiMethod method && method.getContainingClass() instanceof PsiClass containing ?
+            Stream.of(containing.getAllMethods()).cast(DerivedMethod.class).filter(derived -> derived.source() == method) : Stream.empty();
     
     @Hook(value = JavaFindUsagesHelper.class, isStatic = true)
     private static Hook.Result processElementUsages(final PsiElement element, final FindUsagesOptions options, final Processor<? super UsageInfo> processor) {

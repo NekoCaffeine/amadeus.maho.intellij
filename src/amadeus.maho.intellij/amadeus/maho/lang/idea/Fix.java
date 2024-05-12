@@ -27,6 +27,7 @@ import com.intellij.codeInspection.InspectionManager;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.redundantCast.RedundantCastInspection;
 import com.intellij.concurrency.JobLauncher;
+import com.intellij.debugger.engine.DebuggerUtils;
 import com.intellij.find.FindModel;
 import com.intellij.find.impl.FindInProjectUtil;
 import com.intellij.ide.actions.CopyTBXReferenceProvider;
@@ -47,12 +48,14 @@ import com.intellij.openapi.progress.ProgressIndicatorProvider;
 import com.intellij.openapi.progress.impl.CoreProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.roots.LanguageLevelProjectExtension;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.ThrowableComputable;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.impl.IdeFrameImpl;
 import com.intellij.psi.GenericsUtil;
 import com.intellij.psi.PsiAnnotation;
@@ -69,8 +72,10 @@ import com.intellij.psi.PsiFunctionalExpression;
 import com.intellij.psi.PsiImportStaticStatement;
 import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiLambdaExpression;
+import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
+import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiPackageAccessibilityStatement;
 import com.intellij.psi.PsiRecordComponent;
 import com.intellij.psi.PsiRecordHeader;
@@ -88,6 +93,8 @@ import com.intellij.psi.impl.PsiImplUtil;
 import com.intellij.psi.impl.PsiShortNamesCacheImpl;
 import com.intellij.psi.impl.RecordAugmentProvider;
 import com.intellij.psi.impl.compiled.ClsClassImpl;
+import com.intellij.psi.impl.compiled.ClsElementImpl;
+import com.intellij.psi.impl.compiled.ClsModifierListImpl;
 import com.intellij.psi.impl.compiled.ClsParsingUtil;
 import com.intellij.psi.impl.file.impl.FileManagerImpl;
 import com.intellij.psi.impl.java.JavaFunctionalExpressionIndex;
@@ -98,8 +105,10 @@ import com.intellij.psi.impl.search.AllClassesSearchExecutor;
 import com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.intellij.psi.impl.source.PsiFieldImpl;
+import com.intellij.psi.impl.source.SourceTreeToPsiMap;
 import com.intellij.psi.impl.source.resolve.ParameterTypeInferencePolicy;
 import com.intellij.psi.impl.source.tree.JavaElementType;
+import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.scope.conflictResolvers.JavaMethodsConflictResolver;
@@ -113,6 +122,7 @@ import com.intellij.ui.IconDeferrerImpl;
 import com.intellij.ui.LightweightHint;
 import com.intellij.ui.popup.PopupFactoryImpl;
 import com.intellij.util.Processor;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndexEx;
 import com.intellij.util.indexing.UnindexedFilesUpdater;
@@ -191,7 +201,7 @@ interface Fix {
     
     @Hook(value = ClassUtil.class, isStatic = true)
     private static Hook.Result findSubClass(final String name, @Hook.Reference PsiClass parent, final boolean jvmCompatible) {
-        if (parent instanceof ClsClassImpl clsClass && clsClass.getMirror() instanceof PsiClass psiClass) {
+        if (parent instanceof ClsClassImpl clsClass && clsClass.getNavigationElement() instanceof PsiClass psiClass) {
             parent = psiClass;
             return { };
         }
@@ -381,5 +391,40 @@ interface Fix {
     @Hook(at = @At(var = @At.VarInsn(opcode = Bytecodes.ASTORE, var = 3)), capture = true)
     private static JComponent guessBestPopupLocation(final @Nullable JComponent capture, final PopupFactoryImpl $this, final DataContext dataContext)
     = capture ?? (PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(dataContext) instanceof IdeFrameImpl frame ? frame.getComponent() : null);
+    
+    // avoid getQualifiedName crash
+    @Hook(forceReturn = true)
+    private static void setMirror(final ClsModifierListImpl $this, final TreeElement element) {
+        (Privilege) $this.setMirrorCheckingType(element, JavaElementType.MODIFIER_LIST);
+        final PsiAnnotation annotations[] = $this.getAnnotations(), mirrorAnnotations[] = SourceTreeToPsiMap.<PsiModifierList>treeToPsiNotNull(element).getAnnotations();
+        IDEAContext.runReadActionIgnoreDumbMode(() -> {
+            for (final PsiAnnotation annotation : annotations) {
+                final @Nullable String qualifiedName = annotation.getQualifiedName();
+                if (qualifiedName != null) {
+                    final @Nullable PsiAnnotation mirror = ContainerUtil.find(mirrorAnnotations, m -> qualifiedName.equals(m.getQualifiedName()));
+                    if (mirror != null)
+                        (Privilege) ClsElementImpl.setMirror(annotation, mirror);
+                }
+            }
+        });
+    }
+    
+    // avoid return null when IndexNotReadyException
+    @Hook(value = DebuggerUtils.class, isStatic = true, forceReturn = true)
+    private static PsiClass findClass(final String className, final Project project, final GlobalSearchScope scope, final boolean fallbackToAllScope) = IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+        if ((Privilege) DebuggerUtils.getArrayClass(className) != null)
+            return (Privilege) DebuggerUtils.getInstance().createArrayClass(project, LanguageLevelProjectExtension.getInstance(project).getLanguageLevel());
+        if (project.isDefault())
+            return null;
+        final String name = StringUtil.notNullize(StringUtil.substringBefore(className, "<"), className);
+        final PsiManager manager = PsiManager.getInstance(project);
+        PsiClass psiClass = ClassUtil.findPsiClass(manager, name, null, true, scope);
+        if (psiClass == null && fallbackToAllScope) {
+            final GlobalSearchScope globalScope = (Privilege) DebuggerUtils.getInstance().getFallbackAllScope(scope, project);
+            if (globalScope != null)
+                psiClass = ClassUtil.findPsiClass(manager, name, null, true, globalScope);
+        }
+        return psiClass;
+    });
     
 }

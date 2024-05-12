@@ -35,6 +35,7 @@ import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
 import amadeus.maho.lang.idea.handler.base.Handler;
 import amadeus.maho.lang.idea.light.LightField;
 import amadeus.maho.lang.idea.light.LightMethod;
+import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.dynamic.LookupHelper;
@@ -109,9 +110,12 @@ public abstract class PlaceholderHandler<A extends Annotation> extends BaseHandl
             super.check(tree, annotation, annotationTree, holder, quickFix);
             if (tree instanceof PsiClass psiClass)
                 Stream.of(psiClass.getFields())
-                        .filter(field -> field.hasAnnotation(BinaryMapping.Constant.class.getCanonicalName()) && field.hasAnnotation(BinaryMapping.ForWrite.class.getCanonicalName()))
-                        .forEach(field -> holder.registerProblem(field, "@Constant is incompatible with @ForWrite", ProblemHighlightType.GENERIC_ERROR,
-                                quickFix.createDeleteFix(field.getAnnotation(BinaryMapping.Constant.class.getCanonicalName()))));
+                        .filter(field -> field.hasAnnotation(BinaryMapping.ForWrite.class.getCanonicalName()))
+                        .forEach(field -> {
+                            final @Nullable PsiAnnotation constant = field.getAnnotation(BinaryMapping.Constant.class.getCanonicalName());
+                            if (constant != null)
+                                holder.registerProblem(field, "@Constant is incompatible with @ForWrite", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(constant));
+                        });
         }
         
         @Hook(value = HighlightUtil.class, isStatic = true)

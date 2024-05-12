@@ -9,7 +9,6 @@ import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ThreadReference;
 
 import com.intellij.debugger.engine.JavaStackFrame;
-import com.intellij.debugger.engine.evaluation.EvaluateException;
 import com.intellij.xdebugger.breakpoints.XBreakpoint;
 import com.intellij.xdebugger.frame.XSuspendContext;
 import com.intellij.xdebugger.impl.XDebugSessionImpl;
@@ -45,7 +44,7 @@ public interface BreakpointReached {
                                 return Hook.Result.FALSE;
                             }
                         }
-                } catch (final EvaluateException | ClassNotFoundException e) { DebugHelper.breakpoint(); }
+                } catch (final Throwable e) { DebugHelper.breakpoint(e); }
             }
         }
         return Hook.Result.VOID;

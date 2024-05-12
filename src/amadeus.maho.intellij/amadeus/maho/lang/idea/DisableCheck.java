@@ -120,7 +120,7 @@ interface DisableCheck {
     @Hook(value = InvokeThread.class, isStatic = true, forceReturn = true)
     private static void reportCommandError(final Throwable throwable) { }
     
-    @Hook(forceReturn = true)
+    @Hook(forceReturn = true, exactMatch = false)
     private static void inconsistencyDetected(final StubProcessingHelperBase $this, final ObjectStubTree stubTree, final PsiFileWithStubSupport support, final String extraMessage)
             = (Privilege) $this.onInternalError(support.getVirtualFile());
     

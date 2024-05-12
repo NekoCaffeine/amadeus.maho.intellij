@@ -57,6 +57,22 @@ public interface InspectionTool {
     @TransformProvider
     interface Provider {
         
+        @RequiredArgsConstructor
+        @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+        class MahoLocalInspectionToolWrapper extends LocalInspectionToolWrapper {
+            
+            InspectionTool.Checker checker;
+            
+            public MahoLocalInspectionToolWrapper(final InspectionTool.Checker checker) {
+                super(new MahoLocalInspectionTool(checker));
+                this.checker = checker;
+            }
+            
+            @Override
+            public MahoLocalInspectionToolWrapper createCopy() = { checker };
+            
+        }
+        
         Method
                 annotationCheck = LookupHelper.<BaseHandler, PsiElement, Annotation, PsiAnnotation, ProblemsHolder, QuickFixFactory>methodV6(BaseHandler::check),
                 syntaxCheck     = LookupHelper.<BaseSyntaxHandler, PsiElement, ProblemsHolder, QuickFixFactory, Boolean>methodV5(BaseSyntaxHandler::check);
@@ -68,10 +84,7 @@ public interface InspectionTool {
         
         @Hook
         private static void registerToolProviders(final InspectionToolRegistrar $this, final Map<Object, List<Function0<InspectionToolWrapper<?, ?>>>> factories)
-                = factories[Provider.class] = checkers().stream().map(checker -> (Function0<InspectionToolWrapper<?, ?>>) () -> new LocalInspectionToolWrapper(new MahoLocalInspectionTool(checker)) {
-            @Override
-            public LocalInspectionToolWrapper createCopy() = { new MahoLocalInspectionTool(checker) };
-        }).toList();
+                = factories[Provider.class] = checkers().stream().map(checker -> (Function0<InspectionToolWrapper<?, ?>>) () -> new MahoLocalInspectionToolWrapper(checker)).toList();
         
     }
     
@@ -131,6 +144,9 @@ public interface InspectionTool {
         public boolean isEnabledByDefault() = true;
         
         @Override
+        public @Nullable String getLanguage() = JavaLanguage.INSTANCE.getID();
+        
+        @Override
         public MahoLocalInspectionTool.Checker buildVisitor(final ProblemsHolder holder, final boolean isOnTheFly) = { checker, holder, isOnTheFly };
         
     }
@@ -185,6 +201,6 @@ public interface InspectionTool {
     
     @Hook
     private static Hook.Result getTokenizer(final JavaSpellcheckingStrategy $this, final PsiElement element)
-            = Hook.Result.falseToVoid(amadeus.maho.lang.idea.handler.base.Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isSuppressedSpellCheckingFor(element)), SpellcheckingStrategy.EMPTY_TOKENIZER);
+            = Hook.Result.falseToVoid(Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isSuppressedSpellCheckingFor(element)), SpellcheckingStrategy.EMPTY_TOKENIZER);
     
 }

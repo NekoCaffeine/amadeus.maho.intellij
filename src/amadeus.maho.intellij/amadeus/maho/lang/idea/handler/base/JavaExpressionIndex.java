@@ -21,6 +21,7 @@ import com.intellij.psi.SyntaxTraverser;
 import com.intellij.psi.impl.source.JavaFileElementType;
 import com.intellij.psi.impl.source.tree.ChildRole;
 import com.intellij.psi.impl.source.tree.java.PsiArrayAccessExpressionImpl;
+import com.intellij.psi.impl.source.tree.java.PsiArrayInitializerExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiAssignmentExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiBinaryExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiPolyadicExpressionImpl;
@@ -48,7 +49,6 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 
 import static amadeus.maho.lang.idea.IDEAContext.OperatorData.*;
-import static amadeus.maho.lang.idea.handler.base.JavaExpressionIndex.IndexTypes.indexTypes;
 
 public class JavaExpressionIndex extends FileBasedIndexExtension<String, JavaExpressionIndex.Offsets> {
     
@@ -58,7 +58,7 @@ public class JavaExpressionIndex extends FileBasedIndexExtension<String, JavaExp
     
     public record IndexType<E extends PsiExpression>(String name, Class<E> expressionType, Predicate<E> predicate = _ -> true) {
         
-        public IndexType { indexTypes.computeIfAbsent(expressionType, _ -> new CopyOnWriteArrayList<>()) += this; }
+        public IndexType { IndexTypes.indexTypes.computeIfAbsent(expressionType, _ -> new CopyOnWriteArrayList<>()) += this; }
         
         public static @Nullable PsiJavaToken token(final PsiExpression expression) = switch (expression) {
             case PsiUnaryExpression unaryExpression                               -> unaryExpression.getOperationSign();
@@ -66,6 +66,7 @@ public class JavaExpressionIndex extends FileBasedIndexExtension<String, JavaExp
             case PsiPolyadicExpressionImpl polyadicExpression                     -> polyadicExpression.findChildByRoleAsPsiElement(ChildRole.OPERATION_SIGN) instanceof PsiJavaToken token ? token : null;
             case PsiAssignmentExpressionImpl assignmentExpression                 -> assignmentExpression.getOperationSign();
             case PsiArrayAccessExpressionImpl accessExpression                    -> accessExpression.findChildByRoleAsPsiElement(ChildRole.LBRACKET) instanceof PsiJavaToken token ? token : null;
+            case PsiArrayInitializerExpressionImpl arrayInitializerExpression     -> arrayInitializerExpression.findChildByRoleAsPsiElement(ChildRole.LBRACE) instanceof PsiJavaToken token ? token : null;
             case AssignHandler.PsiArrayInitializerBackNewExpression newExpression -> newExpression.getArgumentList().getFirstChild() instanceof PsiJavaToken token ? token : null;
             case null,
                  default                                                          -> null;
@@ -78,6 +79,8 @@ public class JavaExpressionIndex extends FileBasedIndexExtension<String, JavaExp
         ConcurrentWeakIdentityHashMap<Class<?>, List<IndexType<?>>> indexTypes = { };
         
         JavaExpressionIndex.IndexType<AssignHandler.PsiArrayInitializerBackNewExpression> ASSIGN_NEW = { "assign-new", AssignHandler.PsiArrayInitializerBackNewExpression.class };
+        
+        { indexTypes.computeIfAbsent(PsiArrayInitializerExpressionImpl.class, _ -> new CopyOnWriteArrayList<>()) += ASSIGN_NEW; } // before transform ast
         
         Map<String, List<JavaExpressionIndex.IndexType>> operatorTypes = operatorName2operatorType.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> operatorName2expressionTypes[entry.getKey()].stream().map(expressionType -> new JavaExpressionIndex.IndexType(entry.getKey(), expressionType, expression -> {
@@ -105,7 +108,7 @@ public class JavaExpressionIndex extends FileBasedIndexExtension<String, JavaExp
                     .filter(PsiExpression.class)
                     .forEach(expression -> {
                         if (IndexType.token(expression) instanceof PsiJavaToken token && !OperatorOverloadingHandler.cannotOverload(token.getTokenType()))
-                            indexTypes[expression.getClass()]?.forEach(indexType -> {
+                            IndexTypes.indexTypes[expression.getClass()]?.forEach(indexType -> {
                                 if (((Predicate<PsiExpression>) indexType.predicate()).test(expression))
                                     mapping.computeIfAbsent(indexType.name(), _ -> new IntArrayList()).add(token.getNode().getStartOffset());
                             });

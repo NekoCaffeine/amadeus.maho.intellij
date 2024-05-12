@@ -1,6 +1,8 @@
 package amadeus.maho.lang.idea.handler;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -13,7 +15,14 @@ import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.RefCountHolder;
 import com.intellij.codeInsight.highlighting.ReadWriteAccessDetector;
 import com.intellij.codeInspection.OverwrittenKeyInspection;
+import com.intellij.codeInspection.dataFlow.DfaUtil;
+import com.intellij.codeInspection.dataFlow.JavaMethodContractUtil;
+import com.intellij.codeInspection.dataFlow.MethodContract;
+import com.intellij.codeInspection.dataFlow.java.JavaDfaValueFactory;
+import com.intellij.codeInspection.dataFlow.java.anchor.JavaExpressionAnchor;
+import com.intellij.codeInspection.dataFlow.java.inst.MethodCallInstruction;
 import com.intellij.codeInspection.dataFlow.jvm.problems.IndexOutOfBoundsProblem;
+import com.intellij.codeInspection.dataFlow.lang.DfaAnchor;
 import com.intellij.codeInspection.dataFlow.memory.DfaMemoryState;
 import com.intellij.codeInspection.dataFlow.types.DfGenericObjectType;
 import com.intellij.codeInspection.dataFlow.types.DfIntType;
@@ -54,12 +63,14 @@ import com.intellij.psi.PsiLambdaParameterType;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
+import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiParameter;
 import com.intellij.psi.PsiParameterList;
 import com.intellij.psi.PsiPolyadicExpression;
 import com.intellij.psi.PsiPostfixExpression;
 import com.intellij.psi.PsiPrefixExpression;
 import com.intellij.psi.PsiPrimitiveType;
+import com.intellij.psi.PsiReferenceExpression;
 import com.intellij.psi.PsiReturnStatement;
 import com.intellij.psi.PsiStatement;
 import com.intellij.psi.PsiSubstitutor;
@@ -95,6 +106,7 @@ import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.spellchecker.SpellCheckerManager;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.Processor;
 import com.intellij.util.indexing.FileBasedIndex;
 
@@ -110,6 +122,7 @@ import amadeus.maho.transform.mark.Redirect;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformProvider;
+import amadeus.maho.util.runtime.ArrayHelper;
 import amadeus.maho.util.runtime.DebugHelper;
 
 import com.siyeh.ig.controlflow.SimplifiableBooleanExpressionInspection;
@@ -136,7 +149,8 @@ public class OperatorOverloadingHandler {
         
         PsiExpression args[];
         
-        @Nullable OverloadInfo lower;
+        @Nullable
+        OverloadInfo lower;
         
     }
     
@@ -425,7 +439,7 @@ public class OperatorOverloadingHandler {
             return null;
         result.returnType = callType;
         result.expression = overloadCall;
-        result.args = expressions;
+        result.args = ArrayHelper.insert(expressions, expression);
         return result;
     });
     
@@ -590,7 +604,32 @@ public class OperatorOverloadingHandler {
         final @Nullable OverloadInfo info = overloadInfo(expression);
         if (info == null)
             return Hook.Result.VOID;
-        (info.lower?.expression ?? info.expression).accept($this);
+        final PsiMethodCallExpression methodCallExpression = info.lower?.expression ?? info.expression;
+        final PsiReferenceExpression methodExpression = methodCallExpression.getMethodExpression();
+        final JavaResolveResult result = methodExpression.advancedResolve(false);
+        final @Nullable PsiMethod method = ObjectUtils.tryCast(result.getElement(), PsiMethod.class);
+        final List<? extends MethodContract> contracts = method == null ? Collections.emptyList() : DfaUtil.addRangeContracts(method, JavaMethodContractUtil.getMethodCallContracts(method, methodCallExpression));
+        final PsiParameter[] parameters = method != null ? method.getParameterList().getParameters() : null;
+        final boolean isStatic = method != null && method.hasModifierProperty(PsiModifier.STATIC);
+        (Privilege) $this.startElement(expression);
+        (Privilege) $this.addConditionalErrorThrow();
+        for (int i = 0; i < info.args.length; i++) {
+            final PsiExpression arg = info.args[i];
+            arg.accept($this);
+            if (isStatic || i > 0)
+                (Privilege) $this.generateBoxingUnboxingInstructionFor(arg, result.getSubstitutor().substitute(parameters[i - (isStatic ? 0 : 1)].getType()));
+        }
+        if (isStatic)
+            (Privilege) $this.pushUnknown();
+        final JavaExpressionAnchor anchor = { expression };
+        (Privilege) $this.addInstruction(new MethodCallInstruction(methodCallExpression, JavaDfaValueFactory.getExpressionDfaValue((Privilege) $this.myFactory, expression), contracts) {
+            @Override
+            public @Nullable DfaAnchor getDfaAnchor() = anchor;
+        });
+        (Privilege) $this.processFailResult(method, contracts, expression);
+        (Privilege) $this.addMethodThrows(method);
+        (Privilege) $this.addNullCheck(expression);
+        (Privilege) $this.finishElement(expression);
         return Hook.Result.NULL;
     }
     
