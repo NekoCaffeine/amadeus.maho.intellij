@@ -29,18 +29,14 @@ import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.PsiAnonymousClass;
 import com.intellij.psi.PsiCall;
 import com.intellij.psi.PsiClass;
-import com.intellij.psi.PsiClassInitializer;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiCodeBlock;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpressionList;
-import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
-import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
-import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiReference;
 import com.intellij.psi.PsiResolveHelper;
 import com.intellij.psi.PsiReturnStatement;
@@ -76,6 +72,7 @@ import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.function.FunctionHelper;
 
+import static amadeus.maho.lang.idea.IDEAContext.inStaticContext;
 import static amadeus.maho.lang.idea.handler.SelfHandler.PRIORITY;
 
 @TransformProvider
@@ -268,13 +265,6 @@ public class SelfHandler extends BaseSyntaxHandler {
     public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
         if (tree instanceof PsiJavaCodeReferenceElement referenceElement && isSelfReference(referenceElement) && referenceElement.resolve() instanceof PsiClass && inStaticContext(tree))
             registerProblem(tree, holder);
-    }
-    
-    private static boolean inStaticContext(final PsiElement tree) {
-        final @Nullable PsiMember context = PsiTreeUtil.getContextOfType(tree, PsiClassImpl.class, PsiField.class, PsiMethod.class, PsiClassInitializer.class);
-        if (context != null && !(context instanceof PsiClass))
-            return context.hasModifierProperty(PsiModifier.STATIC);
-        return false;
     }
     
     private void registerProblem(final PsiElement tree, final ProblemsHolder holder)

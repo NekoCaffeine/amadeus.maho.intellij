@@ -30,6 +30,7 @@ import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiIdentifier;
@@ -37,9 +38,13 @@ import com.intellij.psi.PsiImportList;
 import com.intellij.psi.PsiImportStatement;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiJavaFile;
+import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
+import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiModifierListOwner;
+import com.intellij.psi.PsiReferenceExpression;
+import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeElement;
 import com.intellij.psi.PsiTypeParameterList;
@@ -69,16 +74,19 @@ import com.intellij.psi.util.PsiUtil;
 
 import amadeus.maho.core.Maho;
 import amadeus.maho.lang.AccessLevel;
+import amadeus.maho.lang.EqualsAndHashCode;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.RequiredArgsConstructor;
+import amadeus.maho.lang.ToString;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.handler.AccessibleHandler;
+import amadeus.maho.lang.idea.light.LightBridgeElement;
+import amadeus.maho.lang.idea.light.LightBridgeField;
 import amadeus.maho.lang.idea.light.LightBridgeMethod;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
-import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.bytecode.ASMHelper;
 import amadeus.maho.util.concurrent.ConcurrentWeakIdentityHashMap;
@@ -91,7 +99,7 @@ import amadeus.maho.util.runtime.ObjectHelper;
 import amadeus.maho.util.runtime.TypeHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
-import static amadeus.maho.lang.idea.IDEAContext.requiresMaho;
+import static amadeus.maho.lang.idea.IDEAContext.*;
 
 @TransformProvider
 public interface HandlerSupport {
@@ -189,7 +197,46 @@ public interface HandlerSupport {
     private static Hook.Result findInnerClassByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
             = checkBases ? Hook.Result.VOID : new Hook.Result(members($this).map(ExtensibleMembers.INNER_CLASSES)[name]?.stream()?.findFirst()?.orElse(null) ?? null);
     
-    @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true, metadata = @TransformMetadata(order = -1))
+    @ToString
+    @EqualsAndHashCode
+    record ProcessDeclarationsContext(boolean qualifier, PsiType type, PsiSubstitutor substitutor) { }
+    
+    static ProcessDeclarationsContext processDeclarationsContext(final PsiClass psiClass, final PsiElement place) {
+        boolean qualifier = false;
+        @Nullable PsiType type = null;
+        // Try to determine the caller type by context.
+        // The reason for getting caller types is the need to distinguish between array types or to infer generics.
+        // There's scope for improving the extrapolation process here.
+        // Currently the type of reference can only be inferred from the full reference name.
+        if (place instanceof PsiMethodCallExpression callExpression) {
+            final @Nullable PsiExpression expression = callExpression.getMethodExpression().getQualifierExpression();
+            if (expression != null) {
+                qualifier = true;
+                type = expression.getType();
+            }
+        } else if (place instanceof PsiReferenceExpression referenceExpression && referenceExpression.getQualifier() != null) {
+            final @Nullable PsiExpression expression = referenceExpression.getQualifierExpression();
+            if (expression != null) {
+                qualifier = true;
+                type = expression.getType();
+            }
+        }
+        // If the context type cannot be inferred, it is inferred by the given PsiClass.
+        if (type == null)
+            type = PsiTypesUtil.getClassType(psiClass);
+        // Used to apply the caller's generic infers to its parent class or interface.
+        PsiSubstitutor substitutor = PsiSubstitutor.EMPTY;
+        if (type instanceof PsiClassType classType) {
+            substitutor = classType.resolveGenerics().getSubstitutor();
+        } else {
+            final PsiType deepComponentType = type.getDeepComponentType();
+            if (deepComponentType instanceof PsiClassType classType)
+                substitutor = classType.resolveGenerics().getSubstitutor();
+        }
+        return { qualifier, type, substitutor };
+    }
+    
+    @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static boolean processDeclarationsInClass(
             final boolean capture,
             final PsiClass psiClass,
@@ -208,15 +255,24 @@ public interface HandlerSupport {
                 return true;
             if (!(processor instanceof MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
                 final ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
-                if (classHint == null || classHint.shouldProcess(ElementClassHint.DeclarationKind.METHOD)) {
-                    final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
-                    final @Nullable String name = nameHint == null ? null : nameHint.getName(state);
-                    final ExtensibleMembers members = members(extensible);
-                    final Stream<LightBridgeMethod> stream = members.map(ExtensibleMembers.BRIDGE_METHODS).values().stream()
-                            .filter(it -> !it.isEmpty())
-                            .map(it -> it[0])
-                            .filter(it -> members.map(ExtensibleMembers.METHODS)[ExtensibleMembers.MethodKey.of(it)] == null);
-                    return (name == null ? stream : stream.filter(method -> name.equals(method.getName()))).allMatch(method -> processor.execute(method, state));
+                final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
+                final @Nullable String name = nameHint?.getName(state) ?? null;
+                final boolean shouldProcessFields = classHint?.shouldProcess(ElementClassHint.DeclarationKind.FIELD) ?? true && (name == null || psiClass.findFieldByName(name, true) == null),
+                        shouldProcessMethods = classHint?.shouldProcess(ElementClassHint.DeclarationKind.METHOD) ?? true;
+                if (shouldProcessFields || shouldProcessMethods) {
+                    final ProcessDeclarationsContext context = processDeclarationsContext(psiClass, place);
+                    final List<? extends LightBridgeElement> bridgeElements = Stream.concat(Stream.of(extensible), supers(extensible).stream())
+                            .cast(PsiExtensibleClass.class)
+                            .map(HandlerSupport::members)
+                            .flatMap(members -> members.bridgeElements(context))
+                            .filter(member -> name?.equals(member.getName()) ?? true)
+                            .toList();
+                    return Stream.<PsiMember>concat(
+                                    shouldProcessFields ? bridgeElements.stream().cast(LightBridgeField.class)
+                                            .filter(it -> name != null || psiClass.findFieldByName(it.getName(), true) == null) : Stream.empty(),
+                                    shouldProcessMethods ? bridgeElements.stream().cast(LightBridgeMethod.class)
+                                            .filter(it -> psiClass.findMethodBySignature(it, true) == null) : Stream.empty())
+                            .allMatch(member -> processor.execute(member, state));
                 }
             }
         }
@@ -242,7 +298,8 @@ public interface HandlerSupport {
             
             PsiElement anchor;
             
-            @Nullable PsiAnnotation stopAt;
+            @Nullable
+            PsiAnnotation stopAt;
             
             @Override
             public int hashCode() = ObjectHelper.hashCode(anchor, stopAt);
@@ -465,7 +522,8 @@ public interface HandlerSupport {
         case PsiField ignored  -> range == Handler.Range.FIELD;
         case PsiMethod ignored -> range == Handler.Range.METHOD;
         case PsiClass ignored  -> range == Handler.Range.CLASS;
-        case null, default     -> false;
+        case null,
+             default     -> false;
     };
     
 }

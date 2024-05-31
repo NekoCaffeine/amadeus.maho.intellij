@@ -27,7 +27,6 @@ import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
@@ -35,7 +34,6 @@ import com.intellij.psi.PsiMethodReferenceExpression;
 import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiPrimitiveType;
-import com.intellij.psi.PsiReferenceExpression;
 import com.intellij.psi.PsiResolveHelper;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
@@ -58,7 +56,6 @@ import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.MethodSignatureBackedByPsiMethod;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.psi.util.PsiTypesUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 
@@ -181,43 +178,16 @@ public class ExtensionHandler extends BaseSyntaxHandler {
             final @Nullable ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
             if (classHint == null || classHint.shouldProcess(ElementClassHint.DeclarationKind.METHOD)) {
                 final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
-                final @Nullable String name = nameHint == null ? null : nameHint.getName(state); // TODO check name if non null
+                final @Nullable String name = nameHint == null ? null : nameHint.getName(state);
                 // Skip existing method signatures of that type.
                 final List<PsiClass> supers = supers(psiClass);
                 final Collection<PsiMethod> collect = supers.stream().map(IDEAContext::methods).flatMap(Collection::stream).collect(Collectors.toSet());
+                final HandlerSupport.ProcessDeclarationsContext context = HandlerSupport.processDeclarationsContext(psiClass, place);
                 // Elimination of duplicate signature methods.
                 // The purpose of differentiating providers is to report errors when multiple providers provide the same signature.
                 final HashMap<PsiClass, Collection<PsiMethod>> providerRecord = { };
-                @Nullable PsiType type = null;
-                // Try to determine the caller type by context.
-                // The reason for getting caller types is the need to distinguish between array types or to infer generics.
-                // There's scope for improving the extrapolation process here.
-                // Currently the type of reference can only be inferred from the full reference name.
-                if (place instanceof PsiMethodCallExpression callExpression) {
-                    final @Nullable PsiExpression expression = callExpression.getMethodExpression().getQualifierExpression();
-                    if (expression != null)
-                        type = expression.getType();
-                } else if (place instanceof PsiReferenceExpression referenceExpression && referenceExpression.getQualifier() != null) {
-                    final @Nullable PsiExpression expression = referenceExpression.getQualifierExpression();
-                    if (expression != null)
-                        type = expression.getType();
-                }
-                // If the context type cannot be inferred, it is inferred by the given PsiClass.
-                if (type == null)
-                    type = PsiTypesUtil.getClassType(psiClass);
-                // Used to apply the caller's generic infers to its parent class or interface.
-                PsiSubstitutor substitutor = PsiSubstitutor.EMPTY;
-                if (type instanceof PsiClassType classType) {
-                    substitutor = classType.resolveGenerics().getSubstitutor();
-                } else {
-                    final PsiType deepComponentType = type.getDeepComponentType();
-                    if (deepComponentType instanceof PsiClassType classType)
-                        substitutor = classType.resolveGenerics().getSubstitutor();
-                }
-                final PsiType finalType = type;
-                final PsiSubstitutor finalSubstitutor = substitutor;
                 return IDEAContext.computeReadActionIgnoreDumbMode(() -> {
-                    final Collection<ExtensionMethod> cache = memberCache(resolveScope, psiClass, finalType, supers, finalSubstitutor);
+                    final Collection<ExtensionMethod> cache = memberCache(resolveScope, psiClass, context.type(), supers, context.substitutor());
                     return (name == null ? cache.stream() : cache.stream().filter(method -> name.equals(method.getName())))
                             .filter(method -> checkMethod(collect, providerRecord, method))
                             .allMatch(method -> processor.execute(method, state));

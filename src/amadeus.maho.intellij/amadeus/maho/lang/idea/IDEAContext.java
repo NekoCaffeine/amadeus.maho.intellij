@@ -28,6 +28,7 @@ import com.intellij.psi.PsiArrayInitializerExpression;
 import com.intellij.psi.PsiArrayType;
 import com.intellij.psi.PsiCapturedWildcardType;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiClassInitializer;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiDiamondType;
 import com.intellij.psi.PsiDisjunctionType;
@@ -42,6 +43,7 @@ import com.intellij.psi.PsiJavaModule;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
+import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.PsiPrimitiveType;
@@ -54,6 +56,7 @@ import com.intellij.psi.PsiTypeVisitor;
 import com.intellij.psi.PsiTypeVisitorEx;
 import com.intellij.psi.PsiWildcardType;
 import com.intellij.psi.impl.source.JavaDummyHolder;
+import com.intellij.psi.impl.source.PsiClassImpl;
 import com.intellij.psi.impl.source.PsiExtensibleClass;
 import com.intellij.psi.impl.source.PsiImmediateClassType;
 import com.intellij.psi.impl.source.tree.CompositeElement;
@@ -69,7 +72,9 @@ import com.intellij.psi.tree.java.IJavaElementType;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.ClassUtil;
 import com.intellij.psi.util.InheritanceUtil;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
+import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.SmartList;
 import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndexEx;
@@ -454,6 +459,13 @@ public class IDEAContext {
             return factory.createType(psiClass);
     }
     
+    public static boolean inStaticContext(final PsiElement tree) {
+        final @Nullable PsiMember context = PsiTreeUtil.getContextOfType(tree, PsiClassImpl.class, PsiField.class, PsiMethod.class, PsiClassInitializer.class);
+        if (context != null && !(context instanceof PsiClass))
+            return context.hasModifierProperty(PsiModifier.STATIC);
+        return false;
+    }
+    
     public static List<PsiClass> supers(final PsiClass psiClass) = CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> Stream.concat(Stream.of(it),
             computeReadActionIgnoreDumbMode(() -> InheritanceUtil.getSuperClasses(it)).stream()).collect(Collectors.toList()));
     
@@ -533,6 +545,9 @@ public class IDEAContext {
             = lookupClass(context, name) instanceof PsiClass psiClass ? new PsiImmediateClassType(psiClass, PsiSubstitutor.EMPTY) : null;
     
     public static boolean marked(final PsiAnnotation annotation, final String mark) = annotation.resolveAnnotationType()?.hasAnnotation(mark) ?? false;
+    
+    public static String methodIdentity(final PsiMethod method) = CachedValuesManager.getProjectPsiDependentCache(method,
+            it -> it.getName() + Stream.of(it.getParameterList().getParameters()).map(parameter -> TypeConversionUtil.erasure(parameter.getType()).getCanonicalText()).collect(Collectors.joining(",", "(", ")")));
     
     public static void runReadActionIgnoreDumbMode(final Runnable runnable) {
         if (((Privilege) FileBasedIndexEx.ourDumbModeAccessTypeStack).get().contains(DumbModeAccessType.RELIABLE_DATA_ONLY))

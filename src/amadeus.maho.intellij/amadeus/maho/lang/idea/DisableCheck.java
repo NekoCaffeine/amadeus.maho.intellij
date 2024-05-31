@@ -33,8 +33,8 @@ import com.intellij.util.IdempotenceChecker;
 import com.intellij.util.SlowOperations;
 import com.intellij.util.concurrency.ThreadingAssertions;
 import com.intellij.util.indexing.ID;
+import com.intellij.util.indexing.projectFilter.ProjectIndexableFilesFilterHealthCheck;
 import com.intellij.util.ui.EDT;
-import com.intellij.vcs.log.data.index.IndexDiagnosticRunner;
 
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.SneakyThrows;
@@ -58,8 +58,11 @@ interface DisableCheck {
     @Hook(value = ThreadingAssertions.class, isStatic = true, exactMatch = false, forceReturn = true)
     private static void throwThreadAccessException() { }
     
-    @Hook(exactMatch = false, forceReturn = true)
-    private static void runDiagnostic(final IndexDiagnosticRunner $this) { }
+    @Hook(target = "com.intellij.vcs.log.data.index.IndexDiagnosticRunner", exactMatch = false, forceReturn = true)
+    private static void runDiagnostic(final Object $this) { }
+    
+    @Hook(forceReturn = true)
+    private static void launchHealthCheck(final ProjectIndexableFilesFilterHealthCheck $this) { }
     
     @Hook(value = PsiInvalidElementAccessException.class, isStatic = true, forceReturn = true)
     private static boolean isTrackingInvalidation() = false;

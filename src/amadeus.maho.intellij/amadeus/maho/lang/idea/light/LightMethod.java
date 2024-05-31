@@ -55,7 +55,7 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     
     @Nullable String mark;
     
-    boolean virtual, fieldInitialized;
+    boolean fieldInitialized;
     
     @Nullable PsiCodeBlock body;
     

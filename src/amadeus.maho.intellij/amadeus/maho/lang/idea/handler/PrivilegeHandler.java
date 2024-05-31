@@ -6,7 +6,6 @@ import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightFixUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightMethodUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
-import com.intellij.codeInsight.daemon.impl.analysis.RefCountHolder;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.dataFlow.java.ControlFlowAnalyzer;
 import com.intellij.debugger.engine.evaluation.expression.EvaluatorBuilderImpl;
@@ -96,7 +95,7 @@ public class PrivilegeHandler {
     private static Hook.Result isExpressionStatementExpression(final PsiElement element) = Hook.Result.falseToVoid(element instanceof PsiTypeCastExpression castExpression && isPrivilegeTypeCast(castExpression));
     
     @Hook(value = HighlightMethodUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static @Nullable HighlightInfo.Builder checkConstructorCallsBaseClassConstructor(final @Nullable HighlightInfo.Builder capture, final PsiMethod method, final RefCountHolder holder, final PsiResolveHelper resolveHelper) {
+    private static @Nullable HighlightInfo.Builder checkConstructorCallsBaseClassConstructor(final @Nullable HighlightInfo.Builder capture, final PsiMethod method, final PsiResolveHelper resolveHelper) {
         if (capture != null && method.isConstructor() && method.hasAnnotation(Privilege.class.getCanonicalName())) {
             final @Nullable PsiClass superClass = method.getContainingClass()?.getSuperClass() ?? null;
             if (superClass != null && Stream.of(superClass.getMethods())

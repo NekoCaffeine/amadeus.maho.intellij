@@ -84,6 +84,7 @@ import com.intellij.psi.formatter.java.ArrayInitializerBlocksBuilder;
 import com.intellij.psi.formatter.java.BlockContainingJavaBlock;
 import com.intellij.psi.formatter.java.JavaSpacePropertyProcessor;
 import com.intellij.psi.impl.BlockSupportImpl;
+import com.intellij.psi.impl.DiffLog;
 import com.intellij.psi.impl.source.DummyHolderFactory;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.intellij.psi.impl.source.PsiMethodImpl;
@@ -158,6 +159,9 @@ public class AssignHandler extends BaseSyntaxHandler {
                 return type == JavaTokenType.LBRACE ? ChildRole.LBRACE : type == JavaTokenType.RBRACE ? ChildRole.RBRACE : super.getChildRole(child);
             }
             
+            @Override
+            public boolean isValid() = true;
+            
         }
         
         public static class ReferenceParameterList extends PsiReferenceParameterListImpl {
@@ -167,6 +171,9 @@ public class AssignHandler extends BaseSyntaxHandler {
                 final IElementType type = child.getElementType();
                 return type == JavaTokenType.LBRACE ? ChildRole.LBRACE : type == JavaTokenType.RBRACE ? ChildRole.RBRACE : super.getChildRole(child);
             }
+            
+            @Override
+            public boolean isValid() = true;
             
         }
         
@@ -225,6 +232,9 @@ public class AssignHandler extends BaseSyntaxHandler {
             
             @Override
             public void fullyQualify(final PsiClass targetClass) { }
+            
+            @Override
+            public boolean isValid() = true;
             
         }
         
@@ -289,6 +299,9 @@ public class AssignHandler extends BaseSyntaxHandler {
             public boolean equals(final Object obj) = obj instanceof PsiPolyVariantCachingReference reference && getElement() == reference.getElement();
             
         });
+        
+        @Override
+        public boolean isValid() = true;
         
     }
     
@@ -413,6 +426,10 @@ public class AssignHandler extends BaseSyntaxHandler {
         }
         return Hook.Result.VOID;
     }
+    
+    @Hook
+    private static Hook.Result nodeReplaced(final DiffLog $this, final ASTNode oldNode, final ASTNode newNode)
+            = Hook.Result.falseToVoid(oldNode instanceof PsiArrayInitializerBackNewExpression && newNode instanceof PsiArrayInitializerExpression && oldNode.getText().equals(newNode.getText()), null);
     
     // There is also room for optimization, by limiting the traversal depth and skipping nested expressions
     @Override

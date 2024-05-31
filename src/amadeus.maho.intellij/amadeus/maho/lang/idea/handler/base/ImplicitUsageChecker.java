@@ -4,13 +4,8 @@ import java.util.List;
 import java.util.Set;
 
 import com.intellij.codeInsight.daemon.ImplicitUsageProvider;
-import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerEx;
-import com.intellij.codeInsight.daemon.impl.analysis.RefCountHolder;
+import com.intellij.codeInsight.daemon.impl.analysis.LocalRefUseInfo;
 import com.intellij.codeInspection.canBeFinal.CanBeFinalHandler;
-import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.TextRange;
-import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMember;
@@ -22,6 +17,7 @@ import com.intellij.util.containers.MultiMap;
 
 import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
+import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.lang.idea.light.LightElement;
@@ -33,11 +29,12 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 @TransformProvider
 public class ImplicitUsageChecker extends CanBeFinalHandler implements ImplicitUsageProvider {
     
+    @Getter
     @RequiredArgsConstructor
     @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
     public static class RefData {
         
-        RefCountHolder inner;
+        LocalRefUseInfo inner;
         
         public MultiMap<PsiElement, PsiReference> localRefMap() = (Privilege) inner.myLocalRefsMap;
         
@@ -46,17 +43,12 @@ public class ImplicitUsageChecker extends CanBeFinalHandler implements ImplicitU
     private static @Nullable RefData refData(final PsiElement element) {
         @Nullable PsiFile file = PsiTreeUtil.getParentOfType(element, PsiFile.class);
         if (file == null && element instanceof LightElement lightElement)
-            file = lightElement.equivalents().stream()
+            file = ~lightElement.equivalents().stream()
                     .map(it -> PsiTreeUtil.getParentOfType(it, PsiFile.class))
-                    .nonnull()
-                    .findFirst()
-                    .orElse(null);
+                    .nonnull();
         if (file == null)
             return null;
-        final Project project = element.getProject();
-        final Document document = PsiDocumentManager.getInstance(project).getDocument(file);
-        final @Nullable TextRange dirtyScope = document == null ? null : DaemonCodeAnalyzerEx.getInstanceEx(project).getFileStatusMap().getFileDirtyScope(document, file, com.intellij.codeHighlighting.Pass.UPDATE_ALL);
-        return { (Privilege) RefCountHolder.get(file, dirtyScope ?? file.getTextRange()) };
+        return { LocalRefUseInfo.forFile(file) };
     }
     
     @Override

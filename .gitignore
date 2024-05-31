@@ -17,5 +17,6 @@
 /intellij.run/Project_Default.xml
 /intellij.run/tmp/
 /ddlc/
+/copilot/
 hs_err*
 *.iml

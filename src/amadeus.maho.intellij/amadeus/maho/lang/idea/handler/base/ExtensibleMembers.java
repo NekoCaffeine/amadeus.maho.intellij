@@ -37,7 +37,7 @@ import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.lang.ToString;
 import amadeus.maho.lang.idea.IDEAContext;
-import amadeus.maho.lang.idea.light.LightBridgeMethod;
+import amadeus.maho.lang.idea.light.LightBridgeElement;
 import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.util.function.FunctionHelper;
@@ -56,6 +56,13 @@ public class ExtensibleMembers {
         public static MethodKey of(final PsiMethod method) = { method.getName(), Stream.of(method.getParameterList().getParameters()).map(PsiParameter::getType).toArray(PsiType::createArray) };
         
         public static MethodKey recursive(final PsiMethod method) = { method.getName() };
+        
+    }
+    
+    @FunctionalInterface
+    public interface BridgeProvider {
+        
+        List<? extends LightBridgeElement> provide(HandlerSupport.ProcessDeclarationsContext context);
         
     }
     
@@ -84,9 +91,6 @@ public class ExtensibleMembers {
     public static final Namespace<String, PsiField>
             FIELDS = { "fields", String.class, PsiField.class, PsiField::getName, stream(PsiExtensibleClass::getOwnFields) };
     
-    public static final Namespace<MethodKey, LightBridgeMethod>
-            BRIDGE_METHODS = { "bridgeMethods", MethodKey.class, LightBridgeMethod.class, MethodKey::of, _ -> Stream.empty() };
-    
     public static final Namespace<MethodKey, PsiMethod>
             METHODS = { "methods", MethodKey.class, PsiMethod.class, MethodKey::of, MethodKey::recursive, stream(PsiExtensibleClass::getOwnMethods), ExtensibleMembers::implicitAdditionalMethods };
     
@@ -103,6 +107,8 @@ public class ExtensibleMembers {
     
     Map<Namespace, List<PsiMember>> namespaceMap = namespaces().stream().collect(Collectors.toMap(Function.identity(), FunctionHelper.abandon(ArrayList::new), FunctionHelper.first(), IdentityHashMap::new));
     
+    List<BridgeProvider> bridgeProviders = new ArrayList<>();
+    
     { buildMap(recursive); }
     
     public <K, E extends PsiMember> Map<K, List<E>> map(final Namespace<K, E> namespace) = (Map<K, List<E>>) (Map) namespaceNamedMap[namespace] ?? Map.<K, List<E>>of();
@@ -118,6 +124,10 @@ public class ExtensibleMembers {
         list(namespace) += member;
         process(member);
     }
+    
+    public void injectBridgeProvider(final BridgeProvider provider) = bridgeProviders += provider;
+    
+    public Stream<? extends LightBridgeElement> bridgeElements(final HandlerSupport.ProcessDeclarationsContext context) = bridgeProviders.stream().flatMap(provider -> provider.provide(context).stream());
     
     public static LightMethod makeValuesMethod(final PsiExtensibleClass extensible) {
         final LightMethod method = { extensible, "values" };

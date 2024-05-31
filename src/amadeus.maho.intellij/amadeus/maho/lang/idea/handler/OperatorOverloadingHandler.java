@@ -12,7 +12,7 @@ import java.util.stream.Stream;
 import com.intellij.codeInsight.ExceptionUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightControlFlowUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
-import com.intellij.codeInsight.daemon.impl.analysis.RefCountHolder;
+import com.intellij.codeInsight.daemon.impl.analysis.LocalRefUseInfo;
 import com.intellij.codeInsight.highlighting.ReadWriteAccessDetector;
 import com.intellij.codeInspection.OverwrittenKeyInspection;
 import com.intellij.codeInspection.dataFlow.DfaUtil;
@@ -241,10 +241,10 @@ public class OperatorOverloadingHandler {
     @Hook(value = HighlightControlFlowUtil.class, isStatic = true)
     private static Hook.Result checkCannotWriteToFinal(final PsiExpression expr, final PsiFile containingFile) = Hook.Result.falseToVoid(overloadInfo(expr) != null, null);
     
-    // # RefCountHolder
+    // # LocalRefUseInfo
     
     // fix local.variable.is.not.used.for.reading
-    @Hook(value = RefCountHolder.class, isStatic = true)
+    @Hook(value = LocalRefUseInfo.class, isStatic = true)
     private static Hook.Result isJustIncremented(final ReadWriteAccessDetector.Access access, final PsiElement refElement) = avoid(refElement.getParent(), false);
     
     // # EvaluatorBuilderImpl
@@ -467,7 +467,6 @@ public class OperatorOverloadingHandler {
     
     @Hook(value = JavaFindUsagesHelper.class, isStatic = true)
     private static void processElementUsages(final PsiElement element, final FindUsagesOptions options, final Processor<? super UsageInfo> processor) {
-        // System.out.println(element);
         if (options instanceof JavaMethodFindUsagesOptions methodOptions && element instanceof PsiMethod method) {
             final PsiMethod target = element instanceof ClsMethodImpl clsMethod ? clsMethod.getSourceMirrorMethod() ?? method : method;
             if (!target.isConstructor()) {
