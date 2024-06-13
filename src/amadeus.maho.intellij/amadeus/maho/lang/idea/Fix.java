@@ -138,7 +138,6 @@ import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.bytecode.ASMHelper;
-import amadeus.maho.util.bytecode.Bytecodes;
 import amadeus.maho.util.runtime.ArrayHelper;
 
 import com.siyeh.ig.BaseInspectionVisitor;
@@ -388,7 +387,7 @@ interface Fix {
     private static boolean sleepIfNeededToGivePriorityToAnotherThread(final CoreProgressManager $this) = false;
     
     // IllegalArgumentException: focusOwner == null
-    @Hook(at = @At(var = @At.VarInsn(opcode = Bytecodes.ASTORE, var = 3)), capture = true)
+    @Hook(at = @At(var = @At.VarInsn(opcode = ASTORE, var = 3)), capture = true)
     private static JComponent guessBestPopupLocation(final @Nullable JComponent capture, final PopupFactoryImpl $this, final DataContext dataContext)
     = capture ?? (PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(dataContext) instanceof IdeFrameImpl frame ? frame.getComponent() : null);
     

@@ -67,7 +67,7 @@ public class ResourceBundleHandler extends BaseHandler<ResourceBundle> {
             if (stringClass == null)
                 return;
             final List<List<PsiClass>> agentParameters = List.of(List.of(stringClass), List.of(stringClass, stringClass));
-            Stream.concat(new LinkedIterator<>(PsiClass::getSuperClass, tree).stream(true), supers(tree).stream().filter(PsiClass::isInterface))
+            Stream.concat(LinkedIterator.of(PsiClass::getSuperClass, tree).stream(true), supers(tree).stream().filter(PsiClass::isInterface))
                     .map(IDEAContext::methods)
                     .flatMap(Collection::stream)
                     .filter(method -> method.getReturnType() != null)

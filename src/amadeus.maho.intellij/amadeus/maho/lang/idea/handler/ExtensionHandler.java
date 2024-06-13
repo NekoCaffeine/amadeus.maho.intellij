@@ -2,7 +2,6 @@ package amadeus.maho.lang.idea.handler;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,18 +37,11 @@ import com.intellij.psi.PsiResolveHelper;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeParameter;
-import com.intellij.psi.PsiTypeParameterList;
-import com.intellij.psi.ResolveState;
-import com.intellij.psi.impl.PsiClassImplUtil;
 import com.intellij.psi.impl.java.stubs.index.JavaAnnotationIndex;
 import com.intellij.psi.impl.light.LightTypeParameterListBuilder;
 import com.intellij.psi.impl.source.PsiExtensibleClass;
 import com.intellij.psi.impl.source.PsiImmediateClassType;
 import com.intellij.psi.infos.MethodCandidateInfo;
-import com.intellij.psi.scope.ElementClassHint;
-import com.intellij.psi.scope.NameHint;
-import com.intellij.psi.scope.PsiScopeProcessor;
-import com.intellij.psi.scope.processor.MethodResolverProcessor;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
@@ -73,15 +65,12 @@ import amadeus.maho.lang.idea.light.LightMethod;
 import amadeus.maho.lang.idea.light.LightParameter;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
-import amadeus.maho.transform.mark.base.At;
-import amadeus.maho.transform.mark.base.TransformMetadata;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.function.FunctionHelper;
 import amadeus.maho.util.runtime.DebugHelper;
 import amadeus.maho.util.tuple.Tuple;
 import amadeus.maho.util.tuple.Tuple2;
 
-import static amadeus.maho.lang.idea.IDEAContext.*;
 import static amadeus.maho.lang.idea.handler.ExtensionHandler.PRIORITY;
 
 @TransformProvider
@@ -158,44 +147,44 @@ public class ExtensionHandler extends BaseSyntaxHandler {
     
     public static PsiElement getSource(final PsiElement element) = element instanceof ExtensionMethod extensionMethod ? extensionMethod.sourceMethod() : element;
     
-    @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true, metadata = @TransformMetadata(order = -1))
-    private static boolean processDeclarationsInClass(
-            final boolean capture,
-            final PsiClass psiClass,
-            final PsiScopeProcessor processor,
-            final ResolveState state,
-            final @Nullable Set<PsiClass> visited,
-            final @Nullable PsiElement last,
-            final PsiElement place,
-            final LanguageLevel languageLevel,
-            final boolean isRaw,
-            final GlobalSearchScope resolveScope) {
-        if (!capture)
-            return false;
-        if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList && psiClass.getModifierList() == last || visited != null && visited.contains(psiClass))
-            return true;
-        if (!(processor instanceof MethodResolverProcessor methodResolverProcessor && methodResolverProcessor.isConstructor()) && requiresMaho(place)) {
-            final @Nullable ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
-            if (classHint == null || classHint.shouldProcess(ElementClassHint.DeclarationKind.METHOD)) {
-                final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
-                final @Nullable String name = nameHint == null ? null : nameHint.getName(state);
-                // Skip existing method signatures of that type.
-                final List<PsiClass> supers = supers(psiClass);
-                final Collection<PsiMethod> collect = supers.stream().map(IDEAContext::methods).flatMap(Collection::stream).collect(Collectors.toSet());
-                final HandlerSupport.ProcessDeclarationsContext context = HandlerSupport.processDeclarationsContext(psiClass, place);
-                // Elimination of duplicate signature methods.
-                // The purpose of differentiating providers is to report errors when multiple providers provide the same signature.
-                final HashMap<PsiClass, Collection<PsiMethod>> providerRecord = { };
-                return IDEAContext.computeReadActionIgnoreDumbMode(() -> {
-                    final Collection<ExtensionMethod> cache = memberCache(resolveScope, psiClass, context.type(), supers, context.substitutor());
-                    return (name == null ? cache.stream() : cache.stream().filter(method -> name.equals(method.getName())))
-                            .filter(method -> checkMethod(collect, providerRecord, method))
-                            .allMatch(method -> processor.execute(method, state));
-                });
-            }
-        }
-        return true;
-    }
+    // @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true, metadata = @TransformMetadata(order = -1))
+    // private static boolean processDeclarationsInClass(
+    //         final boolean capture,
+    //         final PsiClass psiClass,
+    //         final PsiScopeProcessor processor,
+    //         final ResolveState state,
+    //         final @Nullable Set<PsiClass> visited,
+    //         final @Nullable PsiElement last,
+    //         final PsiElement place,
+    //         final LanguageLevel languageLevel,
+    //         final boolean isRaw,
+    //         final GlobalSearchScope resolveScope) {
+    //     if (!capture)
+    //         return false;
+    //     if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList && psiClass.getModifierList() == last || visited != null && visited.contains(psiClass))
+    //         return true;
+    //     if (!(processor instanceof MethodResolverProcessor methodResolverProcessor && methodResolverProcessor.isConstructor()) && requiresMaho(place)) {
+    //         final @Nullable ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
+    //         if (classHint == null || classHint.shouldProcess(ElementClassHint.DeclarationKind.METHOD)) {
+    //             final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
+    //             final @Nullable String name = nameHint == null ? null : nameHint.getName(state);
+    //             // Skip existing method signatures of that type.
+    //             final List<PsiClass> supers = supers(psiClass);
+    //             final Collection<PsiMethod> collect = supers.stream().map(IDEAContext::methods).flatMap(Collection::stream).collect(Collectors.toSet());
+    //             final ClassDeclarationsProcessor.ProcessDeclarationsContext context = ClassDeclarationsProcessor.processDeclarationsContext(psiClass, place);
+    //             // Elimination of duplicate signature methods.
+    //             // The purpose of differentiating providers is to report errors when multiple providers provide the same signature.
+    //             final HashMap<PsiClass, Collection<PsiMethod>> providerRecord = { };
+    //             return IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+    //                 final Collection<ExtensionMethod> cache = memberCache(resolveScope, psiClass, context.type(), supers, context.substitutor());
+    //                 return (name == null ? cache.stream() : cache.stream().filter(method -> name.equals(method.getName())))
+    //                         .filter(method -> checkMethod(collect, providerRecord, method))
+    //                         .allMatch(method -> processor.execute(method, state));
+    //             });
+    //         }
+    //     }
+    //     return true;
+    // }
     
     public static Collection<ExtensionMethod> memberCache(final GlobalSearchScope resolveScope, final PsiClass psiClass, final PsiType type, final List<PsiClass> supers, final PsiSubstitutor substitutor) {
         if (ASTTransformer.collectGuard.get().get() != 0 || ASTTransformer.loadTreeGuard.get().get() != 0)
@@ -224,7 +213,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                 }).collect(Collectors.toList()))).get();
     }
     
-    private static boolean checkMethod(final Collection<PsiMethod> members, final Map<PsiClass, Collection<PsiMethod>> record, final PsiMethod methodTree) {
+    public static boolean checkMethod(final Collection<PsiMethod> members, final Map<PsiClass, Collection<PsiMethod>> record, final PsiMethod methodTree) {
         final PsiElement navigation = methodTree.getNavigationElement();
         final PsiMethod method = navigation == methodTree ? methodTree : navigation instanceof PsiMethod navigationMethod ? navigationMethod : methodTree;
         final Collection<PsiMethod> collection = record.computeIfAbsent(method.getContainingClass(), FunctionHelper.abandon(ArrayList::new));

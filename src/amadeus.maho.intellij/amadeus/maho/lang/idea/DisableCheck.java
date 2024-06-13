@@ -7,6 +7,8 @@ import com.intellij.codeInsight.completion.CompletionPhase;
 import com.intellij.codeInsight.completion.impl.CompletionServiceImpl;
 import com.intellij.codeInsight.daemon.impl.analysis.AnnotationsHighlightUtil;
 import com.intellij.debugger.impl.InvokeThread;
+import com.intellij.diagnostic.EventWatcher;
+import com.intellij.diagnostic.EventWatcherService;
 import com.intellij.diagnostic.LoadingState;
 import com.intellij.idea.SystemHealthMonitorKt;
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
@@ -15,6 +17,8 @@ import com.intellij.openapi.application.TransactionGuardImpl;
 import com.intellij.openapi.application.impl.ApplicationImpl;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.impl.CoreProgressManager;
 import com.intellij.openapi.project.NoAccessDuringPsiEvents;
 import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Key;
@@ -57,6 +61,12 @@ interface DisableCheck {
     
     @Hook(value = ThreadingAssertions.class, isStatic = true, exactMatch = false, forceReturn = true)
     private static void throwThreadAccessException() { }
+    
+    @Hook(value = CoreProgressManager.class, isStatic = true, forceReturn = true)
+    private static void assertUnderProgress(final ProgressIndicator indicator) { }
+    
+    @Hook(value = EventWatcherService.class, isStatic = true, forceReturn = true)
+    private static EventWatcher[] createWatchersAccordingToConfiguration() = new EventWatcher[0];
     
     @Hook(target = "com.intellij.vcs.log.data.index.IndexDiagnosticRunner", exactMatch = false, forceReturn = true)
     private static void runDiagnostic(final Object $this) { }

@@ -43,17 +43,17 @@ public class IncludeHandler extends BaseHandler<Include> {
                         .filter(member -> member.hasModifierProperty(PsiModifier.PUBLIC) && member.hasModifierProperty(PsiModifier.STATIC))
                         .filter(members::shouldInject)
                         .map(member -> (LightBridgeElement) switch (member) {
-                            case PsiMethod method -> new LightBridgeMethod(context, method, PsiSubstitutor.EMPTY, annotationTree)
+                            case PsiMethod method -> new LightBridgeMethod(context, method, PsiSubstitutor.EMPTY, annotationTree, method)
                                     .addModifier(PsiModifier.PUBLIC)
                                     .addModifier(PsiModifier.STATIC)
                                     .let(it -> it.setMethodKind(handler().value().getCanonicalName()));
-                            case PsiField field   -> new LightBridgeField(context, field.getName(), field.getType())
+                            case PsiField field   -> new LightBridgeField(context, field.getName(), field.getType(), annotationTree, field)
                                     .addModifier(PsiModifier.PUBLIC)
                                     .addModifier(PsiModifier.STATIC);
                             default               -> throw DebugHelper.breakpointBeforeThrow(new UnsupportedOperationException(STR."member: \{member}"));
                         }))
                 .toList();
-        members.injectBridgeProvider(_ -> injectBridgeElements);
+        members.injectBridgeProvider((_, _) -> injectBridgeElements);
     }
     
 }

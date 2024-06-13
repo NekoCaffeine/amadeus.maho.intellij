@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -23,7 +24,7 @@ import com.intellij.psi.PsiParameter;
 import com.intellij.psi.PsiRecordComponent;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.augment.PsiAugmentProvider;
-import com.intellij.psi.impl.source.PsiExtensibleClass;
+import com.intellij.psi.impl.PsiClassImplUtil;
 import com.intellij.psi.impl.source.PsiFieldImpl;
 import com.intellij.psi.impl.source.PsiMethodImpl;
 import com.intellij.psi.impl.source.tree.ChildRole;
@@ -62,14 +63,14 @@ public class ExtensibleMembers {
     @FunctionalInterface
     public interface BridgeProvider {
         
-        List<? extends LightBridgeElement> provide(HandlerSupport.ProcessDeclarationsContext context);
+        List<? extends LightBridgeElement> provide(ClassDeclarationsProcessor.ProcessDeclarationsContext context, boolean staticOnly);
         
     }
     
     @ToString
     @EqualsAndHashCode
     public record Namespace<K, E extends PsiMember>(String name, Class<K> keyType, Class<E> memberType, Function<E, K> keyMapper, Function<E, K> recursiveKeyMapper = keyMapper,
-                                                    Function<PsiExtensibleClass, Stream<E>> ownerMembersGetter, Function<PsiExtensibleClass, Stream<E>> implicitAdditionalElementsGetter = _ -> Stream.empty()) {
+                                                    Function<PsiClass, Stream<E>> ownerMembersGetter, Function<PsiClass, Stream<E>> implicitAdditionalElementsGetter = _ -> Stream.empty()) {
         
         public Namespace { namespaces += this; }
         
@@ -82,24 +83,25 @@ public class ExtensibleMembers {
     
     public static Namespace lookupNamespace(final Class<? extends PsiMember> memberType) = namespaces().stream().filter(namespace -> namespace.memberType().isAssignableFrom(memberType)).findFirst().orElseThrow();
     
-    public static <E> Function<PsiExtensibleClass, Stream<E>> stream(final Function<PsiExtensibleClass, List<E>> ownerElementGetter, final Predicate<E> predicate = _ -> true)
+    public static <E> Function<PsiClass, Stream<E>> stream(final Function<PsiClass, Collection<E>> ownerElementGetter, final Predicate<E> predicate = _ -> true)
             = extensible -> ownerElementGetter.apply(extensible).stream().filter(predicate);
     
     public static final Namespace<String, PsiClass>
-            INNER_CLASSES = { "innerClasses", String.class, PsiClass.class, PsiClass::getName, stream(PsiExtensibleClass::getOwnInnerClasses) };
+            INNER_CLASSES = { "innerClasses", String.class, PsiClass.class, PsiClass::getName, stream(IDEAContext::innerClasses) };
     
     public static final Namespace<String, PsiField>
-            FIELDS = { "fields", String.class, PsiField.class, PsiField::getName, stream(PsiExtensibleClass::getOwnFields) };
+            FIELDS = { "fields", String.class, PsiField.class, PsiField::getName, stream(IDEAContext::fields) };
     
     public static final Namespace<MethodKey, PsiMethod>
-            METHODS = { "methods", MethodKey.class, PsiMethod.class, MethodKey::of, MethodKey::recursive, stream(PsiExtensibleClass::getOwnMethods), ExtensibleMembers::implicitAdditionalMethods };
+            METHODS = { "methods", MethodKey.class, PsiMethod.class, MethodKey::of, MethodKey::recursive, stream(IDEAContext::methods), ExtensibleMembers::implicitAdditionalMethods };
     
     public static final Namespace<String, PsiRecordComponent>
             RECORD_COMPONENTS = { "recordComponents", String.class, PsiRecordComponent.class, PsiRecordComponent::getName, extensible -> Stream.of(extensible.getRecordHeader()?.getRecordComponents() ?? PsiRecordComponent.EMPTY_ARRAY) };
     
     @Getter
-    PsiExtensibleClass extensible;
+    PsiClass context;
     
+    @Getter
     @Default
     boolean recursive = false;
     
@@ -115,6 +117,16 @@ public class ExtensibleMembers {
     
     public <K, E extends PsiMember> List<E> list(final Namespace<K, E> namespace) = (List<E>) namespaceMap[namespace] ?? List.<E>of();
     
+    public <K, E extends PsiMember> List<E> list(final Namespace<K, E> namespace, final String name) {
+        if (namespace == METHODS)
+            return list(namespace).stream().filter(method -> name.equals(method.getName())).toList();
+        return ((Map<String, List<E>>) map(namespace))[name] ?? List.<E>of();
+    }
+    
+    public <K, E extends PsiMember> @Nullable E lookup(final Namespace<K, E> namespace, final K key) = map(namespace)[key]?.getFirst() ?? null;
+    
+    public <K, E extends PsiMember> E[] lookupAll(final Namespace<K, E> namespace, final Predicate<E> predicate, final IntFunction<E[]> arrayFactory) = list(namespace).stream().filter(predicate).toArray(arrayFactory);
+    
     public <K, E extends PsiMember> boolean shouldInject(final Namespace<K, E> namespace, final K key) = map(namespace)[key]?.isEmpty() ?? true;
     
     public <K, E extends PsiMember> boolean shouldInject(final E member, final Namespace<K, E> namespace = lookupNamespace(member)) = shouldInject(namespace, namespace.keyMapper().apply(member));
@@ -127,43 +139,44 @@ public class ExtensibleMembers {
     
     public void injectBridgeProvider(final BridgeProvider provider) = bridgeProviders += provider;
     
-    public Stream<? extends LightBridgeElement> bridgeElements(final HandlerSupport.ProcessDeclarationsContext context) = bridgeProviders.stream().flatMap(provider -> provider.provide(context).stream());
+    public Stream<? extends LightBridgeElement> bridgeElements(final ClassDeclarationsProcessor.ProcessDeclarationsContext context, final boolean staticOnly)
+            = bridgeProviders.stream().flatMap(provider -> provider.provide(context, staticOnly).stream());
     
-    public static LightMethod makeValuesMethod(final PsiExtensibleClass extensible) {
-        final LightMethod method = { extensible, "values" };
-        method.setNavigationElement(extensible);
+    public static LightMethod makeValuesMethod(final PsiClass context) {
+        final LightMethod method = { context, "values" };
+        method.setNavigationElement(context);
         method.mark(ExtensibleMembers.class.getSimpleName());
-        method.setContainingClass(extensible);
-        method.setMethodReturnType(JavaPsiFacade.getElementFactory(extensible.getProject()).createType(extensible).createArrayType());
+        method.setContainingClass(context);
+        method.setMethodReturnType(JavaPsiFacade.getElementFactory(context.getProject()).createType(context).createArrayType());
         method.addModifiers(PUBLIC, STATIC);
         return method;
     }
     
-    public static LightMethod makeValueOfMethod(final PsiExtensibleClass extensible) {
-        final LightMethod method = { extensible, "valueOf" };
-        method.setNavigationElement(extensible);
+    public static LightMethod makeValueOfMethod(final PsiClass context) {
+        final LightMethod method = { context, "valueOf" };
+        method.setNavigationElement(context);
         method.mark(ExtensibleMembers.class.getSimpleName());
-        method.setContainingClass(extensible);
-        method.setMethodReturnType(JavaPsiFacade.getElementFactory(extensible.getProject()).createType(extensible));
-        method.addParameter("name", PsiType.getJavaLangString(extensible.getManager(), extensible.getResolveScope()));
+        method.setContainingClass(context);
+        method.setMethodReturnType(JavaPsiFacade.getElementFactory(context.getProject()).createType(context));
+        method.addParameter("name", PsiType.getJavaLangString(context.getManager(), context.getResolveScope()));
         method.addModifiers(PUBLIC, STATIC);
         return method;
     }
     
-    public static Stream<PsiMethod> implicitAdditionalMethods(final PsiExtensibleClass extensible)
-            = extensible.isEnum() && !isAnonymousClass(extensible) ? Stream.of(makeValuesMethod(extensible), makeValueOfMethod(extensible)) : Stream.empty();
+    public static Stream<PsiMethod> implicitAdditionalMethods(final PsiClass context)
+            = context.isEnum() && !isAnonymousClass(context) ? Stream.of(makeValuesMethod(context), makeValueOfMethod(context)) : Stream.empty();
     
-    protected static boolean isAnonymousClass(final PsiExtensibleClass extensible) = extensible.getName() == null || extensible instanceof PsiAnonymousClass;
+    protected static boolean isAnonymousClass(final PsiClass context) = context.getName() == null || context instanceof PsiAnonymousClass;
     
     protected void buildMap(final boolean recursive) {
         namespaces().forEach(this::buildNamespace);
         if (!recursive)
             IDEAContext.computeReadActionIgnoreDumbMode(() -> {
-                final PsiExtensibleClass extensible = extensible();
-                final boolean requiresMaho = requiresMaho(extensible);
+                final PsiClass context = context();
+                final boolean requiresMaho = requiresMaho(context);
                 if (requiresMaho) {
                     namespaceMap.values().stream().map(List::copyOf).flatMap(Collection::stream).forEach(this::process);
-                    process(extensible());
+                    process(context);
                 }
                 namespaces().forEach(namespace -> collectAugments(namespace, requiresMaho ? (Consumer<? extends PsiMember>) adder(namespace) > this::process : adder(namespace)));
                 return null;
@@ -176,17 +189,17 @@ public class ExtensibleMembers {
         list.add(member);
     };
     
-    protected <K, E extends PsiMember> void buildNamespace(final Namespace<K, E> namespace) = Stream.concat(namespace.ownerMembersGetter().apply(extensible()), namespace.implicitAdditionalElementsGetter().apply(extensible()))
+    protected <K, E extends PsiMember> void buildNamespace(final Namespace<K, E> namespace) = Stream.concat(namespace.ownerMembersGetter().apply(context()), namespace.implicitAdditionalElementsGetter().apply(context()))
             .filter(ExtensibleMembers::namedElement)
             .forEach(adder(namespace));
     
     protected <E extends PsiMember> void process(final E member) {
-        final PsiExtensibleClass extensible = extensible();
-        HandlerSupport.process(member, (handler, target, annotation, annotationTree) -> handler.process(target, annotation, annotationTree, this, extensible));
-        Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.process(member, this, extensible));
+        final PsiClass context = context();
+        HandlerSupport.process(member, (handler, target, annotation, annotationTree) -> handler.process(target, annotation, annotationTree, this, context));
+        Syntax.Marker.syntaxHandlers().values().forEach(handler -> handler.process(member, this, context));
     }
     
-    protected <K, E extends PsiMember> void collectAugments(final Namespace<K, E> namespace, final Consumer<? extends PsiElement> processor) = PsiAugmentProvider.collectAugments(extensible(), namespace.memberType(), null)
+    protected <K, E extends PsiMember> void collectAugments(final Namespace<K, E> namespace, final Consumer<? extends PsiElement> processor) = PsiAugmentProvider.collectAugments(context(), namespace.memberType(), null)
             .stream().peek(adder(namespace)).forEach(this::process);
     
     public static boolean namedElement(final PsiElement element) = !incompleteElement(element);
@@ -196,5 +209,11 @@ public class ExtensibleMembers {
               element instanceof PsiMethodImpl method && Stream.concat(Stream.of(method), Stream.of(method.getParameterList().getParameters())).map(PsiElement::getNode)
                       .cast(CompositeElement.class)
                       .anyMatch(node -> node.findChildByRoleAsPsiElement(ChildRole.NAME) == null);
+    
+    public static Namespace<?, ? extends PsiMember> memberType(final PsiClassImplUtil.MemberType memberType) = switch (memberType) {
+        case FIELD  -> FIELDS;
+        case METHOD -> METHODS;
+        default     -> INNER_CLASSES;
+    };
     
 }

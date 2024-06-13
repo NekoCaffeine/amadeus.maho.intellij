@@ -88,7 +88,9 @@ public class HookHandler extends BaseHandler<Hook> {
         }
     }
     
-    private static PsiType mapInvisibleType(final PsiParameter parameter) = parameter.hasAnnotation(InvisibleType.class.getName()) ?
-            lookupClassType(parameter, parameter.getAnnotation(InvisibleType.class.getName()).findAttributeValue("value") instanceof PsiLiteral literal && literal.getValue() instanceof String value ? value : null) : parameter.getType();
+    private static @Nullable PsiType mapInvisibleType(final PsiParameter parameter) {
+        final @Nullable PsiAnnotation annotation = parameter.getAnnotation(InvisibleType.class.getName());
+        return annotation != null ? lookupClassType(parameter, annotation.findAttributeValue("value") instanceof PsiLiteral literal && literal.getValue() instanceof String value ? value : null) : parameter.getType();
+    }
     
 }

@@ -3,6 +3,7 @@ package amadeus.maho.lang.idea.handler.base;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Inherited;
 import java.lang.reflect.Method;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -11,7 +12,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -24,13 +24,11 @@ import org.objectweb.asm.tree.MethodNode;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
-import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiIdentifier;
@@ -38,18 +36,12 @@ import com.intellij.psi.PsiImportList;
 import com.intellij.psi.PsiImportStatement;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiJavaFile;
-import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
-import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiModifierListOwner;
-import com.intellij.psi.PsiReferenceExpression;
-import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeElement;
-import com.intellij.psi.PsiTypeParameterList;
 import com.intellij.psi.PsiVariable;
-import com.intellij.psi.ResolveState;
 import com.intellij.psi.TypeAnnotationProvider;
 import com.intellij.psi.augment.PsiAugmentProvider;
 import com.intellij.psi.impl.PsiClassImplUtil;
@@ -59,11 +51,6 @@ import com.intellij.psi.impl.source.PsiExtensibleClass;
 import com.intellij.psi.impl.source.PsiJavaFileImpl;
 import com.intellij.psi.impl.source.tree.JavaSharedImplUtil;
 import com.intellij.psi.impl.source.tree.java.PsiReferenceExpressionImpl;
-import com.intellij.psi.scope.ElementClassHint;
-import com.intellij.psi.scope.NameHint;
-import com.intellij.psi.scope.PsiScopeProcessor;
-import com.intellij.psi.scope.processor.MethodResolverProcessor;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
@@ -74,15 +61,11 @@ import com.intellij.psi.util.PsiUtil;
 
 import amadeus.maho.core.Maho;
 import amadeus.maho.lang.AccessLevel;
-import amadeus.maho.lang.EqualsAndHashCode;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.RequiredArgsConstructor;
-import amadeus.maho.lang.ToString;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.handler.AccessibleHandler;
-import amadeus.maho.lang.idea.light.LightBridgeElement;
-import amadeus.maho.lang.idea.light.LightBridgeField;
 import amadeus.maho.lang.idea.light.LightBridgeMethod;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
@@ -95,11 +78,12 @@ import amadeus.maho.util.control.OverrideMap;
 import amadeus.maho.util.dynamic.ClassLocal;
 import amadeus.maho.util.dynamic.InvokeContext;
 import amadeus.maho.util.function.Consumer4;
+import amadeus.maho.util.runtime.DebugHelper;
 import amadeus.maho.util.runtime.ObjectHelper;
 import amadeus.maho.util.runtime.TypeHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
-import static amadeus.maho.lang.idea.IDEAContext.*;
+import static amadeus.maho.lang.idea.IDEAContext.requiresMaho;
 
 @TransformProvider
 public interface HandlerSupport {
@@ -129,155 +113,139 @@ public interface HandlerSupport {
         
     }
     
-    ThreadLocal<LinkedList<PsiClass>> collectMemberContextLocal = ThreadLocal.withInitial(LinkedList::new);
+    ThreadLocal<LinkedList<PsiClass>>
+            collectMembersContextLocal = ThreadLocal.withInitial(LinkedList::new),
+            collectAllMembersContextLocal = ThreadLocal.withInitial(LinkedList::new);
     
-    Key<CachedValue<ConcurrentWeakIdentityHashMap<PsiExtensibleClass, DelayExtensibleMembers>>> members = { "members" }, recursiveMembers = { "recursiveMembers" };
+    Key<CachedValue<ConcurrentWeakIdentityHashMap<PsiClass, DelayExtensibleMembers>>> members = { "members" }, recursiveMembers = { "recursiveMembers" };
     
-    static ConcurrentWeakIdentityHashMap<PsiExtensibleClass, DelayExtensibleMembers> membersCache(final Project project, final boolean recursive = false)
+    static ConcurrentWeakIdentityHashMap<PsiClass, DelayExtensibleMembers> membersCacheMap(final Project project, final boolean recursive = false)
             = CachedValuesManager.getManager(project).getCachedValue(project, recursive ? recursiveMembers : members,
             () -> CachedValueProvider.Result.create(new ConcurrentWeakIdentityHashMap<>(), PsiModificationTracker.getInstance(project)), false);
     
     private static ExtensibleMembers members(final ClassInnerStuffCache cache) = members((Privilege) cache.myClass);
     
-    record DelayExtensibleMembers(PsiExtensibleClass extensible, boolean recursive, ReentrantLock lock = { }, AtomicReference<ExtensibleMembers> reference = { }) {
+    record DelayExtensibleMembers(PsiClass context, boolean recursive, AtomicReference<ExtensibleMembers> extensibleMembersReference = { }, AtomicReference<MembersCache> allMembersReference = { }) {
         
-        public ExtensibleMembers members(final boolean shouldLock = ASTTransformer.collectGuard.get().get() == 0 && false) {
-            if (shouldLock)
-                lock.lock();
-            try {
-                @Nullable ExtensibleMembers members = reference.get();
-                if (members == null)
-                    reference.set(members = { extensible, recursive });
-                return members;
-            } finally {
-                if (shouldLock)
-                    lock.unlock();
+        public ExtensibleMembers members() {
+            @Nullable ExtensibleMembers members = extensibleMembersReference.get();
+            if (members == null)
+                extensibleMembersReference.set(members = { context, recursive });
+            return members;
+        }
+        
+        public MembersCache allMembers() {
+            @Nullable MembersCache cache = allMembersReference.get();
+            if (cache == null) {
+                cache = { context, recursive };
+                if (cache.complete())
+                    allMembersReference.set(cache);
+                else
+                    DebugHelper.breakpoint();
             }
+            return cache;
         }
         
     }
     
-    private static ExtensibleMembers awaitMembers(final PsiExtensibleClass extensible, final boolean recursive = false)
-            = membersCache(extensible.getProject(), recursive).computeIfAbsent(extensible, it -> new DelayExtensibleMembers(it, recursive)).members();
+    static DelayExtensibleMembers delayExtensibleMembers(final PsiClass extensible, final boolean recursive = false)
+            = membersCacheMap(extensible.getProject(), recursive).computeIfAbsent(extensible, it -> new DelayExtensibleMembers(it, recursive));
     
-    private static ExtensibleMembers members(final PsiExtensibleClass extensible) {
+    static ExtensibleMembers members(final PsiClass owner) {
         if (!accessSourceAST()) {
-            final var context = collectMemberContextLocal.get();
-            if (!context[extensible]) {
-                context << extensible;
+            final var context = collectMembersContextLocal.get();
+            if (!context[owner]) {
+                context << owner;
                 try {
-                    return awaitMembers(extensible);
+                    return delayExtensibleMembers(owner).members();
                 } finally { context--; }
             }
         }
-        return awaitMembers(extensible, true);
+        return delayExtensibleMembers(owner, true).members();
     }
     
-    @Hook
-    private static Hook.Result getFields(final ClassInnerStuffCache $this) = { members($this).list(ExtensibleMembers.FIELDS).toArray(PsiField.EMPTY_ARRAY) };
-    
-    @Hook
-    private static Hook.Result getMethods(final ClassInnerStuffCache $this) = { members($this).list(ExtensibleMembers.METHODS).toArray(PsiMethod.EMPTY_ARRAY) };
-    
-    @Hook
-    private static Hook.Result getConstructors(final ClassInnerStuffCache $this) = { members($this).list(ExtensibleMembers.METHODS).stream().filter(PsiMethod::isConstructor).toArray(PsiMethod.ARRAY_FACTORY::create) };
-    
-    @Hook
-    private static Hook.Result getInnerClasses(final ClassInnerStuffCache $this) = { members($this).list(ExtensibleMembers.INNER_CLASSES).toArray(PsiClass.EMPTY_ARRAY) };
-    
-    @Hook
-    private static Hook.Result findFieldByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
-            = checkBases ? Hook.Result.VOID : new Hook.Result(members($this).map(ExtensibleMembers.FIELDS)[name]?.stream()?.findFirst()?.orElse(null) ?? null);
-    
-    @Hook
-    private static Hook.Result findMethodsByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
-            = checkBases ? Hook.Result.VOID : new Hook.Result(members($this).list(ExtensibleMembers.METHODS).stream().filter(method -> method.getName().equals(name)).toArray(PsiMethod.ARRAY_FACTORY::create));
-    
-    @Hook
-    private static Hook.Result findInnerClassByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
-            = checkBases ? Hook.Result.VOID : new Hook.Result(members($this).map(ExtensibleMembers.INNER_CLASSES)[name]?.stream()?.findFirst()?.orElse(null) ?? null);
-    
-    @ToString
-    @EqualsAndHashCode
-    record ProcessDeclarationsContext(boolean qualifier, PsiType type, PsiSubstitutor substitutor) { }
-    
-    static ProcessDeclarationsContext processDeclarationsContext(final PsiClass psiClass, final PsiElement place) {
-        boolean qualifier = false;
-        @Nullable PsiType type = null;
-        // Try to determine the caller type by context.
-        // The reason for getting caller types is the need to distinguish between array types or to infer generics.
-        // There's scope for improving the extrapolation process here.
-        // Currently the type of reference can only be inferred from the full reference name.
-        if (place instanceof PsiMethodCallExpression callExpression) {
-            final @Nullable PsiExpression expression = callExpression.getMethodExpression().getQualifierExpression();
-            if (expression != null) {
-                qualifier = true;
-                type = expression.getType();
-            }
-        } else if (place instanceof PsiReferenceExpression referenceExpression && referenceExpression.getQualifier() != null) {
-            final @Nullable PsiExpression expression = referenceExpression.getQualifierExpression();
-            if (expression != null) {
-                qualifier = true;
-                type = expression.getType();
+    static MembersCache allMembers(final PsiClass owner) {
+        if (!accessSourceAST()) {
+            final var context = collectAllMembersContextLocal.get();
+            if (!context[owner]) {
+                context << owner;
+                try {
+                    return delayExtensibleMembers(owner).allMembers();
+                } finally { context--; }
             }
         }
-        // If the context type cannot be inferred, it is inferred by the given PsiClass.
-        if (type == null)
-            type = PsiTypesUtil.getClassType(psiClass);
-        // Used to apply the caller's generic infers to its parent class or interface.
-        PsiSubstitutor substitutor = PsiSubstitutor.EMPTY;
-        if (type instanceof PsiClassType classType) {
-            substitutor = classType.resolveGenerics().getSubstitutor();
-        } else {
-            final PsiType deepComponentType = type.getDeepComponentType();
-            if (deepComponentType instanceof PsiClassType classType)
-                substitutor = classType.resolveGenerics().getSubstitutor();
-        }
-        return { qualifier, type, substitutor };
+        return delayExtensibleMembers(owner, true).allMembers();
     }
     
-    @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    private static boolean processDeclarationsInClass(
-            final boolean capture,
-            final PsiClass psiClass,
-            final PsiScopeProcessor processor,
-            final ResolveState state,
-            final @Nullable Set<PsiClass> visited,
-            final @Nullable PsiElement last,
-            final PsiElement place,
-            final LanguageLevel languageLevel,
-            final boolean isRaw,
-            final GlobalSearchScope resolveScope) {
-        if (!capture)
-            return false;
-        if (psiClass instanceof PsiExtensibleClass extensible && requiresMaho(psiClass)) {
-            if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList && psiClass.getModifierList() == last || visited != null && visited.contains(psiClass))
-                return true;
-            if (!(processor instanceof MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
-                final ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
-                final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
-                final @Nullable String name = nameHint?.getName(state) ?? null;
-                final boolean shouldProcessFields = classHint?.shouldProcess(ElementClassHint.DeclarationKind.FIELD) ?? true && (name == null || psiClass.findFieldByName(name, true) == null),
-                        shouldProcessMethods = classHint?.shouldProcess(ElementClassHint.DeclarationKind.METHOD) ?? true;
-                if (shouldProcessFields || shouldProcessMethods) {
-                    final ProcessDeclarationsContext context = processDeclarationsContext(psiClass, place);
-                    final List<? extends LightBridgeElement> bridgeElements = Stream.concat(Stream.of(extensible), supers(extensible).stream())
-                            .cast(PsiExtensibleClass.class)
-                            .map(HandlerSupport::members)
-                            .flatMap(members -> members.bridgeElements(context))
-                            .filter(member -> name?.equals(member.getName()) ?? true)
-                            .toList();
-                    return Stream.<PsiMember>concat(
-                                    shouldProcessFields ? bridgeElements.stream().cast(LightBridgeField.class)
-                                            .filter(it -> name != null || psiClass.findFieldByName(it.getName(), true) == null) : Stream.empty(),
-                                    shouldProcessMethods ? bridgeElements.stream().cast(LightBridgeMethod.class)
-                                            .filter(it -> psiClass.findMethodBySignature(it, true) == null) : Stream.empty())
-                            .allMatch(member -> processor.execute(member, state));
-                }
-            }
-        }
-        return true;
-    }
+    @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
+    private static Collection<PsiClass> getAllSuperClassesRecursively(final PsiClass psiClass) = allMembers(psiClass).allSupers();
+    
+    @Hook(forceReturn = true)
+    private static PsiField[] getFields(final ClassInnerStuffCache $this) = members($this).list(ExtensibleMembers.FIELDS).toArray(PsiField.EMPTY_ARRAY);
+    
+    @Hook(forceReturn = true)
+    private static PsiMethod[] getMethods(final ClassInnerStuffCache $this) = members($this).list(ExtensibleMembers.METHODS).toArray(PsiMethod.EMPTY_ARRAY);
+    
+    @Hook(forceReturn = true)
+    private static PsiMethod[] getConstructors(final ClassInnerStuffCache $this) = members($this).list(ExtensibleMembers.METHODS).stream().filter(PsiMethod::isConstructor).toArray(PsiMethod.ARRAY_FACTORY::create);
+    
+    @Hook(forceReturn = true)
+    private static PsiClass[] getInnerClasses(final ClassInnerStuffCache $this) = members($this).list(ExtensibleMembers.INNER_CLASSES).toArray(PsiClass.EMPTY_ARRAY);
+    
+    @Hook(forceReturn = true)
+    private static @Nullable PsiField findFieldByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
+            = checkBases ? PsiClassImplUtil.findFieldByName((Privilege) $this.myClass, name, true) : members($this).lookup(ExtensibleMembers.FIELDS, name);
+    
+    @Hook(forceReturn = true)
+    private static PsiMethod[] findMethodsByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
+            = checkBases ? PsiClassImplUtil.findMethodsByName((Privilege) $this.myClass, name, true) : members($this).lookupAll(ExtensibleMembers.METHODS, method -> method.getName().equals(name), PsiMethod.ARRAY_FACTORY::create);
+    
+    @Hook(forceReturn = true)
+    private static @Nullable PsiClass findInnerClassByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
+            = checkBases ? PsiClassImplUtil.findInnerByName((Privilege) $this.myClass, name, true) : members($this).lookup(ExtensibleMembers.INNER_CLASSES, name);
+    
+    // @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+    // private static boolean processDeclarationsInClass(
+    //         final boolean capture,
+    //         final PsiClass context,
+    //         final PsiScopeProcessor processor,
+    //         final ResolveState state,
+    //         final @Nullable Set<PsiClass> visited,
+    //         final @Nullable PsiElement last,
+    //         final PsiElement place,
+    //         final LanguageLevel languageLevel,
+    //         final boolean isRaw,
+    //         final GlobalSearchScope resolveScope) {
+    //     if (!capture)
+    //         return false;
+    //     if (requiresMaho(context)) {
+    //         if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList && context.getModifierList() == last || visited != null && visited.contains(context))
+    //             return true;
+    //         if (!(processor instanceof MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
+    //             final ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
+    //             final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
+    //             final @Nullable String name = nameHint?.getName(state) ?? null;
+    //             final boolean shouldProcessFields = classHint?.shouldProcess(ElementClassHint.DeclarationKind.FIELD) ?? true && (name == null || context.findFieldByName(name, true) == null),
+    //                     shouldProcessMethods = classHint?.shouldProcess(ElementClassHint.DeclarationKind.METHOD) ?? true;
+    //             if (shouldProcessFields || shouldProcessMethods) {
+    //                 final ClassDeclarationsProcessor.ProcessDeclarationsContext pdc = ClassDeclarationsProcessor.processDeclarationsContext(context, place);
+    //                 final List<? extends LightBridgeElement> bridgeElements = Stream.concat(Stream.of(context), supers(context).stream())
+    //                         .cast(PsiExtensibleClass.class)
+    //                         .map(HandlerSupport::members)
+    //                         .flatMap(members -> members.bridgeElements(pdc))
+    //                         .filter(member -> name?.equals(member.getName()) ?? true)
+    //                         .toList();
+    //                 return Stream.<PsiMember>concat(
+    //                                 shouldProcessFields ? bridgeElements.stream().cast(LightBridgeField.class)
+    //                                         .filter(it -> name != null || context.findFieldByName(it.getName(), true) == null) : Stream.empty(),
+    //                                 shouldProcessMethods ? bridgeElements.stream().cast(LightBridgeMethod.class)
+    //                                         .filter(it -> context.findMethodBySignature(it, true) == null) : Stream.empty())
+    //                         .allMatch(member -> processor.execute(member, state));
+    //             }
+    //         }
+    //     }
+    //     return true;
+    // }
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static JavaResolveResult[] resolveToMethod(final JavaResolveResult capture[], final PsiReferenceExpressionImpl $this, final PsiFile containingFile) {
@@ -377,7 +345,7 @@ public interface HandlerSupport {
             return it;
         final Class<?> declaringClass = it.getDeclaringClass();
         final ClassLoader loader = declaringClass.getClassLoader();
-        return ~new LinkedIterator<>(AbstractInsnNode::getPrevious, methodNode.instructions.getLast()).stream()
+        return ~LinkedIterator.of(AbstractInsnNode::getPrevious, methodNode.instructions.getLast()).stream()
                 .cast(MethodInsnNode.class)
                 .map(insn -> ASMHelper.loadMethod(Type.getObjectType(insn.owner), insn.name, insn.desc, loader))
                 .filterNot(TypeHelper::isBoxedMethod) ?? it;
@@ -502,7 +470,8 @@ public interface HandlerSupport {
                         return index == -1 ? importClassNames(file)[canonicalName] :
                                 canonicalName.endsWith(referenceText) && importClassNames(file)[canonicalName.substring(0, canonicalName.length() - (referenceText.length() - index))];
                     }
-                }
+                } else
+                    return false;
             return IDEAContext.computeReadActionIgnoreDumbMode(() -> {
                 if (canonicalName.equals(annotation.getQualifiedName()))
                     return true;

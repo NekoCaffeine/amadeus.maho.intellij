@@ -1,27 +1,22 @@
 package amadeus.maho.lang.idea.handler.base;
 
 import java.util.LinkedList;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.intellij.codeHighlighting.HighlightingPass;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.project.DumbService;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Key;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.impl.DiffLog;
 import com.intellij.psi.impl.ElementBase;
 import com.intellij.psi.impl.source.PsiFileImpl;
-import com.intellij.psi.impl.source.PsiJavaCodeReferenceElementImpl;
-import com.intellij.psi.impl.source.resolve.ResolveCache;
 import com.intellij.psi.impl.source.tree.FileElement;
 import com.intellij.psi.impl.source.tree.LazyParseableElement;
 import com.intellij.psi.impl.source.tree.java.ClassElement;
 import com.intellij.psi.impl.source.tree.java.JavaFileElement;
-import com.intellij.psi.stubs.LightStubBuilder;
 import com.intellij.util.indexing.FileBasedIndexImpl;
 
 import amadeus.maho.lang.Privilege;
@@ -30,8 +25,6 @@ import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
-
-import static amadeus.maho.util.bytecode.Bytecodes.ILOAD;
 
 @TransformProvider
 public interface ASTTransformer {
@@ -54,12 +47,6 @@ public interface ASTTransformer {
     ThreadLocal<AtomicInteger>
             collectGuard = ThreadLocal.withInitial(AtomicInteger::new),
             loadTreeGuard = ThreadLocal.withInitial(AtomicInteger::new);
-    
-    @Hook(exactMatch = false)
-    private static void buildStubTree_$Enter(final LightStubBuilder $this) = collectGuard.get().getAndIncrement();
-    
-    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.FINALLY)), exactMatch = false)
-    private static void buildStubTree_$Exit(final LightStubBuilder $this) = collectGuard.get().getAndDecrement();
     
     @Hook(exactMatch = false)
     private static void indexFileContent_$Enter(final FileBasedIndexImpl $this) = collectGuard.get().getAndIncrement();
@@ -86,7 +73,7 @@ public interface ASTTransformer {
     }
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
-    private static void doActualPsiChange(final DiffLog $this, final PsiFile file) {
+    private static void performActualPsiChange(final DiffLog $this, final PsiFile file) {
         if (file.getLanguage() == JavaLanguage.INSTANCE)
             ((Privilege) $this.myEntries).forEach(entry -> {
                 switch (entry) {
@@ -97,10 +84,6 @@ public interface ASTTransformer {
                 }
             });
     }
-    
-    @Hook(value = ResolveCache.class, isStatic = true, at = @At(var = @At.VarInsn(opcode = ILOAD, var = 2)), before = false, capture = true)
-    private static <TRef, TResult> boolean resolve(final boolean capture, final TRef ref, final Map<TRef, TResult> cache, final boolean preventRecursion, final Computable<? extends TResult> resolver)
-            = capture && !(ref instanceof PsiJavaCodeReferenceElementImpl);
     
     ThreadLocal<LinkedList<Object>> reentrant = ThreadLocal.withInitial(LinkedList::new);
     

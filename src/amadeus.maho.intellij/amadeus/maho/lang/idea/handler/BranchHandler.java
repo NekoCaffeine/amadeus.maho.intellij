@@ -351,6 +351,7 @@ public class BranchHandler {
                 }
             if (value instanceof String string)
                 value = ((Privilege) $this.myInterner).intern(string);
+            // noinspection DataFlowIssue
             (Privilege) ($this.myResult = value);
             return Hook.Result.NULL;
         }

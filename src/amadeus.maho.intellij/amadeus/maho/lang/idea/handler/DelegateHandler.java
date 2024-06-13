@@ -22,7 +22,6 @@ import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
-import com.intellij.psi.impl.source.PsiExtensibleClass;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
@@ -30,9 +29,9 @@ import com.intellij.psi.util.TypeConversionUtil;
 import amadeus.maho.lang.Delegate;
 import amadeus.maho.lang.idea.IDEAContext;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
+import amadeus.maho.lang.idea.handler.base.ClassDeclarationsProcessor;
 import amadeus.maho.lang.idea.handler.base.ExtensibleMembers;
 import amadeus.maho.lang.idea.handler.base.Handler;
-import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
 import amadeus.maho.lang.idea.light.LightBridgeElement;
 import amadeus.maho.lang.idea.light.LightBridgeField;
@@ -61,7 +60,8 @@ public class DelegateHandler extends BaseHandler<Delegate> {
     }
     
     private static void process(final @Nullable PsiType type, final PsiClass context, final PsiMember member, final Delegate annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members) {
-        if (type instanceof PsiClassType classType && !(member instanceof LightBridgeElement))
+        if (type instanceof PsiClassType classType && !(member instanceof LightBridgeElement)) {
+            final boolean staticSource = member.hasModifierProperty(PsiModifier.STATIC);
             if (annotation.hard()) {
                 delegateTypes(annotation, classType).forEach(psiType -> {
                     final PsiClassType.ClassResolveResult resolveResult = PsiUtil.resolveGenericsClassInType(psiType);
@@ -77,7 +77,7 @@ public class DelegateHandler extends BaseHandler<Delegate> {
                                         wrapper.setContainingClass(context);
                                         wrapper.setNavigationElement(method);
                                         wrapper.getModifierList().modifiers().remove(PsiModifier.ABSTRACT);
-                                        if (member.hasModifierProperty(PsiModifier.STATIC))
+                                        if (staticSource)
                                             wrapper.getModifierList().addModifier(PsiModifier.STATIC);
                                         wrapper.setMethodKind(Delegate.class.getCanonicalName());
                                         members.inject(wrapper);
@@ -87,57 +87,56 @@ public class DelegateHandler extends BaseHandler<Delegate> {
                 });
             } else {
                 final List<? extends PsiClassType> delegateTypes = delegateTypes(annotation, classType).toList();
-                members.injectBridgeProvider(pdc -> {
-                    if (pdc.type() instanceof PsiClassType contextType && contextType.resolve() instanceof PsiClass derived) {
+                members.injectBridgeProvider((pdc, staticOnly) -> {
+                    if ((!staticOnly || staticSource) && pdc.type() instanceof PsiClassType contextType && contextType.resolve() instanceof PsiClass derived) {
                         final PsiClassType.ClassResolveResult resolveResult = contextType.resolveGenerics();
                         final @Nullable PsiClass contextClass = resolveResult.getElement();
-                        if (contextClass instanceof PsiExtensibleClass extensibleClass) {
-                            return CachedValuesManager.getProjectPsiDependentCache(contextClass, _ -> new ConcurrentWeakIdentityHashMap<PsiAnnotation,
-                                            ConcurrentHashMap<PsiClassType, List<? extends LightBridgeElement>>>())
-                                    .computeIfAbsent(annotationTree, _ -> new ConcurrentHashMap<>())
-                                    .computeIfAbsent(contextType, _ -> delegateTypes.stream()
-                                            .map(substitutor(pdc, context, derived)::substitute)
-                                            .cast(PsiClassType.class)
-                                            .flatMap(delegateType -> {
-                                                final PsiClassType.ClassResolveResult delegateResult = delegateType.resolveGenerics();
-                                                final @Nullable PsiClass delegateClass = delegateResult.getElement();
-                                                if (delegateClass != null) {
-                                                    return Stream.<PsiMember>concat(Stream.of(delegateClass.getAllFields()), Stream.of(delegateClass.getAllMethods()))
-                                                            .filter(it -> it.hasModifierProperty(PsiModifier.PUBLIC) && !it.hasModifierProperty(PsiModifier.STATIC))
-                                                            .filter(it -> !(it instanceof PsiMethod method) || !objectMethodIdentities.contains(IDEAContext.methodIdentity(method)))
-                                                            .map(it -> (LightBridgeElement) switch (it) {
-                                                                case PsiField field   -> {
-                                                                    final LightBridgeField wrapper = { context, field.getName(), delegateType.resolveGenerics().getSubstitutor().substitute(field.getType()), field };
-                                                                    wrapper.setContainingClass(context);
-                                                                    wrapper.setNavigationElement(field);
-                                                                    if (member.hasModifierProperty(PsiModifier.STATIC))
-                                                                        wrapper.getModifierList().addModifier(PsiModifier.STATIC);
-                                                                    yield wrapper;
-                                                                }
-                                                                case PsiMethod method -> {
-                                                                    final LightBridgeMethod wrapper = { extensibleClass, method, delegateType.resolveGenerics().getSubstitutor(), method };
-                                                                    wrapper.setContainingClass(contextClass);
-                                                                    wrapper.setNavigationElement(method);
-                                                                    if (member.hasModifierProperty(PsiModifier.STATIC))
-                                                                        wrapper.getModifierList().addModifier(PsiModifier.STATIC);
-                                                                    wrapper.setMethodKind(Delegate.class.getCanonicalName());
-                                                                    yield wrapper;
-                                                                }
-                                                                default               -> null;
-                                                            })
-                                                            .nonnull();
-                                                }
-                                                return Stream.empty();
-                                            })
-                                            .toList());
-                        }
+                        return CachedValuesManager.getProjectPsiDependentCache(contextClass, _ -> new ConcurrentWeakIdentityHashMap<PsiAnnotation,
+                                        ConcurrentHashMap<PsiClassType, List<? extends LightBridgeElement>>>())
+                                .computeIfAbsent(annotationTree, _ -> new ConcurrentHashMap<>())
+                                .computeIfAbsent(contextType, _ -> delegateTypes.stream()
+                                        .map(substitutor(pdc, context, derived)::substitute)
+                                        .cast(PsiClassType.class)
+                                        .flatMap(delegateType -> {
+                                            final PsiClassType.ClassResolveResult delegateResult = delegateType.resolveGenerics();
+                                            final @Nullable PsiClass delegateClass = delegateResult.getElement();
+                                            if (delegateClass != null) {
+                                                return Stream.<PsiMember>concat(Stream.of(delegateClass.getAllFields()), Stream.of(delegateClass.getAllMethods()))
+                                                        .filter(it -> it.hasModifierProperty(PsiModifier.PUBLIC) && !it.hasModifierProperty(PsiModifier.STATIC))
+                                                        .filter(it -> !(it instanceof PsiMethod method) || !method.isConstructor() && !objectMethodIdentities.contains(IDEAContext.methodIdentity(method)))
+                                                        .map(it -> (LightBridgeElement) switch (it) {
+                                                            case PsiField field   -> {
+                                                                final LightBridgeField wrapper = { context, field.getName(), delegateType.resolveGenerics().getSubstitutor().substitute(field.getType()), annotationTree, field };
+                                                                wrapper.setContainingClass(context);
+                                                                wrapper.setNavigationElement(field);
+                                                                if (staticSource)
+                                                                    wrapper.getModifierList().addModifier(PsiModifier.STATIC);
+                                                                yield wrapper;
+                                                            }
+                                                            case PsiMethod method -> {
+                                                                final LightBridgeMethod wrapper = { context, method, delegateType.resolveGenerics().getSubstitutor(), annotationTree, method };
+                                                                wrapper.setContainingClass(contextClass);
+                                                                wrapper.setNavigationElement(method);
+                                                                if (staticSource)
+                                                                    wrapper.getModifierList().addModifier(PsiModifier.STATIC);
+                                                                wrapper.setMethodKind(Delegate.class.getCanonicalName());
+                                                                yield wrapper;
+                                                            }
+                                                            default               -> null;
+                                                        })
+                                                        .nonnull();
+                                            }
+                                            return Stream.empty();
+                                        })
+                                        .toList());
                     }
                     return List.of();
                 });
             }
+        }
     }
     
-    private static PsiSubstitutor substitutor(final HandlerSupport.ProcessDeclarationsContext pdc, final PsiClass context, final PsiClass derived)
+    private static PsiSubstitutor substitutor(final ClassDeclarationsProcessor.ProcessDeclarationsContext pdc, final PsiClass context, final PsiClass derived)
             = pdc.qualifier() ? pdc.substitutor() : TypeConversionUtil.getClassSubstitutor(context, derived, pdc.substitutor());
     
     @Override

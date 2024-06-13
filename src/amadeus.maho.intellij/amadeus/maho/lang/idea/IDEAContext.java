@@ -413,7 +413,7 @@ public class IDEAContext {
         lastChild(holder, last);
         myPrevSibling(first, null);
         myNextSibling(last, null);
-        new LinkedIterator<>(TreeElement::getTreeNext, first).stream(true).forEach(it -> myParent(it, holder));
+        LinkedIterator.of(TreeElement::getTreeNext, first).stream(true).forEach(it -> myParent(it, holder));
     }
     
     public static void markChildAs(final CompositeElement holder, final TreeElement target) {

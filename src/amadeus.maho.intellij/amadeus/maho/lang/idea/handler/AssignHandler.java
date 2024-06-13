@@ -85,6 +85,7 @@ import com.intellij.psi.formatter.java.BlockContainingJavaBlock;
 import com.intellij.psi.formatter.java.JavaSpacePropertyProcessor;
 import com.intellij.psi.impl.BlockSupportImpl;
 import com.intellij.psi.impl.DiffLog;
+import com.intellij.psi.impl.source.DummyHolder;
 import com.intellij.psi.impl.source.DummyHolderFactory;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.intellij.psi.impl.source.PsiMethodImpl;
@@ -450,8 +451,13 @@ public class AssignHandler extends BaseSyntaxHandler {
         return CachedValuesManager.getProjectPsiDependentCache(expression, it -> RecursionManager.doPreventingRecursion(expression, false, () -> computeReadActionIgnoreDumbMode(() -> syncType(expression))));
     }
     
+    private static PsiElement parent(final PsiExpression expression) = switch (expression.getContext()) {
+        case DummyHolder dummyHolder -> dummyHolder.getContext();
+        case PsiElement element      -> element;
+    };
+    
     private static @Nullable Object syncType(final PsiArrayInitializerExpression expression) {
-        final PsiElement parent = expression.getParent();
+        final PsiElement parent = parent(expression);
         if (parent instanceof PsiReturnStatement) {
             final PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class);
             if (owner instanceof PsiMethod method)
@@ -467,7 +473,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     }
     
     public static @Nullable PsiType lookupType(final PsiExpression expression) {
-        final PsiElement parent = expression.getParent();
+        final PsiElement parent = parent(expression);
         if (parent instanceof PsiReturnStatement) {
             final PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class);
             if (owner instanceof PsiMethod method)
