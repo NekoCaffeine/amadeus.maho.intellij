@@ -3,10 +3,7 @@ package amadeus.maho.lang.idea.ui;
 import java.awt.Container;
 import java.awt.Dialog;
 import java.awt.Frame;
-import java.awt.Shape;
 import java.awt.Window;
-import java.util.List;
-import java.util.Map;
 import javax.swing.JRootPane;
 import javax.swing.RootPaneContainer;
 import javax.swing.border.Border;
@@ -22,44 +19,14 @@ import com.intellij.ui.WindowResizeListener;
 import com.intellij.util.ui.JBEmptyBorder;
 import com.intellij.util.ui.JBUI;
 
-import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 
-import com.jetbrains.CustomWindowDecoration;
-import com.jetbrains.JBR;
-
 @TransformProvider
 public interface IdeFrameDecoratorHelper {
-    
-    // JBR support, module: jetbrains.api, location: lib/app.jar
-    @SuppressWarnings("deprecation") enum WithoutJBRWindowDecoration implements CustomWindowDecoration {
-        
-        @Getter
-        instance;
-        
-        @Override
-        public void setCustomDecorationEnabled(final Window window, final boolean enabled) { }
-        
-        @Override
-        public boolean isCustomDecorationEnabled(final Window window) = true;
-        
-        @Override
-        public void setCustomDecorationHitTestSpots(final Window window, final List<Map.Entry<Shape, Integer>> spots) { }
-        
-        @Override
-        public List<Map.Entry<Shape, Integer>> getCustomDecorationHitTestSpots(final Window window) = List.of();
-        
-        @Override
-        public void setCustomDecorationTitleBarHeight(final Window window, final int height) { }
-        
-        @Override
-        public int getCustomDecorationTitleBarHeight(final Window window) = 0;
-        
-    }
     
     static boolean shouldEnable() = !SystemInfo.isJetBrainsJvm && SystemInfo.isWindows; // The compatibility of OpenJDK and IDEA on other platforms has not been tested yet, TODO [low] test other platforms
     
@@ -69,17 +36,11 @@ public interface IdeFrameDecoratorHelper {
             (Privilege) (AppIcon.ourIcon = (Privilege) new AppIcon.EmptyIcon());
     }
     
-    @Hook(value = JBR.class, isStatic = true)
-    private static Hook.Result getCustomWindowDecoration() = Hook.Result.falseToVoid(shouldEnable(), WithoutJBRWindowDecoration.instance());
-    
     // #IC-233.9102.97 2023.3 EAP
     @SuppressWarnings("Hook")
     @Hook(target = "com.intellij.openapi.wm.impl.WinMainFrameDecorator$toggleFullScreen$2",
             at = @At(method = @At.MethodInsn(name = "dispose"), offset = -3), jump = @At(method = @At.MethodInsn(name = "setUndecorated"), offset = 1), exactMatch = false)
     private static Hook.Result invokeSuspend() = shouldEnable() ? new Hook.Result().jump() : Hook.Result.VOID;
-    
-    // @Hook
-    // private static boolean
     
     @Hook
     private static Hook.Result isCustomDecorationAvailable$intellij_platform_ide_impl(final IdeFrameDecorator.Companion $this) = Hook.Result.falseToVoid(shouldEnable());

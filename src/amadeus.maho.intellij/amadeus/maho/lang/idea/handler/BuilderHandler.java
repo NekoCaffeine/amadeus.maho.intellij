@@ -27,7 +27,7 @@ public class BuilderHandler extends BaseHandler<Builder> {
     public void processMethod(final PsiMethod tree, final Builder annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
         if (!tree.isConstructor())
             return;
-        final LightClass builderClass = { tree, "InnerBuilder", context.getQualifiedName() + ".InnerBuilder", annotationTree };
+        final LightClass builderClass = { tree, "InnerBuilder", STR."\{context.getQualifiedName()}.InnerBuilder", annotationTree };
         Stream.of(context.getTypeParameters()).forEach(builderClass.getTypeParameterList()::addParameter);
         if (members.shouldInject(builderClass)) {
             builderClass.setNavigationElement(annotationTree);

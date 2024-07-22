@@ -14,12 +14,15 @@ import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiPackage;
+import com.intellij.psi.PsiType;
 import com.intellij.psi.impl.JavaPlatformModuleSystem;
+import com.intellij.psi.impl.PsiClassImplUtil;
 import com.intellij.psi.impl.cache.ModifierFlags;
 import com.intellij.psi.impl.compiled.ClsModifierListImpl;
 import com.intellij.psi.impl.light.LightJavaModule;
 import com.intellij.psi.impl.source.resolve.JavaResolveUtil;
 import com.intellij.psi.impl.source.resolve.PsiResolveHelperImpl;
+import com.intellij.psi.search.GlobalSearchScope;
 
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
@@ -76,5 +79,8 @@ public class AccessibleHandler {
     private static boolean hasModifierProperty(final boolean capture, final ClsModifierListImpl $this, final String name)
             = capture && (!($this.getParent() instanceof PsiMethod || $this.getParent() instanceof PsiField) || !PACKAGE_LOCAL.equals(name)) ||
               ($this.getParent() instanceof PsiMethod || $this.getParent() instanceof PsiField) && PROTECTED.equals(name) && ModifierFlags.hasModifierProperty(PACKAGE_LOCAL, $this.getStub().getModifiersMask());
+    
+    @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
+    private static <T extends PsiType> @Nullable T correctType(final @Nullable T originalType, final GlobalSearchScope scope) = originalType;
     
 }

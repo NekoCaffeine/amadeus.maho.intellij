@@ -14,4 +14,10 @@ public class LightDefaultParameter extends LightParameter {
     
     PsiExpression defaultValue;
     
+    @Override
+    public PsiExpression getInitializer() = defaultValue;
+    
+    @Override
+    public boolean hasInitializer() = defaultValue != null;
+    
 }

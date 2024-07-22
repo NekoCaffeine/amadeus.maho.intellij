@@ -49,11 +49,11 @@ public class SetterHandler extends BaseHandler<Setter> {
         }
         if (tree instanceof PsiMethod method) {
             if (method.getParameterList().getParametersCount() != 0)
-                holder.registerProblem(annotationTree, "The methods marked by @Setter must have no parameters.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+                holder.registerProblem(annotationTree, "The methods marked by @Setter must have no parameters", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
             if (tree.getParent() instanceof PsiClass parent && !parent.isInterface())
-                holder.registerProblem(annotationTree, "The method marked by @Setter must be in the interface scope.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+                holder.registerProblem(annotationTree, "The method marked by @Setter must be in the interface scope", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
             if (method.hasModifierProperty(STATIC))
-                holder.registerProblem(annotationTree, "The method marked by @Setter must be non-static.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree),
+                holder.registerProblem(annotationTree, "The method marked by @Setter must be non-static", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree),
                         quickFix.createModifierListFix(method, STATIC, false, false));
         }
     }

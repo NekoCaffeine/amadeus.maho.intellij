@@ -40,7 +40,6 @@ import com.intellij.util.io.KeyDescriptor;
 import amadeus.maho.lang.EqualsAndHashCode;
 import amadeus.maho.lang.ToString;
 import amadeus.maho.lang.idea.IDEAContext;
-import amadeus.maho.lang.idea.handler.AssignHandler;
 import amadeus.maho.lang.idea.handler.OperatorOverloadingHandler;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.util.concurrent.ConcurrentWeakIdentityHashMap;
@@ -67,7 +66,7 @@ public class JavaExpressionIndex extends FileBasedIndexExtension<String, JavaExp
             case PsiAssignmentExpressionImpl assignmentExpression                 -> assignmentExpression.getOperationSign();
             case PsiArrayAccessExpressionImpl accessExpression                    -> accessExpression.findChildByRoleAsPsiElement(ChildRole.LBRACKET) instanceof PsiJavaToken token ? token : null;
             case PsiArrayInitializerExpressionImpl arrayInitializerExpression     -> arrayInitializerExpression.findChildByRoleAsPsiElement(ChildRole.LBRACE) instanceof PsiJavaToken token ? token : null;
-            case AssignHandler.PsiArrayInitializerBackNewExpression newExpression -> newExpression.getArgumentList().getFirstChild() instanceof PsiJavaToken token ? token : null;
+            // case AssignHandler.PsiArrayInitializerBackNewExpression newExpression -> newExpression.getArgumentList().getFirstChild() instanceof PsiJavaToken token ? token : null;
             case null,
                  default                                                          -> null;
         };
@@ -78,9 +77,9 @@ public class JavaExpressionIndex extends FileBasedIndexExtension<String, JavaExp
         
         ConcurrentWeakIdentityHashMap<Class<?>, List<IndexType<?>>> indexTypes = { };
         
-        JavaExpressionIndex.IndexType<AssignHandler.PsiArrayInitializerBackNewExpression> ASSIGN_NEW = { "assign-new", AssignHandler.PsiArrayInitializerBackNewExpression.class };
+        JavaExpressionIndex.IndexType<PsiArrayInitializerExpressionImpl> ASSIGN_NEW = { "assign-new", PsiArrayInitializerExpressionImpl.class };
         
-        { indexTypes.computeIfAbsent(PsiArrayInitializerExpressionImpl.class, _ -> new CopyOnWriteArrayList<>()) += ASSIGN_NEW; } // before transform ast
+        // { indexTypes.computeIfAbsent(PsiArrayInitializerExpressionImpl.class, _ -> new CopyOnWriteArrayList<>()) += ASSIGN_NEW; } // before transform ast
         
         Map<String, List<JavaExpressionIndex.IndexType>> operatorTypes = operatorName2operatorType.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> operatorName2expressionTypes[entry.getKey()].stream().map(expressionType -> new JavaExpressionIndex.IndexType(entry.getKey(), expressionType, expression -> {

@@ -3,6 +3,7 @@ package amadeus.maho.lang.idea;
 import java.util.ResourceBundle;
 
 import com.intellij.analysis.AnalysisScope;
+import com.intellij.codeInsight.completion.CompletionProgressIndicator;
 import com.intellij.codeInsight.javadoc.JavaDocInfoGenerator;
 import com.intellij.ide.actions.searcheverywhere.WaitForContributorsListenerWrapper;
 import com.intellij.openapi.diagnostic.Logger;
@@ -88,5 +89,8 @@ public interface DisableLogger {
     
     @Hook(forceReturn = true)
     private static void logIfAlive(final BoundedLocalCache<?, ?> $this, final Node<?, ?> node) { }
+    
+    @Redirect(targetClass = CompletionProgressIndicator.class, selector = "handleEmptyLookup", slice = @Slice(@At(method = @At.MethodInsn(name = "assertTrue"))))
+    private static boolean assertTrue_$CompletionProgressIndicator(final Logger logger, final boolean value) = true;
     
 }

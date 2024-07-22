@@ -20,6 +20,7 @@ import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeElement;
 import com.intellij.psi.util.TypeConversionUtil;
 
+import amadeus.maho.lang.idea.handler.base.AnnotationInvocationHandler;
 import amadeus.maho.lang.idea.handler.base.BaseHandler;
 import amadeus.maho.lang.idea.handler.base.Handler;
 import amadeus.maho.lang.inspection.Nullable;
@@ -41,14 +42,14 @@ public class HookHandler extends BaseHandler<Hook> {
             final PsiParameter parameters[] = method.getParameterList().getParameters();
             if (returnTypeElement != null) {
                 if (!method.hasModifierProperty(PsiModifier.STATIC))
-                    holder.registerProblem(returnTypeElement, STR."The target method of the @\{Hook.class.getSimpleName()} must be static.", ProblemHighlightType.GENERIC_ERROR,
+                    holder.registerProblem(returnTypeElement, STR."The target method of the @\{Hook.class.getSimpleName()} must be static", ProblemHighlightType.GENERIC_ERROR,
                             quickFix.createModifierListFix(method, PsiModifier.STATIC, true, false));
                 if (switch (method.getReturnType()) {
                     case PsiClassType classType -> !(classType.resolve()?.getQualifiedName()?.equals(Hook.Result.class.getCanonicalName()) ?? false);
                     case null,
                          default                -> true;
                 } && Stream.of(parameters).anyMatch(parameter -> parameter.hasAnnotation(Hook.Reference.class.getCanonicalName())))
-                    holder.registerProblem(returnTypeElement, STR."@\{Hook.Reference.class.getSimpleName()} needs to pass the result by returning value type \{Hook.Result.class.getSimpleName()}.", ProblemHighlightType.GENERIC_ERROR,
+                    holder.registerProblem(returnTypeElement, STR."@\{Hook.Reference.class.getSimpleName()} needs to pass the result by returning value type \{Hook.Result.class.getSimpleName()}", ProblemHighlightType.GENERIC_ERROR,
                             quickFix.createMethodReturnFix(method, JavaPsiFacade.getElementFactory(method.getProject()).createTypeByFQClassName(Hook.Result.class.getCanonicalName(), method.getResolveScope()), false));
             }
             final String name = annotation.selector().isEmpty() ? switch (At.Lookup.dropInvalidPart(method.getName())) {
@@ -56,6 +57,8 @@ public class HookHandler extends BaseHandler<Hook> {
                 case "_clinit_"    -> ASMHelper._CLINIT_;
                 case String string -> string;
             } : annotation.selector();
+            if (annotation.capture() && (!annotationTree.hasAttribute("at") || !canCapture(annotation.at())))
+                holder.registerProblem(annotationTree, "Cannot capture value in method header", ProblemHighlightType.GENERIC_ERROR);
             if (!At.Lookup.WILDCARD.equals(name) && !ASMHelper._CLINIT_.equals(name)) {
                 final List<PsiType> types = Stream.of(parameters)
                         .map(HookHandler::mapInvisibleType)
@@ -81,11 +84,18 @@ public class HookHandler extends BaseHandler<Hook> {
                             candidate = ~Stream.of(ASMHelper._INIT_.equals(name) ? target.getConstructors() : target.findMethodsByName(name, false));
                         if (candidate == null)
                             holder.registerProblem(annotationTree, "Missing Hook target method", ProblemHighlightType.GENERIC_ERROR);
+                        else if (candidate.hasModifierProperty(PsiModifier.STATIC) != isStatic)
+                            holder.registerProblem(annotationTree, "Mismatched static modifier, should set isStatic = true", ProblemHighlightType.GENERIC_ERROR);
                     } else
                         holder.registerProblem(annotationTree, "Missing Hook target class", ProblemHighlightType.GENERIC_ERROR);
                 }
             }
         }
+    }
+    
+    private static boolean canCapture(final At annotation) {
+        final @Nullable  AnnotationInvocationHandler handler = AnnotationInvocationHandler.asOneOfUs(annotation);
+        return handler == null || !handler.annotationTree.hasAttribute("endpoint") || annotation.endpoint().value() != At.Endpoint.Type.HEAD;
     }
     
     private static @Nullable PsiType mapInvisibleType(final PsiParameter parameter) {

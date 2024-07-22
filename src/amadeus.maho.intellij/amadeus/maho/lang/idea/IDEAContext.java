@@ -59,8 +59,6 @@ import com.intellij.psi.impl.source.JavaDummyHolder;
 import com.intellij.psi.impl.source.PsiClassImpl;
 import com.intellij.psi.impl.source.PsiExtensibleClass;
 import com.intellij.psi.impl.source.PsiImmediateClassType;
-import com.intellij.psi.impl.source.tree.CompositeElement;
-import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.impl.source.tree.java.PsiAssignmentExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiBinaryExpressionImpl;
 import com.intellij.psi.impl.source.tree.java.PsiPolyadicExpressionImpl;
@@ -90,15 +88,12 @@ import amadeus.maho.lang.inspection.Callback;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.lang.inspection.TestOnly;
 import amadeus.maho.transform.mark.Hook;
-import amadeus.maho.transform.mark.Proxy;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.InvisibleType;
 import amadeus.maho.transform.mark.base.TransformProvider;
-import amadeus.maho.util.control.LinkedIterator;
 
 import static com.intellij.psi.JavaTokenType.*;
 import static com.intellij.psi.PsiModifier.*;
-import static org.objectweb.asm.Opcodes.*;
 
 @TransformProvider
 public class IDEAContext {
@@ -107,16 +102,18 @@ public class IDEAContext {
     public static class AdditionalOperators {
         
         public static final IJavaElementType
-                NULL_OR     = { "NULL_OR" },
-                SAFE_ACCESS = { "SAFE_ACCESS" };
+                NULL_OR            = { "NULL_OR" },
+                SAFE_ACCESS        = { "SAFE_ACCESS" },
+                ASSERT_ACCESS      = { "ASSERT_ACCESS" };
         
-        public static final TokenSet YIELD_EXPR_INDICATOR_TOKENS = TokenSet.create(NULL_OR, SAFE_ACCESS);
+        public static final TokenSet YIELD_EXPR_INDICATOR_TOKENS = TokenSet.create(NULL_OR, SAFE_ACCESS, ASSERT_ACCESS);
         
         @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-        private static IElementType advance(final IElementType capture, final @InvisibleType("com.intellij.lang.java.lexer._JavaLexer") FlexLexer $this) = capture == QUEST ? tryMapToken($this) : capture;
+        private static IElementType advance(final IElementType capture, final @InvisibleType("com.intellij.lang.java.lexer._JavaLexer") FlexLexer $this)
+                = capture == QUEST ? tryMapTokenQUEST($this) : capture == EXCL ? tryMapTokenEXCL($this) : capture;
         
         @Privilege
-        private static IElementType tryMapToken(final @InvisibleType("com.intellij.lang.java.lexer._JavaLexer") FlexLexer flexLexer) {
+        private static IElementType tryMapTokenQUEST(final @InvisibleType("com.intellij.lang.java.lexer._JavaLexer") FlexLexer flexLexer) {
             final _JavaLexer lexer = (_JavaLexer) flexLexer;
             final int mark = lexer.zzMarkedPos, next = next(flexLexer);
             if (next == '.')
@@ -125,6 +122,16 @@ public class IDEAContext {
                 return NULL_OR;
             lexer.goTo(mark);
             return QUEST;
+        }
+        
+        @Privilege
+        private static IElementType tryMapTokenEXCL(final @InvisibleType("com.intellij.lang.java.lexer._JavaLexer") FlexLexer flexLexer) {
+            final _JavaLexer lexer = (_JavaLexer) flexLexer;
+            final int mark = lexer.zzMarkedPos, next = next(flexLexer);
+            if (next == '.')
+                return ASSERT_ACCESS;
+            lexer.goTo(mark);
+            return EXCL;
         }
         
         @Privilege
@@ -175,44 +182,44 @@ public class IDEAContext {
         
         static {
             // @formatter:off
-            add("PLUS",     PLUS,        "+"   , PsiPrefixExpressionImpl.class);
-            add("MINUS",    MINUS,       "-"   , PsiPrefixExpressionImpl.class);
-            add("NOT",      EXCL,        "!"   , PsiPrefixExpressionImpl.class);
-            add("TILDE",    TILDE,       "~"   , PsiPrefixExpressionImpl.class);
-            add("POSTINC",  PLUSPLUS,    "_++" , PsiPrefixExpressionImpl.class);
-            add("POSTDEC",  MINUSMINUS,  "_--" , PsiPrefixExpressionImpl.class);
-            add("PREINC",   PLUSPLUS,    "++_" , PsiPostfixExpressionImpl.class);
-            add("PREDEC",   MINUSMINUS,  "--_" , PsiPostfixExpressionImpl.class);
-            add("OROR",     OROR,        "||"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("ANDAND",   ANDAND,      "&&"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("OR",       OR,          "|"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("XOR",      XOR,         "^"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("AND",      AND,         "&"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("EQ",       EQEQ,        "=="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("NE",       NE,          "!="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("LT",       LT,          "<"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("GT",       GT,          ">"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("LE",       LE,          "<="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("GE",       GE,          ">="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("LTLT",     LTLT,        "<<"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("GTGT",     GTGT,        ">>"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("GTGTGT",   GTGTGT,      ">>>" , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("PLUS",     PLUS,        "+"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("MINUS",    MINUS,       "-"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("MUL",      ASTERISK,    "*"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("DIV",      DIV,         "/"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("MOD",      PERC,        "%"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
-            add("OREQ",     OREQ,        "|="  , PsiAssignmentExpressionImpl.class);
-            add("XOREQ",    XOREQ,       "^="  , PsiAssignmentExpressionImpl.class);
-            add("ANDEQ",    ANDEQ,       "&="  , PsiAssignmentExpressionImpl.class);
-            add("LTLTEQ",   LTLTEQ,      "<<=" , PsiAssignmentExpressionImpl.class);
-            add("GTGTEQ",   GTGTEQ,      ">>=" , PsiAssignmentExpressionImpl.class);
-            add("GTGTGTEQ", GTGTGTEQ,    ">>>=", PsiAssignmentExpressionImpl.class);
-            add("PLUSEQ",   PLUSEQ,      "+="  , PsiAssignmentExpressionImpl.class);
-            add("MINUSEQ",  MINUSEQ,     "-="  , PsiAssignmentExpressionImpl.class);
-            add("MULEQ",    ASTERISKEQ,  "*="  , PsiAssignmentExpressionImpl.class);
-            add("DIVEQ",    DIVEQ,       "/="  , PsiAssignmentExpressionImpl.class);
-            add("MODEQ",    PERCEQ,      "%="  , PsiAssignmentExpressionImpl.class);
+            add("PLUS"    , PLUS      , "+"   , PsiPrefixExpressionImpl.class);
+            add("MINUS"   , MINUS     , "-"   , PsiPrefixExpressionImpl.class);
+            add("NOT"     , EXCL      , "!"   , PsiPrefixExpressionImpl.class);
+            add("TILDE"   , TILDE     , "~"   , PsiPrefixExpressionImpl.class);
+            add("POSTINC" , PLUSPLUS  , "_++" , PsiPrefixExpressionImpl.class);
+            add("POSTDEC" , MINUSMINUS, "_--" , PsiPrefixExpressionImpl.class);
+            add("PREINC"  , PLUSPLUS  , "++_" , PsiPostfixExpressionImpl.class);
+            add("PREDEC"  , MINUSMINUS, "--_" , PsiPostfixExpressionImpl.class);
+            add("OROR"    , OROR      , "||"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("ANDAND"  , ANDAND    , "&&"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("OR"      , OR        , "|"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("XOR"     , XOR       , "^"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("AND"     , AND       , "&"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("EQ"      , EQEQ      , "=="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("NE"      , NE        , "!="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("LT"      , LT        , "<"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("GT"      , GT        , ">"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("LE"      , LE        , "<="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("GE"      , GE        , ">="  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("LTLT"    , LTLT      , "<<"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("GTGT"    , GTGT      , ">>"  , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("GTGTGT"  , GTGTGT    , ">>>" , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("PLUS"    , PLUS      , "+"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("MINUS"   , MINUS     , "-"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("MUL"     , ASTERISK  , "*"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("DIV"     , DIV       , "/"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("MOD"     , PERC      , "%"   , PsiBinaryExpressionImpl.class, PsiPolyadicExpressionImpl.class);
+            add("OREQ"    , OREQ      , "|="  , PsiAssignmentExpressionImpl.class);
+            add("XOREQ"   , XOREQ     , "^="  , PsiAssignmentExpressionImpl.class);
+            add("ANDEQ"   , ANDEQ     , "&="  , PsiAssignmentExpressionImpl.class);
+            add("LTLTEQ"  , LTLTEQ    , "<<=" , PsiAssignmentExpressionImpl.class);
+            add("GTGTEQ"  , GTGTEQ    , ">>=" , PsiAssignmentExpressionImpl.class);
+            add("GTGTGTEQ", GTGTGTEQ  , ">>>=", PsiAssignmentExpressionImpl.class);
+            add("PLUSEQ"  , PLUSEQ    , "+="  , PsiAssignmentExpressionImpl.class);
+            add("MINUSEQ" , MINUSEQ   , "-="  , PsiAssignmentExpressionImpl.class);
+            add("MULEQ"   , ASTERISKEQ, "*="  , PsiAssignmentExpressionImpl.class);
+            add("DIVEQ"   , DIVEQ     , "/="  , PsiAssignmentExpressionImpl.class);
+            add("MODEQ"   , PERCEQ    , "%="  , PsiAssignmentExpressionImpl.class);
             // @formatter:on
         }
         
@@ -363,93 +370,6 @@ public class IDEAContext {
         
     }
     
-    @Proxy(GETFIELD)
-    public static native TreeElement firstChild(CompositeElement $this);
-    
-    @Proxy(PUTFIELD)
-    public static native void firstChild(CompositeElement $this, @Nullable TreeElement value);
-    
-    @Proxy(GETFIELD)
-    public static native TreeElement lastChild(CompositeElement $this);
-    
-    @Proxy(PUTFIELD)
-    public static native void lastChild(CompositeElement $this, @Nullable TreeElement value);
-    
-    @Proxy(GETFIELD)
-    public static native TreeElement myNextSibling(TreeElement $this);
-    
-    @Proxy(PUTFIELD)
-    public static native void myNextSibling(TreeElement $this, @Nullable TreeElement value);
-    
-    @Proxy(GETFIELD)
-    public static native TreeElement myPrevSibling(TreeElement $this);
-    
-    @Proxy(PUTFIELD)
-    public static native void myPrevSibling(TreeElement $this, @Nullable TreeElement value);
-    
-    @Proxy(GETFIELD)
-    public static native CompositeElement myParent(TreeElement $this);
-    
-    @Proxy(PUTFIELD)
-    public static native void myParent(TreeElement $this, @Nullable CompositeElement value);
-    
-    public static void markTree(final @Nullable TreeElement prev, final @Nullable TreeElement next) {
-        if (prev != null)
-            myNextSibling(prev, next);
-        if (next != null)
-            myPrevSibling(next, prev);
-    }
-    
-    public static void markEquivalent(final CompositeElement self, final CompositeElement target) {
-        myParent(self, myParent(target));
-        myPrevSibling(self, myPrevSibling(target));
-        myNextSibling(self, myNextSibling(target));
-    }
-    
-    public static void markChild(final CompositeElement holder, final CompositeElement target) = markChild(holder, firstChild(target), lastChild(target));
-    
-    public static void markChild(final CompositeElement holder, final TreeElement first, final TreeElement last) {
-        firstChild(holder, first);
-        lastChild(holder, last);
-        myPrevSibling(first, null);
-        myNextSibling(last, null);
-        LinkedIterator.of(TreeElement::getTreeNext, first).stream(true).forEach(it -> myParent(it, holder));
-    }
-    
-    public static void markChildAs(final CompositeElement holder, final TreeElement target) {
-        firstChild(holder, target);
-        lastChild(holder, target);
-        myPrevSibling(target, null);
-        myNextSibling(target, null);
-        myParent(target, holder);
-    }
-    
-    public static void markChildAs(final CompositeElement holder, final TreeElement... targets) {
-        if (targets.length > 0) {
-            firstChild(holder, targets[0]);
-            lastChild(holder, targets[targets.length - 1]);
-            @Nullable TreeElement l = null, r = null;
-            for (final TreeElement target : targets) {
-                r = target;
-                markTree(l, r);
-                myParent(r, holder);
-                l = r;
-            }
-            myNextSibling(r, null);
-        }
-    }
-    
-    public static void replaceMarkChild(final CompositeElement holder, final TreeElement target, final TreeElement element) {
-        final TreeElement prev = target.getTreePrev(), next = target.getTreeNext();
-        markTree(prev, element);
-        markTree(element, next);
-        if (prev == null)
-            firstChild(holder, element);
-        if (next == null)
-            lastChild(holder, element);
-        myParent(element, holder);
-    }
-    
     public static PsiClassType typeWithGenerics(final PsiClass psiClass) {
         final PsiElementFactory factory = JavaPsiFacade.getElementFactory(psiClass.getProject());
         final PsiType psiTypes[] = Stream.of(psiClass.getTypeParameters()).map(factory::createType).toArray(PsiType.ARRAY_FACTORY::create);
@@ -596,7 +516,7 @@ public class IDEAContext {
     }
     
     public static boolean requiresMaho(final @Nullable PsiElement element)
-            = element != null && requiresMaho(element.getContainingFile().getOriginalFile());
+            = element != null && requiresMaho(element.getContainingFile()?.getOriginalFile() ?? null);
     
     public static boolean requiresMaho(final @Nullable PsiFileSystemItem item)
             = item != null && (item instanceof JavaDummyHolder holder ? requiresMaho(holder.getContext()?.getContainingFile()?.getOriginalFile() ?? null) :

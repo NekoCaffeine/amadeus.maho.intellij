@@ -1,5 +1,6 @@
 package amadeus.maho.lang.idea.handler;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -88,11 +89,9 @@ public class DelegateHandler extends BaseHandler<Delegate> {
             } else {
                 final List<? extends PsiClassType> delegateTypes = delegateTypes(annotation, classType).toList();
                 members.injectBridgeProvider((pdc, staticOnly) -> {
-                    if ((!staticOnly || staticSource) && pdc.type() instanceof PsiClassType contextType && contextType.resolve() instanceof PsiClass derived) {
-                        final PsiClassType.ClassResolveResult resolveResult = contextType.resolveGenerics();
-                        final @Nullable PsiClass contextClass = resolveResult.getElement();
-                        return CachedValuesManager.getProjectPsiDependentCache(contextClass, _ -> new ConcurrentWeakIdentityHashMap<PsiAnnotation,
-                                        ConcurrentHashMap<PsiClassType, List<? extends LightBridgeElement>>>())
+                    if ((!staticOnly || staticSource) && pdc.type() instanceof PsiClassType contextType && contextType.resolve() instanceof PsiClass derived)
+                        return CachedValuesManager.getProjectPsiDependentCache(derived, _ ->
+                                        new ConcurrentWeakIdentityHashMap<PsiAnnotation, ConcurrentHashMap<PsiClassType, List<? extends LightBridgeElement>>>())
                                 .computeIfAbsent(annotationTree, _ -> new ConcurrentHashMap<>())
                                 .computeIfAbsent(contextType, _ -> delegateTypes.stream()
                                         .map(substitutor(pdc, context, derived)::substitute)
@@ -100,10 +99,16 @@ public class DelegateHandler extends BaseHandler<Delegate> {
                                         .flatMap(delegateType -> {
                                             final PsiClassType.ClassResolveResult delegateResult = delegateType.resolveGenerics();
                                             final @Nullable PsiClass delegateClass = delegateResult.getElement();
+                                            final HashSet<String> record = { };
                                             if (delegateClass != null) {
                                                 return Stream.<PsiMember>concat(Stream.of(delegateClass.getAllFields()), Stream.of(delegateClass.getAllMethods()))
                                                         .filter(it -> it.hasModifierProperty(PsiModifier.PUBLIC) && !it.hasModifierProperty(PsiModifier.STATIC))
-                                                        .filter(it -> !(it instanceof PsiMethod method) || !method.isConstructor() && !objectMethodIdentities.contains(IDEAContext.methodIdentity(method)))
+                                                        .filter(it -> !(it instanceof PsiMethod method) || !method.isConstructor() && !objectMethodIdentities[IDEAContext.methodIdentity(method)])
+                                                        .filter(it -> record.add(switch (it) {
+                                                            case PsiField field   -> field.getName();
+                                                            case PsiMethod method -> IDEAContext.methodIdentity(method);
+                                                            default               -> null;
+                                                        }))
                                                         .map(it -> (LightBridgeElement) switch (it) {
                                                             case PsiField field   -> {
                                                                 final LightBridgeField wrapper = { context, field.getName(), delegateType.resolveGenerics().getSubstitutor().substitute(field.getType()), annotationTree, field };
@@ -115,7 +120,7 @@ public class DelegateHandler extends BaseHandler<Delegate> {
                                                             }
                                                             case PsiMethod method -> {
                                                                 final LightBridgeMethod wrapper = { context, method, delegateType.resolveGenerics().getSubstitutor(), annotationTree, method };
-                                                                wrapper.setContainingClass(contextClass);
+                                                                wrapper.setContainingClass(derived);
                                                                 wrapper.setNavigationElement(method);
                                                                 if (staticSource)
                                                                     wrapper.getModifierList().addModifier(PsiModifier.STATIC);
@@ -129,7 +134,6 @@ public class DelegateHandler extends BaseHandler<Delegate> {
                                             return Stream.empty();
                                         })
                                         .toList());
-                    }
                     return List.of();
                 });
             }
@@ -137,7 +141,7 @@ public class DelegateHandler extends BaseHandler<Delegate> {
     }
     
     private static PsiSubstitutor substitutor(final ClassDeclarationsProcessor.ProcessDeclarationsContext pdc, final PsiClass context, final PsiClass derived)
-            = pdc.qualifier() ? pdc.substitutor() : TypeConversionUtil.getClassSubstitutor(context, derived, pdc.substitutor());
+            = pdc.qualifier() ? pdc.substitutor() : TypeConversionUtil.getClassSubstitutor(context, derived, pdc.substitutor()) ?? pdc.substitutor();
     
     @Override
     public void processVariable(final PsiField tree, final Delegate annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context)
@@ -151,17 +155,19 @@ public class DelegateHandler extends BaseHandler<Delegate> {
     
     @Override
     public void check(final PsiElement tree, final Delegate annotation, final PsiAnnotation annotationTree, final ProblemsHolder holder, final QuickFixFactory quickFix) {
+        if (tree instanceof PsiModifierListOwner owner && owner.hasModifierProperty(PsiModifier.STATIC) && annotation.hard())
+            holder.registerProblem(annotationTree, "The target of a hard delegate must be a non-static member", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
         if (tree instanceof PsiMethod method && method.getParameterList().getParametersCount() != 0)
-            holder.registerProblem(annotationTree, "The delegate method must have no parameters.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+            holder.registerProblem(annotationTree, "The delegate method must have no parameters", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
         final @Nullable PsiType type = switch (tree) {
             case PsiField field   -> field.getType();
             case PsiMethod method -> method.getReturnType();
             default               -> null;
         };
         if (type instanceof PsiPrimitiveType)
-            holder.registerProblem(annotationTree, "The delegate type cannot be a primitive type.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+            holder.registerProblem(annotationTree, "The delegate type cannot be a primitive type", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
         if (type instanceof PsiArrayType)
-            holder.registerProblem(annotationTree, "The delegate type cannot be an array type.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+            holder.registerProblem(annotationTree, "The delegate type cannot be an array type", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
     }
     
     @Override

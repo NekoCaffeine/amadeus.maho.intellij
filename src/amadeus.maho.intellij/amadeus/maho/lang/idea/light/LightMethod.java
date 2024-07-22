@@ -32,7 +32,6 @@ import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.Setter;
-import amadeus.maho.lang.idea.handler.DefaultValueHandler;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.TransformProvider;
@@ -136,7 +135,7 @@ public class LightMethod extends LightMethodBuilder implements LightElement {
     @Override
     public self addParameter(final PsiParameter parameter) = getParameterList().addParameter(parameter);
     
-    public self addParameter(final PsiParameter parameter, final PsiType type, final boolean isVarArgs = parameter.isVarArgs(), final PsiExpression defaultValue = DefaultValueHandler.defaultValue(parameter)) {
+    public self addParameter(final PsiParameter parameter, final PsiType type, final boolean isVarArgs = parameter.isVarArgs(), final PsiExpression defaultValue = parameter.getInitializer()) {
         if (defaultValue == null)
             addParameter(new LightParameter(this, parameter.getName(), type, isVarArgs));
         else

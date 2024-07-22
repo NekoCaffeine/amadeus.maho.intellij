@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -52,11 +51,12 @@ import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 
 import amadeus.maho.lang.AccessLevel;
+import amadeus.maho.lang.EqualsAndHashCode;
 import amadeus.maho.lang.Extension;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.Getter;
+import amadeus.maho.lang.ToString;
 import amadeus.maho.lang.idea.IDEAContext;
-import amadeus.maho.lang.idea.handler.base.ASTTransformer;
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
 import amadeus.maho.lang.idea.handler.base.HandlerSupport;
 import amadeus.maho.lang.idea.handler.base.ImplicitUsageChecker;
@@ -67,9 +67,6 @@ import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.function.FunctionHelper;
-import amadeus.maho.util.runtime.DebugHelper;
-import amadeus.maho.util.tuple.Tuple;
-import amadeus.maho.util.tuple.Tuple2;
 
 import static amadeus.maho.lang.idea.handler.ExtensionHandler.PRIORITY;
 
@@ -100,7 +97,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         
         // When the first parameter is annotated with @Nullable, the call that may be null is not checked.
         @Hook
-        public static <T extends PsiElement> Hook.Result ifMyProblem(final NullabilityProblemKind<T> $this, final NullabilityProblemKind.NullabilityProblem<?> problem, final Consumer<? super T> consumer) {
+        private static <T extends PsiElement> Hook.Result ifMyProblem(final NullabilityProblemKind<T> $this, final NullabilityProblemKind.NullabilityProblem<?> problem, final Consumer<? super T> consumer) {
             if ($this == NullabilityProblemKind.callNPE) {
                 final NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
                 if (myProblem != null && skipNullabilityCheck(((PsiMethodCallExpression) myProblem.getAnchor()).resolveMethod()))
@@ -137,6 +134,10 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         
     }
     
+    @ToString
+    @EqualsAndHashCode
+    public record ExtensionMethodCacheByType(Predicate<PsiType> predicate, BiFunction<PsiClass, PsiType, ExtensionMethod> provider) { }
+    
     public static boolean isProvider(final @Nullable PsiClass node) = node != null && node.hasAnnotation(Extension.class.getCanonicalName()) && node.hasModifierProperty(PsiModifier.PUBLIC);
     
     public static boolean isExtensionMethodOrSource(final @Nullable PsiElement element) = isExtensionMethod(element) || isExtensionMethodSource(element);
@@ -147,69 +148,22 @@ public class ExtensionHandler extends BaseSyntaxHandler {
     
     public static PsiElement getSource(final PsiElement element) = element instanceof ExtensionMethod extensionMethod ? extensionMethod.sourceMethod() : element;
     
-    // @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true, metadata = @TransformMetadata(order = -1))
-    // private static boolean processDeclarationsInClass(
-    //         final boolean capture,
-    //         final PsiClass psiClass,
-    //         final PsiScopeProcessor processor,
-    //         final ResolveState state,
-    //         final @Nullable Set<PsiClass> visited,
-    //         final @Nullable PsiElement last,
-    //         final PsiElement place,
-    //         final LanguageLevel languageLevel,
-    //         final boolean isRaw,
-    //         final GlobalSearchScope resolveScope) {
-    //     if (!capture)
-    //         return false;
-    //     if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList && psiClass.getModifierList() == last || visited != null && visited.contains(psiClass))
-    //         return true;
-    //     if (!(processor instanceof MethodResolverProcessor methodResolverProcessor && methodResolverProcessor.isConstructor()) && requiresMaho(place)) {
-    //         final @Nullable ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
-    //         if (classHint == null || classHint.shouldProcess(ElementClassHint.DeclarationKind.METHOD)) {
-    //             final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
-    //             final @Nullable String name = nameHint == null ? null : nameHint.getName(state);
-    //             // Skip existing method signatures of that type.
-    //             final List<PsiClass> supers = supers(psiClass);
-    //             final Collection<PsiMethod> collect = supers.stream().map(IDEAContext::methods).flatMap(Collection::stream).collect(Collectors.toSet());
-    //             final ClassDeclarationsProcessor.ProcessDeclarationsContext context = ClassDeclarationsProcessor.processDeclarationsContext(psiClass, place);
-    //             // Elimination of duplicate signature methods.
-    //             // The purpose of differentiating providers is to report errors when multiple providers provide the same signature.
-    //             final HashMap<PsiClass, Collection<PsiMethod>> providerRecord = { };
-    //             return IDEAContext.computeReadActionIgnoreDumbMode(() -> {
-    //                 final Collection<ExtensionMethod> cache = memberCache(resolveScope, psiClass, context.type(), supers, context.substitutor());
-    //                 return (name == null ? cache.stream() : cache.stream().filter(method -> name.equals(method.getName())))
-    //                         .filter(method -> checkMethod(collect, providerRecord, method))
-    //                         .allMatch(method -> processor.execute(method, state));
-    //             });
-    //         }
-    //     }
-    //     return true;
-    // }
-    
     public static Collection<ExtensionMethod> memberCache(final GlobalSearchScope resolveScope, final PsiClass psiClass, final PsiType type, final List<PsiClass> supers, final PsiSubstitutor substitutor) {
-        if (ASTTransformer.collectGuard.get().get() != 0 || ASTTransformer.loadTreeGuard.get().get() != 0)
-            DebugHelper.breakpoint();
         final @Nullable Project project = resolveScope.getProject();
         if (project == null)
             return List.of();
-        final List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>> tuples = CachedValuesManager.getManager(project).getCachedValue(project, () -> CachedValueProvider.Result.create(
-                        new ConcurrentHashMap<GlobalSearchScope, List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>>>(), PsiModificationTracker.getInstance(project)))
-                .computeIfAbsent(resolveScope, scope -> {
-                    final AtomicInteger guard = ASTTransformer.collectGuard.get();
-                    guard.getAndIncrement();
-                    try {
-                        return extensionSet(scope).stream()
-                                .map(ExtensionHandler::providerData)
-                                .flatMap(Collection::stream)
-                                .collect(Collectors.toList());
-                    } finally { guard.getAndDecrement(); }
-                });
+        final List<ExtensionMethodCacheByType> caches = CachedValuesManager.getManager(project).getCachedValue(project, () -> CachedValueProvider.Result.create(
+                        new ConcurrentHashMap<GlobalSearchScope, List<ExtensionMethodCacheByType>>(), PsiModificationTracker.getInstance(project)))
+                .computeIfAbsent(resolveScope, scope -> extensionSet(scope).stream()
+                        .map(ExtensionHandler::providerData)
+                        .flatMap(Collection::stream)
+                        .collect(Collectors.toList()));
         return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<String, Supplier<Collection<ExtensionMethod>>>>())
                 .computeIfAbsent(resolveScope, _ -> new ConcurrentHashMap<>()).computeIfAbsent(type.getCanonicalText(), it -> FunctionHelper.lazy(() -> supers.stream().flatMap(node -> {
                     final PsiType contextType = psiClass == node ? type : new PsiImmediateClassType(node, TypeConversionUtil.getSuperClassSubstitutor(node, psiClass, substitutor));
-                    return tuples.stream()
-                            .filter(tuple -> tuple.v1.test(contextType))
-                            .map(tuple -> tuple.v2.apply(psiClass, contextType));
+                    return caches.stream()
+                            .filter(cache -> cache.predicate().test(contextType))
+                            .map(cache -> cache.provider().apply(psiClass, contextType));
                 }).collect(Collectors.toList()))).get();
     }
     
@@ -246,19 +200,17 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                 .collect(Collectors.toList());
     }
     
-    public static List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>> providerData(final PsiClass node) = CachedValuesManager.getProjectPsiDependentCache(node, ExtensionHandler::syncProviderData);
+    public static List<ExtensionMethodCacheByType> providerData(final PsiClass node) = CachedValuesManager.getProjectPsiDependentCache(node, ExtensionHandler::syncProviderData);
     
-    private static List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>> syncProviderData(final PsiClass node) {
+    private static List<ExtensionMethodCacheByType> syncProviderData(final PsiClass node) {
         // Improve code completion speed with lazy loading and built-in caching.
-        final List<Tuple2<Predicate<PsiType>, BiFunction<PsiClass, PsiType, ExtensionMethod>>> result = new ArrayList<>();
+        final List<ExtensionMethodCacheByType> result = new ArrayList<>();
         final Project project = node.getProject();
         final PsiResolveHelper resolveHelper = JavaPsiFacade.getInstance(project).getResolveHelper();
         final LanguageLevel languageLevel = PsiUtil.getLanguageLevel(project);
         Stream.of(node.getMethods())
                 .filter(methodNode -> methodNode.hasModifierProperty(PsiModifier.PUBLIC) && methodNode.hasModifierProperty(PsiModifier.STATIC))
                 .filter(methodNode -> methodNode.getParameterList().getParametersCount() > 0)
-                // Determine if the method works by getting the parameter type. The method may be incomplete, e.g., under preparation.
-                // .filter(methodNode -> Stream.of(methodNode.getParameterList().getParameters()).map(PsiParameter::getType).allMatch(ObjectHelper::nonNull))
                 // Cannot be applied to the primitive type.
                 .filter(methodNode -> !(methodNode.getParameterList().getParameters()[0].getType() instanceof PsiPrimitiveType))
                 .filter(methodNode -> methodNode.getReturnType() != null)
@@ -295,16 +247,18 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                         return lightMethod;
                     };
                     final ConcurrentHashMap<PsiClass, Map<PsiType, Supplier<ExtensionMethod>>> cache = { };
-                    result.add(Tuple.tuple(
+                    final ExtensionMethodCacheByType cacheByType = {
                             injectType -> TypeConversionUtil.isAssignable(resolveHelper.inferTypeArguments(typeParameters, leftTypes, new PsiType[]{ injectType }, languageLevel).substitute(type), injectType),
-                            (injectNode, injectType) -> cache.computeIfAbsent(injectNode, _ -> new ConcurrentHashMap<>()).computeIfAbsent(injectType, _ -> FunctionHelper.lazy(() -> function.apply(injectNode, injectType))).get()));
+                            (injectNode, injectType) -> cache.computeIfAbsent(injectNode, _ -> new ConcurrentHashMap<>()).computeIfAbsent(injectType, _ -> FunctionHelper.lazy(() -> function.apply(injectNode, injectType))).get()
+                    };
+                    result += cacheByType;
                 });
         return result;
     }
     
     private static final String
-            CANNOT_INNER_CLASS      = "@Extension cannot be marked on an inner class.",
-            CAN_ONLY_STATIC_CONTEXT = "The extension owner must be in a static context.";
+            CANNOT_INNER_CLASS      = "@Extension cannot be marked on an inner class",
+            CAN_ONLY_STATIC_CONTEXT = "The extension owner must be in a static context";
     
     @Override
     public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {

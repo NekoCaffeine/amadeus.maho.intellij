@@ -3,10 +3,13 @@ package amadeus.maho.lang.idea.handler;
 import java.util.List;
 
 import com.intellij.codeInsight.Nullability;
+import com.intellij.codeInsight.NullabilityAnnotationInfo;
 import com.intellij.codeInsight.NullableNotNullManager;
 import com.intellij.codeInsight.NullableNotNullManagerImpl;
 import com.intellij.codeInsight.annoPackages.AnnotationPackageSupport;
 import com.intellij.codeInsight.intention.AddAnnotationPsiFix;
+import com.intellij.codeInspection.dataFlow.DataFlowInspectionBase;
+import com.intellij.codeInspection.dataFlow.DfaPsiUtil;
 import com.intellij.codeInspection.dataFlow.NullabilityUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.libraries.LibraryUtil;
@@ -16,11 +19,15 @@ import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiAnnotationOwner;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
+import com.intellij.psi.PsiLocalVariable;
 import com.intellij.psi.PsiModifierList;
+import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.PsiNameValuePair;
+import com.intellij.psi.PsiParameter;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.SmartTypePointer;
@@ -32,8 +39,12 @@ import com.intellij.refactoring.introduceVariable.VariableExtractor;
 import amadeus.maho.lang.Getter;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
+import amadeus.maho.transform.mark.Redirect;
 import amadeus.maho.transform.mark.base.At;
+import amadeus.maho.transform.mark.base.Slice;
 import amadeus.maho.transform.mark.base.TransformProvider;
+
+import static amadeus.maho.lang.idea.IDEAContext.requiresMaho;
 
 @TransformProvider
 public class NullableHandler implements AnnotationPackageSupport {
@@ -84,5 +95,20 @@ public class NullableHandler implements AnnotationPackageSupport {
             }));
         return capture;
     }
+    
+    public static Nullability defaultNullability(final PsiElement element) = requiresMaho(element) ? Nullability.NOT_NULL : Nullability.UNKNOWN;
+    
+    public static Nullability findNullability(final PsiModifierListOwner owner, final Nullability defaultNullability)
+            = NullableNotNullManager.getInstance(owner.getProject()).findExplicitNullability(owner)?.getNullability() ?? defaultNullability;
+    
+    @Hook(value = DfaPsiUtil.class, isStatic = true, at = @At(field = @At.FieldInsn(name = "UNKNOWN")), forceReturn = true)
+    private static Nullability inferParameterNullability(final PsiParameter parameter) = defaultNullability(parameter);
+    
+    @Hook(value = DfaPsiUtil.class, isStatic = true, at = @At(field = @At.FieldInsn(name = "UNKNOWN"), ordinal = 4), forceReturn = true)
+    private static Nullability getElementNullability(final @Nullable PsiType resultType, final @Nullable PsiModifierListOwner owner, final boolean ignoreParameterNullabilityInference)
+            = owner instanceof PsiLocalVariable variable ? defaultNullability(variable) : Nullability.UNKNOWN;
+    
+    @Redirect(targetClass = DataFlowInspectionBase.class, selector = "reportNullableReturns", slice = @Slice(@At(method = @At.MethodInsn(name = "isInferred"))))
+    private static boolean isInferred(final NullabilityAnnotationInfo info) = false;
     
 }

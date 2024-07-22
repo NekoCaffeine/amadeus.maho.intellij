@@ -93,8 +93,10 @@ public class AnnotationInvocationHandler implements InvocationHandler {
     AnnotationType annotationType = AnnotationType.instance(annotationClass);
     
     @Default
-    @Nullable PsiAnnotation annotationTree     = null;
-    @Nullable PsiAnnotation annotationTreeCopy = annotationTree == null ? null : JavaPsiFacade.getElementFactory(annotationTree.getProject()).createAnnotationFromText(annotationTree.getText(), annotationTree);
+    PsiAnnotation annotationTree;
+    
+    @Nullable
+    PsiAnnotation annotationTreeCopy = annotationTree == null ? null : JavaPsiFacade.getElementFactory(annotationTree.getProject()).createAnnotationFromText(annotationTree.getText(), annotationTree);
     
     ConcurrentHashMap<String, Object> evaluateCache = { };
     
@@ -213,6 +215,9 @@ public class AnnotationInvocationHandler implements InvocationHandler {
                     .filter(method -> !skipReturnTypes.contains(method.getReturnType()))
                     .toList()
     };
+    
+    public static @Nullable AnnotationInvocationHandler asOneOfUs(final Annotation annotation)
+            = Proxy.isProxyClass(annotation.getClass()) && Proxy.getInvocationHandler(annotation) instanceof AnnotationInvocationHandler handler ? handler : null;
     
     public static <A extends Annotation> @Nullable A make(final Class<A> annotationType, final @Nullable PsiAnnotation annotation = null) {
         if (annotation == null)

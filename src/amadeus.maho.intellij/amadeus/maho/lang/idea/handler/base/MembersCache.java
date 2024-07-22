@@ -4,7 +4,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiField;
@@ -25,6 +24,8 @@ import amadeus.maho.lang.inspection.Nullable;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class MembersCache {
     
+    private static final List<ExtensibleMembers.Namespace<?, ?>> NAMESPACES = List.of(ExtensibleMembers.INNER_CLASSES, ExtensibleMembers.FIELDS, ExtensibleMembers.METHODS);
+    
     PsiClass context;
     
     @Default
@@ -39,15 +40,12 @@ public class MembersCache {
     boolean complete = recursive || extensibleMembers.stream().noneMatch(ExtensibleMembers::recursive);
     
     Map<Class<? extends PsiMember>, List<PsiMember>> allMembers = extensibleMembers.stream()
-            .flatMap(members -> Stream.<ExtensibleMembers.Namespace<?, ? extends PsiMember>>of(
-                            ExtensibleMembers.INNER_CLASSES,
-                            ExtensibleMembers.FIELDS,
-                            ExtensibleMembers.METHODS)
-                    .map(members::list)
-                    .flatMap(List::stream))
+            .flatMap(members -> NAMESPACES.stream().map(members::list).flatMap(List::stream))
             .collect(Collectors.groupingBy(MembersCache::memberType));
     
-    Map<String, Map<Class<? extends PsiMember>, List<PsiMember>>> membersByName = allMembers.values().stream().flatMap(Collection::stream).collect(Collectors.groupingBy(PsiMember::getName, Collectors.groupingBy(MembersCache::memberType)));
+    Map<String, Map<Class<? extends PsiMember>, List<PsiMember>>> membersByName = allMembers.values().stream()
+            .flatMap(Collection::stream)
+            .collect(Collectors.groupingBy(member -> member.getName() ?? "", Collectors.groupingBy(MembersCache::memberType)));
     
     public <T extends PsiMember> List<T> allMembers(final Class<T> type) = (List<T>) (allMembers()[type] ?? List.of());
     

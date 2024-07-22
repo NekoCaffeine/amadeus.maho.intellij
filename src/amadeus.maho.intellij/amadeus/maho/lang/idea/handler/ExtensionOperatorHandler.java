@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import com.intellij.codeInsight.intention.QuickFixFactory;
+import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.find.findUsages.FindUsagesOptions;
 import com.intellij.find.findUsages.JavaFindUsagesHelper;
 import com.intellij.psi.PsiAnnotation;
@@ -40,7 +42,7 @@ public class ExtensionOperatorHandler extends BaseHandler<Extension.Operator> {
     
     @Override
     public void processMethod(final PsiMethod tree, final Extension.Operator annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
-        if (tree instanceof LightBridgeMethod)
+        if (tree instanceof LightBridgeMethod || annotation.value().isEmpty())
             return;
         final DerivedMethod methodTree = { context, tree, PsiSubstitutor.EMPTY, annotationTree, tree };
         methodTree.name(operatorSymbol2operatorName.getOrDefault(annotation.value(), annotation.value()));
@@ -54,6 +56,12 @@ public class ExtensionOperatorHandler extends BaseHandler<Extension.Operator> {
     
     @Override
     public void collectRelatedTarget(final PsiModifierListOwner tree, final Extension.Operator annotation, final PsiAnnotation annotationTree, final Set<PsiNameIdentifierOwner> targets) = derivedMethods(tree).forEach(targets::add);
+    
+    @Override
+    public void check(final PsiElement tree, final Extension.Operator annotation, final PsiAnnotation annotationTree, final ProblemsHolder holder, final QuickFixFactory quickFix) {
+        if (annotation.value().isEmpty())
+            holder.registerProblem(annotationTree, "Operator name is empty", quickFix.createDeleteFix(annotationTree));
+    }
     
     private static Stream<? extends PsiMethod> derivedMethods(final PsiModifierListOwner tree) = tree instanceof PsiMethod method && method.getContainingClass() instanceof PsiClass containing ?
             Stream.of(containing.getAllMethods()).cast(DerivedMethod.class).filter(derived -> derived.source() == method) : Stream.empty();

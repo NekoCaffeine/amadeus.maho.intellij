@@ -62,13 +62,13 @@ public class GetterHandler extends BaseHandler<Getter> {
             holder.registerProblem(field.getNameIdentifier(), JavaErrorBundle.message("variable.not.initialized", field.getName()), ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
         if (tree instanceof PsiMethod method) {
             if (annotation.lazy())
-                holder.registerProblem(annotationTree, "The @Getter marked on the method does not support the lazy attribute.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+                holder.registerProblem(annotationTree, "The @Getter marked on the method does not support the lazy attribute", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
             if (method.getParameterList().getParametersCount() != 0)
-                holder.registerProblem(annotationTree, "The methods marked by @Getter must have no parameters.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+                holder.registerProblem(annotationTree, "The methods marked by @Getter must have no parameters", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
             if (tree.getParent() instanceof PsiClass psiClass && !psiClass.isInterface())
-                holder.registerProblem(annotationTree, "The method marked by @Getter must be in the interface scope.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+                holder.registerProblem(annotationTree, "The method marked by @Getter must be in the interface scope", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
             if (method.hasModifierProperty(STATIC))
-                holder.registerProblem(annotationTree, "The method marked by @Getter must be non-static.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree),
+                holder.registerProblem(annotationTree, "The method marked by @Getter must be non-static", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree),
                         quickFix.createModifierListFix(method, STATIC, false, false));
         }
     }
@@ -155,7 +155,8 @@ public class GetterHandler extends BaseHandler<Getter> {
     public boolean isImplicitWrite(final PsiElement tree, final ImplicitUsageChecker.RefData refData) = tree instanceof PsiField field && HandlerSupport.lookupAnnotation(field, Getter.class)?.lazy() ?? false;
     
     @Hook(value = JavaCodeStyleManagerImpl.class, isStatic = true)
-    private static Hook.Result suggestUniqueVariableName(final String baseName, final PsiElement place, final boolean lookForward, final boolean allowShadowing, final Predicate<? super PsiVariable> canBeReused)
+    private static Hook.Result suggestUniqueVariableName(final String baseName, final PsiElement place, final boolean lookForward, final boolean allowShadowing,
+            final Predicate<? super PsiVariable> canBeReused, final @Nullable Predicate<String> additionalValidator)
             = Hook.Result.falseToVoid(place instanceof PsiExpressionStatement statement && statement.getExpression() instanceof PsiMethodCallExpression callExpression && callExpression.getArgumentList().isEmpty(), baseName);
     
     @Hook(at = @At(method = @At.MethodInsn(name = "areElementsEquivalent")), before = false, capture = true)

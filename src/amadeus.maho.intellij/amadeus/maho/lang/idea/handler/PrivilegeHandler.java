@@ -5,7 +5,6 @@ import java.util.stream.Stream;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightFixUtil;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightMethodUtil;
-import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.dataFlow.java.ControlFlowAnalyzer;
 import com.intellij.debugger.engine.evaluation.expression.EvaluatorBuilderImpl;
@@ -17,7 +16,6 @@ import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
-import com.intellij.psi.PsiExpressionStatement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiIdentifier;
 import com.intellij.psi.PsiImportStatement;
@@ -31,7 +29,6 @@ import com.intellij.psi.PsiNewExpression;
 import com.intellij.psi.PsiParenthesizedExpression;
 import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiResolveHelper;
-import com.intellij.psi.PsiStatement;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeCastExpression;
 import com.intellij.psi.PsiTypeElement;
@@ -84,15 +81,11 @@ public class PrivilegeHandler {
         return Hook.Result.VOID;
     }
     
-    @Hook(value = HighlightUtil.class, isStatic = true)
-    private static Hook.Result checkNotAStatement(final PsiStatement statement) = statement instanceof PsiExpressionStatement expressionStatement && expressionStatement.getExpression() instanceof PsiTypeCastExpression castExpression ?
-            Hook.Result.falseToVoid(isPrivilegeTypeCast(castExpression), null) : Hook.Result.VOID;
-    
     @Hook(value = PsiUtil.class, isStatic = true)
     private static Hook.Result isStatement(final PsiElement element) = Hook.Result.falseToVoid(element instanceof PsiTypeCastExpression castExpression && isPrivilegeTypeCast(castExpression));
     
     @Hook(value = LambdaUtil.class, isStatic = true)
-    private static Hook.Result isExpressionStatementExpression(final PsiElement element) = Hook.Result.falseToVoid(element instanceof PsiTypeCastExpression castExpression && isPrivilegeTypeCast(castExpression));
+    private static Hook.Result isExpressionStatementExpression(final PsiElement element) = isStatement(element);
     
     @Hook(value = HighlightMethodUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static @Nullable HighlightInfo.Builder checkConstructorCallsBaseClassConstructor(final @Nullable HighlightInfo.Builder capture, final PsiMethod method, final PsiResolveHelper resolveHelper) {
@@ -140,7 +133,7 @@ public class PrivilegeHandler {
         while (parent.getParent() instanceof PsiParenthesizedExpression parenthesizedExpression)
             parent = parenthesizedExpression;
         if (parent.getParent() instanceof PsiJavaCodeReferenceElement referenceElement && referenceElement.getQualifier() == parent && referenceElement.getParent() instanceof PsiMethodCallExpression callExpression &&
-            callExpression.getMethodExpression() == referenceElement && callExpression.resolveMethod().hasModifierProperty(PsiModifier.PRIVATE))
+            callExpression.getMethodExpression() == referenceElement && callExpression.resolveMethod()?.hasModifierProperty(PsiModifier.PRIVATE) ?? false)
             return Hook.Result.TRUE;
         return Hook.Result.VOID;
     }

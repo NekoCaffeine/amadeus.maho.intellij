@@ -39,16 +39,16 @@ public interface DisablePersistentStateComponent {
     @Hook(forceReturn = true, exactMatch = false)
     private static boolean runEssentialHighlightingOnly(final HighlightingSettingsPerFile $this) = false;
     
-    @Hook(value = HighlightingMarkupGrave.class, isStatic = true, forceReturn = true)
-    private static boolean isZombieMarkup(final RangeMarker highlighter) = false;
+    @Hook(value = HighlightingMarkupGrave.Companion.class, forceReturn = true)
+    private static boolean isZombieMarkup(final HighlightingMarkupGrave.Companion $this, final RangeMarker highlighter) = false;
     
-    @Hook(value = HighlightingMarkupGrave.class, isStatic = true, forceReturn = true)
-    private static void unmarkZombieMarkup(final RangeMarker highlighter) { }
+    @Hook(value = HighlightingMarkupGrave.Companion.class, forceReturn = true)
+    private static void unmarkZombieMarkup(final HighlightingMarkupGrave.Companion $this, final RangeMarker highlighter) { }
     
     @Hook(forceReturn = true)
-    private static void resurrectZombies(final HighlightingMarkupGrave $this, final Document document, final VirtualFileWithId file) { }
+    private static void resurrectZombies$intellij_platform_lang_impl(final HighlightingMarkupGrave $this, final Document document, final VirtualFileWithId file) { }
     
-    @Hook(at = @At(field = @At.FieldInsn(name = "myProject")), before = false, exactMatch = false)
+    @Hook(at = @At(field = @At.FieldInsn(name = "project")), before = false, exactMatch = false)
     private static Hook.Result _init_(final HighlightingMarkupGrave $this) = Hook.Result.NULL;
     
 }

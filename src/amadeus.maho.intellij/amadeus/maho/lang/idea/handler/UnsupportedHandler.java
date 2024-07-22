@@ -27,7 +27,7 @@ public class UnsupportedHandler extends BaseHandler<Unsupported> {
     @Override
     public void check(final PsiElement tree, final Unsupported annotation, final PsiAnnotation annotationTree, final ProblemsHolder holder, final QuickFixFactory quickFix) {
         if (tree instanceof PsiClass context && context.hasModifierProperty(PsiModifier.ABSTRACT))
-            holder.registerProblem(annotationTree, "@Unsupported cannot be marked on an abstract class or interface.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+            holder.registerProblem(annotationTree, "@Unsupported cannot be marked on an abstract class or interface", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
     }
     
     @Hook(value = HighlightClassUtil.class, isStatic = true)

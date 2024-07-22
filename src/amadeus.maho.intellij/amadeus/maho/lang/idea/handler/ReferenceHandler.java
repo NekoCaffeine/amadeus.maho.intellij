@@ -10,8 +10,10 @@ import java.util.stream.Stream;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.lang.ASTNode;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.psi.JavaPsiFacade;
+import com.intellij.psi.LambdaUtil;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
@@ -26,8 +28,10 @@ import com.intellij.psi.PsiPrimitiveType;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeElement;
 import com.intellij.psi.PsiVariable;
+import com.intellij.psi.ResolveState;
 import com.intellij.psi.impl.source.PsiFieldImpl;
 import com.intellij.psi.impl.source.tree.java.PsiLocalVariableImpl;
+import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.util.CachedValuesManager;
 
 import amadeus.maho.lang.Getter;
@@ -82,7 +86,7 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
     @Override
     public void check(final PsiElement tree, final A annotation, final PsiAnnotation annotationTree, final ProblemsHolder holder, final QuickFixFactory quickFix) {
         if (tree instanceof PsiModifierListOwner owner && findReferences(owner) > 1)
-            holder.registerProblem(annotationTree, "There can only be one reference mark.", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
+            holder.registerProblem(annotationTree, "There can only be one reference mark", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotationTree));
     }
     
     @Override
@@ -154,6 +158,13 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
         }
     }
     
+    @Hook(value = LambdaUtil.class, isStatic = true)
+    private static Hook.Result getFunctionalInterfaceType(final PsiElement expression, final boolean tryToSubstitute) {
+        if (expression.getParent() instanceof PsiVariable variable)
+            return { HandlerSupport.unwrapType(variable) };
+        return Hook.Result.VOID;
+    }
+    
     @Hook(capture = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
     private static @Nullable PsiExpression getInitializer(final @Nullable PsiExpression capture, final PsiFieldImpl $this) = findReferences($this) > 0 ? capture ?? lightExpression($this) : capture;
     
@@ -162,6 +173,10 @@ public abstract class ReferenceHandler<A extends Annotation> extends BaseHandler
     
     private static LightExpression lightExpression(final PsiVariable $this)
             = CachedValuesManager.getProjectPsiDependentCache($this, _ -> new LightExpression($this.getManager(), JavaLanguage.INSTANCE, $this, HandlerSupport.unwrapType($this)));
+    
+    @Hook(at = @At(method = @At.MethodInsn(name = "psiElementToTree")), before = false, capture = true)
+    private static Hook.Result processDeclarations(final @Nullable ASTNode capture, final PsiLocalVariableImpl $this, final PsiScopeProcessor processor, final ResolveState state, final PsiElement lastParent, final PsiElement place)
+            = Hook.Result.falseToVoid(capture == null); // skip lightExpression
     
     public static long findReferences(final PsiModifierListOwner tree) = references.stream()
             .map(annotationType -> HandlerSupport.getAnnotationsByTypeWithOuter(tree, annotationType))

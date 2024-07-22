@@ -29,7 +29,7 @@ public class LetHandler extends BaseSyntaxHandler {
             if (qualifierExpression != null && qualifierExpression.getType() instanceof PsiClassType classType) {
                 final @Nullable PsiClass resolved = classType.resolve();
                 if (resolved != null && Stream.class.getCanonicalName().equals(resolved.getQualifiedName()))
-                    holder.registerProblem(callExpression, "Since the operation on the stream will return a new identity, this call is suspicious. An IllegalStateException will be thrown.", ProblemHighlightType.WARNING);
+                    holder.registerProblem(callExpression, "Since the operation on the stream will return a new identity, this call is suspicious. An IllegalStateException will be thrown", ProblemHighlightType.WARNING);
             }
         }
     }

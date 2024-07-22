@@ -6,6 +6,7 @@ import java.util.Set;
 import com.intellij.codeInsight.daemon.ImplicitUsageProvider;
 import com.intellij.codeInsight.daemon.impl.analysis.LocalRefUseInfo;
 import com.intellij.codeInspection.canBeFinal.CanBeFinalHandler;
+import com.intellij.psi.PsiCompiledElement;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMember;
@@ -41,6 +42,8 @@ public class ImplicitUsageChecker extends CanBeFinalHandler implements ImplicitU
     }
     
     private static @Nullable RefData refData(final PsiElement element) {
+        if (element instanceof PsiCompiledElement)
+            return null;
         @Nullable PsiFile file = PsiTreeUtil.getParentOfType(element, PsiFile.class);
         if (file == null && element instanceof LightElement lightElement)
             file = ~lightElement.equivalents().stream()
@@ -62,19 +65,19 @@ public class ImplicitUsageChecker extends CanBeFinalHandler implements ImplicitU
     
     @Override
     public boolean isImplicitRead(final PsiElement element) {
-        final @Nullable RefData helper = refData(element);
-        return helper != null && (
-                Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitRead(element, helper)) ||
-                Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitRead(element, helper))
+        final @Nullable RefData refData = refData(element);
+        return refData != null && (
+                Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitRead(element, refData)) ||
+                Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitRead(element, refData))
         );
     }
     
     @Override
     public boolean isImplicitWrite(final PsiElement element) {
-        final @Nullable RefData helper = refData(element);
-        return helper != null && (
-                Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitWrite(element, helper)) ||
-                Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitWrite(element, helper))
+        final @Nullable RefData refData = refData(element);
+        return refData != null && (
+                Handler.Marker.baseHandlers().stream().anyMatch(handler -> handler.isImplicitWrite(element, refData)) ||
+                Syntax.Marker.syntaxHandlers().values().stream().anyMatch(handler -> handler.isImplicitWrite(element, refData))
         );
     }
     

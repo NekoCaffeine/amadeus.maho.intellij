@@ -30,7 +30,9 @@ import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 
+import amadeus.maho.lang.EqualsAndHashCode;
 import amadeus.maho.lang.Privilege;
+import amadeus.maho.lang.ToString;
 import amadeus.maho.lang.idea.handler.base.BaseSyntaxHandler;
 import amadeus.maho.lang.idea.handler.base.Syntax;
 import amadeus.maho.lang.inspection.Nullable;
@@ -38,7 +40,6 @@ import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.MethodDescriptor;
 import amadeus.maho.transform.mark.base.TransformProvider;
-import amadeus.maho.util.tuple.Tuple2;
 
 import static amadeus.maho.lang.idea.handler.AddressOfHandler.PRIORITY;
 import static amadeus.maho.util.bytecode.Bytecodes.NEW;
@@ -51,12 +52,16 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     
     public static final int PRIORITY = 1 << 12;
     
+    @ToString
+    @EqualsAndHashCode
+    public record ArgInfo(PsiExpression arg, Set<IElementType> tags) { }
+    
     @Override
     public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
         if (tree instanceof PsiPrefixExpression expression && expression.getOperationSign().getTokenType() == AND) {
-            final Tuple2<PsiExpression, Set<IElementType>> arg = arg(expression);
-            if (!arg.v2.contains(PLUS) && arg.v1 instanceof PsiMethodCallExpression callExpression)
-                holder.registerProblem(callExpression, "Unable to write value from off-heap memory back to method call expression.", ProblemHighlightType.GENERIC_ERROR);
+            final ArgInfo argInfo = argInfo(expression);
+            if (!argInfo.tags().contains(PLUS) && argInfo.arg() instanceof PsiMethodCallExpression callExpression)
+                holder.registerProblem(callExpression, "Unable to write value from off-heap memory back to method call expression", ProblemHighlightType.GENERIC_ERROR);
         }
     }
     
@@ -72,7 +77,7 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     private static Hook.Result isUnaryOperatorApplicable(final PsiJavaToken token, final PsiType type)
             = token.getTokenType() == AND ? type instanceof PsiPrimitiveType && addressOfApplicableType.contains(type.getCanonicalText(false)) ? Hook.Result.TRUE : Hook.Result.FALSE : Hook.Result.VOID;
     
-    private static Tuple2<PsiExpression, Set<IElementType>> arg(final PsiUnaryExpression expression) {
+    private static ArgInfo argInfo(final PsiUnaryExpression expression) {
         PsiExpression arg = PsiUtil.skipParenthesizedExprDown(expression);
         if (!(expression.getOperand() instanceof PsiUnaryExpression))
             return { arg, Set.of() };
@@ -87,8 +92,8 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     @Hook(at = @At(type = @At.TypeInsn(opcode = NEW, type = PopInstruction.class), offset = -1), jump = @At(method = @At.MethodInsn(name = "finishElement"), offset = -2))
     private static Hook.Result visitPrefixExpression(final ControlFlowAnalyzer $this, final PsiPrefixExpression expression) {
         if (expression.getOperationSign().getTokenType() == AND) {
-            final Tuple2<PsiExpression, Set<IElementType>> arg = arg(expression);
-            final PsiExpression operand = arg.v1;
+            final ArgInfo argInfo = argInfo(expression);
+            final PsiExpression operand = argInfo.arg();
             (Privilege) $this.addInstruction(new DupInstruction());
             (Privilege) $this.addInstruction(new AssignInstruction(operand, null, JavaDfaValueFactory.getExpressionDfaValue((Privilege) $this.myFactory, operand)));
             return new Hook.Result().jump();
@@ -99,14 +104,14 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     @Hook(at = @At(method = @At.MethodInsn(name = "finishElement")))
     private static void visitPrefixExpression(final com.intellij.psi.controlFlow.ControlFlowAnalyzer $this, final PsiPrefixExpression expression) {
         if (expression.getOperationSign().getTokenType() == AND) {
-            final Tuple2<PsiExpression, Set<IElementType>> arg = arg(expression);
-            final PsiExpression operand = arg.v1;
+            final ArgInfo argInfo = argInfo(expression);
+            final PsiExpression operand = argInfo.arg();
             if (operand instanceof PsiReferenceExpression referenceExpression) {
                 final @Nullable PsiVariable variable = (Privilege) $this.getUsedVariable(referenceExpression);
                 if (variable != null) {
-                    if (!arg.v2.contains(MINUS))
+                    if (!argInfo.tags().contains(MINUS))
                         (Privilege) $this.generateReadInstruction(variable);
-                    if (!arg.v2.contains(PLUS))
+                    if (!argInfo.tags().contains(PLUS))
                         (Privilege) $this.generateWriteInstruction(variable);
                 }
             }
@@ -124,8 +129,8 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     private static Hook.Result isAccessedForReading(final PsiExpression expression) {
         final @Nullable PsiUnaryExpression unary = unary(expression);
         if (unary != null && unary.getOperationTokenType() == AND) {
-            final Tuple2<PsiExpression, Set<IElementType>> arg = arg(unary);
-            return { !arg.v2.contains(MINUS) };
+            final ArgInfo argInfo = argInfo(unary);
+            return { !argInfo.tags().contains(MINUS) };
         }
         return Hook.Result.VOID;
     }
@@ -134,8 +139,8 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     private static Hook.Result isAccessedForWriting(final PsiExpression expression) {
         final @Nullable PsiUnaryExpression unary = unary(expression);
         if (unary != null && unary.getOperationTokenType() == AND) {
-            final Tuple2<PsiExpression, Set<IElementType>> arg = arg(unary);
-            return { !arg.v2.contains(PLUS) };
+            final ArgInfo argInfo = argInfo(unary);
+            return { !argInfo.tags().contains(PLUS) };
         }
         return Hook.Result.VOID;
     }

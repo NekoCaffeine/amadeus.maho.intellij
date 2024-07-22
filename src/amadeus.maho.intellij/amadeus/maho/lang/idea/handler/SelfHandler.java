@@ -70,7 +70,6 @@ import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
-import amadeus.maho.util.function.FunctionHelper;
 
 import static amadeus.maho.lang.idea.IDEAContext.inStaticContext;
 import static amadeus.maho.lang.idea.handler.SelfHandler.PRIORITY;
@@ -93,8 +92,7 @@ public class SelfHandler extends BaseSyntaxHandler {
             if (target instanceof PsiClass && PsiSearchScopeUtil.isInScope(parameters.getEffectiveSearchScope(), target))
                 PsiTreeUtil.findChildrenOfType(target, PsiJavaCodeReferenceElement.class).stream()
                         .filter(element -> element.getText().equals(self) && PsiTreeUtil.getContextOfType(element, PsiClass.class) == target)
-                        .takeWhile(processor::process)
-                        .forEach(FunctionHelper.abandon());
+                        .allMatch(processor::process);
         }
         
     }

@@ -126,7 +126,7 @@ public interface ClassDeclarationsProcessor {
         final LanguageLevel level = PsiUtil.getLanguageLevel(context);
         return members.stream().map(member -> {
             final @Nullable PsiClass containingClass = member.getContainingClass();
-            return Pair.create((T) member, containingClass == null ? PsiSubstitutor.EMPTY : (Privilege) hierarchy.getSuperMembersSubstitutor(containingClass, level));
+            return Pair.create((T) member, containingClass == null ? PsiSubstitutor.EMPTY : (Privilege) hierarchy.getSuperMembersSubstitutor(containingClass, level) ?? PsiSubstitutor.EMPTY);
         }).toList();
     }
     
@@ -165,7 +165,7 @@ public interface ClassDeclarationsProcessor {
                 if (last instanceof PsiClass && !processor.execute(last, state))
                     return false;
                 final @Nullable PsiTypeParameterList list = context.getTypeParameterList();
-                if (list != null && !list.processDeclarations(processor, state, last, place))
+                if (list != null && !list.processDeclarations(processor, ResolveState.initial(), last, place))
                     return false;
             }
         }
@@ -207,32 +207,30 @@ public interface ClassDeclarationsProcessor {
                     return false;
             }
         }
-        if (!(shouldProcessFields || shouldProcessMethods) || ASTTransformer.collectGuard.get().get() != 0)
-            return true;
-        if (requiresMaho(place)) { // Maho
-            if (!(processor instanceof MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
-                final ProcessDeclarationsContext pdc = processDeclarationsContext(context, place);
-                { // Extension
-                    if (shouldProcessMethods) {
-                        final List<PsiClass> supers = supers(context);
-                        final Collection<PsiMethod> collect = supers.stream().map(IDEAContext::methods).flatMap(Collection::stream).collect(Collectors.toSet());
-                        // The purpose of differentiating providers is to report errors when multiple providers provide the same signature.
-                        final HashMap<PsiClass, Collection<PsiMethod>> providerRecord = { };
-                        if (!IDEAContext.computeReadActionIgnoreDumbMode(() -> {
-                            final Collection<ExtensionHandler.ExtensionMethod> extensionMethods = ExtensionHandler.memberCache(resolveScope, context, pdc.type(), supers, pdc.substitutor());
-                            return (name == null ? extensionMethods.stream() : extensionMethods.stream().filter(method -> name.equals(method.getName())))
-                                    .filter(method -> ExtensionHandler.checkMethod(collect, providerRecord, method))
-                                    .allMatch(method -> processor.execute(method, state));
-                        }))
-                            return false;
+        if (shouldProcessFields || shouldProcessMethods)
+            if (requiresMaho(place)) { // Maho
+                if (!(processor instanceof MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
+                    final ProcessDeclarationsContext pdc = processDeclarationsContext(context, place);
+                    { // Extension
+                        if (shouldProcessMethods) {
+                            final List<PsiClass> supers = supers(context);
+                            final Collection<PsiMethod> collect = supers.stream().map(IDEAContext::methods).flatMap(Collection::stream).collect(Collectors.toSet());
+                            // The purpose of differentiating providers is to report errors when multiple providers provide the same signature.
+                            final HashMap<PsiClass, Collection<PsiMethod>> providerRecord = { };
+                            if (!IDEAContext.computeReadActionIgnoreDumbMode(() -> {
+                                final Collection<ExtensionHandler.ExtensionMethod> extensionMethods = ExtensionHandler.memberCache(resolveScope, context, pdc.type(), supers, pdc.substitutor());
+                                return (name == null ? extensionMethods.stream() : extensionMethods.stream().filter(method -> name.equals(method.getName())))
+                                        .filter(method -> ExtensionHandler.checkMethod(collect, providerRecord, method))
+                                        .allMatch(method -> processor.execute(method, state));
+                            }))
+                                return false;
+                        }
+                    }
+                    { // Bridge
+                        return processBridgeElements(context, processor, state, pdc, name, shouldProcessFields, shouldProcessMethods);
                     }
                 }
-                { // Bridge
-                    if (shouldProcessFields || shouldProcessMethods)
-                        return processBridgeElements(context, processor, state, pdc, name, shouldProcessFields, shouldProcessMethods);
-                }
             }
-        }
         return true;
     }
     
@@ -265,7 +263,7 @@ public interface ClassDeclarationsProcessor {
         final PsiElementFactory factory = JavaPsiFacade.getElementFactory(context.getProject());
         return member -> {
             final @Nullable PsiClass containingClass = member.getContainingClass();
-            final PsiSubstitutor finalSubstitutor = member.hasModifierProperty(PsiModifier.STATIC) ? substitutor :
+            final PsiSubstitutor finalSubstitutor = containingClass == null || member.hasModifierProperty(PsiModifier.STATIC) ? substitutor :
                     obtainFinalSubstitutor(containingClass, (Privilege) hierarchy.getSuperMembersSubstitutor(containingClass, languageLevel) ?? PsiSubstitutor.EMPTY, context, substitutor, factory, languageLevel);
             return member instanceof PsiMethod method ? checkRaw(isRaw, factory, method, finalSubstitutor) : finalSubstitutor;
         };

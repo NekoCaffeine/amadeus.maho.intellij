@@ -4,7 +4,6 @@ import java.util.Set;
 
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.ProblemsHolder;
-import com.intellij.lang.ASTNode;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiCompiledElement;
 import com.intellij.psi.PsiElement;
@@ -18,8 +17,6 @@ import com.intellij.psi.PsiTypeElement;
 import com.intellij.psi.PsiVariable;
 
 public non-sealed class BaseSyntaxHandler implements InspectionTool.Checker {
-    
-    public void transformASTNode(final ASTNode root, final boolean loadingTreeElement) { }
     
     public boolean contextFilter(final PsiClass context) = !(context instanceof PsiCompiledElement);
     

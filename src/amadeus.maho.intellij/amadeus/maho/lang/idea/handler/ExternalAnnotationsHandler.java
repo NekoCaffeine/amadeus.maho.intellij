@@ -4,6 +4,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.swing.JComponent;
 import javax.swing.JPanel;
 
 import com.intellij.codeInsight.ExternalAnnotationsManager;
@@ -14,6 +15,7 @@ import com.intellij.codeInsight.hints.presentation.PresentationFactory;
 import com.intellij.codeInsight.hints.presentation.VerticalListInlayPresentation;
 import com.intellij.codeInsight.intention.impl.BaseIntentionAction;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.colors.EditorFontType;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogBuilder;
 import com.intellij.psi.PsiAnnotation;
@@ -22,6 +24,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiModifierListOwner;
 import com.intellij.psi.PsiNameValuePair;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextArea;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.ui.GridBag;
@@ -59,7 +62,9 @@ public class ExternalAnnotationsHandler {
             if (owner != null) {
                 final ExternalAnnotationsManager manager = ExternalAnnotationsManager.getInstance(project);
                 final @Nullable PsiAnnotation comment = manager.findExternalAnnotation(owner, Comment);
-                final JBTextArea area = { 20, 120 };
+                final JBTextArea area = { 50, 50 };
+                area.setPreferredSize(JBUI.size(800, 640));
+                area.setFont(editor.getColorsScheme().getFont(EditorFontType.PLAIN));
                 if (comment != null) {
                     final @Nullable PsiAnnotationMemberValue value = comment.findAttributeValue(null);
                     if (value != null) {
@@ -68,7 +73,7 @@ public class ExternalAnnotationsHandler {
                             area.setText(text.substring(1, text.length() - 1).replace("_\\n_", "\n"));
                     }
                 }
-                if (createDialog(project, area).showAndGet()) {
+                if (createDialog(project, new JBScrollPane(area)).showAndGet()) {
                     final String result = area.getText();
                     if (result.isEmpty())
                         manager.deannotate(owner, Comment);
@@ -80,7 +85,7 @@ public class ExternalAnnotationsHandler {
             }
         }
         
-        private static DialogBuilder createDialog(final Project project, final JBTextArea field) {
+        private static DialogBuilder createDialog(final Project project, final JComponent field) {
             final JPanel panel = { new GridBagLayout() };
             final GridBag bag = new GridBag().setDefaultAnchor(GridBagConstraints.WEST).setDefaultFill(GridBagConstraints.HORIZONTAL)
                     .setDefaultInsets(JBUI.insets(2)).setDefaultWeightX(1.0).setDefaultWeightY(1.0);

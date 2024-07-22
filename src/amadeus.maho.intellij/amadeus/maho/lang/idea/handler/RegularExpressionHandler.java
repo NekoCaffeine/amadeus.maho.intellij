@@ -42,31 +42,26 @@ public class RegularExpressionHandler extends BaseSyntaxHandler {
     public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
         if (tree instanceof PsiExpression expression && expression.getType() != null && TypeConversionUtil.isAssignable(PsiType.getJavaLangString(tree.getManager(), tree.getResolveScope()), expression.getType()))
             switch (tree.getParent()) {
-                case PsiVariable variable                                               -> {
+                case PsiVariable variable               -> {
                     if (variable.getInitializer() == expression)
                         check(expression, variable, holder, quickFix);
                 }
-                case PsiAssignmentExpression assignment when assignment.getLExpression() instanceof PsiReferenceExpression reference
-                                                             && reference.resolve() instanceof PsiModifierListOwner owner -> {
-                    if (assignment.getRExpression() == expression)
+                case PsiAssignmentExpression assignment -> {
+                    if (assignment.getLExpression() instanceof PsiReferenceExpression reference && reference.resolve() instanceof PsiModifierListOwner owner && assignment.getRExpression() == expression)
                         check(expression, owner, holder, quickFix);
                 }
-                case PsiNameValuePair pair                                              -> {
+                case PsiNameValuePair pair              -> {
                     final @Nullable PsiMethod method = AnnotationUtil.getAnnotationMethod(pair);
                     if (method != null)
                         check(expression, method, holder, quickFix);
                 }
-                case PsiReturnStatement statement                                       -> {
+                case PsiReturnStatement statement       -> {
                     final @Nullable PsiMethod method = PsiTreeUtil.getContextOfType(statement, PsiMethod.class);
                     if (method != null)
                         check(expression, method, holder, quickFix);
                 }
-                case null                                                               -> { }
-                default                                                                 -> {
-                    final @Nullable PsiVariable variable = DefaultValueHandler.defaultVariable(expression);
-                    if (variable != null)
-                        check(expression, variable, holder, quickFix);
-                }
+                case null,
+                     default                            -> { }
             }
     }
     

@@ -40,21 +40,25 @@ import static amadeus.maho.util.bytecode.Bytecodes.ALOAD;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class AsyncLogger extends Logger {
     
-    Logger logger;
+    public record LogRecordWithLogger(LogRecord record, Logger logger) { }
     
-    LinkedBlockingQueue<LogRecord> records = { };
+    private static final LinkedBlockingQueue<LogRecordWithLogger> records = { };
     
-    Thread loggingThread = new Thread() {
+    private static final Thread loggingThread = new Thread() {
         
         { setName("JUL-AsyncLogging"); }
         
         { setDaemon(true); }
         
+        { start(); }
+        
         @Override
         @SneakyThrows
-        public void run() = Stream.generate(records()::take).forEach(logger()::log);
+        public void run() = Stream.generate(records()::take).forEach(record -> record.logger.log(record.record));
         
     };
+    
+    Logger logger;
     
     protected AsyncLogger(final Logger logger) {
         super(logger.getName(), logger.getResourceBundleName());
@@ -62,10 +66,9 @@ public class AsyncLogger extends Logger {
     }
     
     @Override
-    public void log(final LogRecord record) = records += record;
+    public void log(final LogRecord record) = records += new LogRecordWithLogger(record, logger);
     
     @Hook(at = @At(var = @At.VarInsn(opcode = ALOAD, var = 1)), before = false, capture = true)
-    private static AsyncLogger _init_(final Logger capture, final JulLogger $this, final Logger delegate) = { capture };
-    
+    private static AsyncLogger _init_(final Logger capture, final JulLogger $this, final Logger delegate) = capture instanceof AsyncLogger logger ? logger : new AsyncLogger(capture);
     
 }

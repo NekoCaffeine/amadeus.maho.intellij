@@ -73,7 +73,7 @@ public interface Build {
     
     static Path libPath(final Path pluginsPath) = pluginsPath / module.name() / "lib";
     
-    static Path build(final boolean aot = true) {
+    static Path build(final boolean aot = false) {
         workspace.clean(module).flushMetadata();
         Javac.compile(workspace, module, useModulePath::contains, args -> Javac.addReadsAllUnnamed(args, module));
         final Map<String, Jar.Result> pack = Jar.pack(workspace, module, Jar.manifest(), (a, b) -> {

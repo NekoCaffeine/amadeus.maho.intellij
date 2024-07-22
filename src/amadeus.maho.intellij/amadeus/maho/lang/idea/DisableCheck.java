@@ -12,10 +12,8 @@ import com.intellij.diagnostic.EventWatcherService;
 import com.intellij.diagnostic.LoadingState;
 import com.intellij.idea.SystemHealthMonitorKt;
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl;
-import com.intellij.openapi.actionSystem.impl.ActionUpdater;
 import com.intellij.openapi.application.TransactionGuardImpl;
 import com.intellij.openapi.application.impl.ApplicationImpl;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.impl.CoreProgressManager;
@@ -32,6 +30,7 @@ import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.stubs.ObjectStubTree;
 import com.intellij.psi.stubs.StubProcessingHelperBase;
 import com.intellij.psi.util.CachedValueProvider;
+import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.CachedValueStabilityChecker;
 import com.intellij.util.IdempotenceChecker;
 import com.intellij.util.SlowOperations;
@@ -47,9 +46,6 @@ import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.misc.ConstantLookup;
-
-import kotlin.coroutines.Continuation;
-import kotlin.jvm.functions.Function0;
 
 // These checks are too expensive, and most of the time are almost purely redundant calculations
 @TransformProvider
@@ -73,6 +69,9 @@ interface DisableCheck {
     
     @Hook(forceReturn = true)
     private static void launchHealthCheck(final ProjectIndexableFilesFilterHealthCheck $this) { }
+    
+    @Hook(value = PsiUtil.class, isStatic = true, exactMatch = false, forceReturn = true)
+    private static void ensureValidType() { }
     
     @Hook(value = PsiInvalidElementAccessException.class, isStatic = true, forceReturn = true)
     private static boolean isTrackingInvalidation() = false;
@@ -98,11 +97,11 @@ interface DisableCheck {
     @Hook(isStatic = true, value = CachedValueStabilityChecker.class, forceReturn = true)
     private static <T> void checkProvidersEquivalent(final CachedValueProvider<?> p1, final CachedValueProvider<?> p2, final Key<?> key) { }
     
-    @Hook(forceReturn = true)
-    private static boolean assertTrue(final Logger $this, final boolean value, final @Nullable Object message) = true;
-    
-    @Hook(forceReturn = true)
-    private static boolean assertTrue(final Logger $this, final boolean value) = true;
+    // @Hook(forceReturn = true)
+    // private static boolean assertTrue(final Logger $this, final boolean value, final @Nullable Object message) = true;
+    //
+    // @Hook(forceReturn = true)
+    // private static boolean assertTrue(final Logger $this, final boolean value) = true;
     
     @Hook(forceReturn = true)
     private static void checkOccurred(final LoadingState $this) { }
@@ -136,9 +135,5 @@ interface DisableCheck {
     @Hook(forceReturn = true, exactMatch = false)
     private static void inconsistencyDetected(final StubProcessingHelperBase $this, final ObjectStubTree stubTree, final PsiFileWithStubSupport support, final String extraMessage)
             = (Privilege) $this.onInternalError(support.getVirtualFile());
-    
-    @Hook(forceReturn = true)
-    private static <T> T computeOnEdt(final ActionUpdater $this, final Object action, final String operationName, final boolean noRulesInEDT, final Function0<T> call, final Continuation<T> continuation)
-            = (T) (Privilege) $this.computeOnEdt(call, continuation);
     
 }

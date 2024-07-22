@@ -5,6 +5,7 @@ import java.lang.annotation.Inherited;
 import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +23,9 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
+import com.intellij.ide.structureView.impl.java.JavaClassTreeElement;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.Key;
 import com.intellij.psi.JavaResolveResult;
 import com.intellij.psi.PsiAnnotation;
@@ -36,6 +39,7 @@ import com.intellij.psi.PsiImportList;
 import com.intellij.psi.PsiImportStatement;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiJavaFile;
+import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiModifierListOwner;
@@ -45,10 +49,14 @@ import com.intellij.psi.PsiVariable;
 import com.intellij.psi.TypeAnnotationProvider;
 import com.intellij.psi.augment.PsiAugmentProvider;
 import com.intellij.psi.impl.PsiClassImplUtil;
+import com.intellij.psi.impl.PsiImplUtil;
+import com.intellij.psi.impl.light.LightElement;
 import com.intellij.psi.impl.source.ClassInnerStuffCache;
 import com.intellij.psi.impl.source.PsiClassImpl;
 import com.intellij.psi.impl.source.PsiExtensibleClass;
+import com.intellij.psi.impl.source.PsiJavaCodeReferenceElementImpl;
 import com.intellij.psi.impl.source.PsiJavaFileImpl;
+import com.intellij.psi.impl.source.resolve.ResolveCache;
 import com.intellij.psi.impl.source.tree.JavaSharedImplUtil;
 import com.intellij.psi.impl.source.tree.java.PsiReferenceExpressionImpl;
 import com.intellij.psi.util.CachedValue;
@@ -72,6 +80,7 @@ import amadeus.maho.transform.mark.Hook;
 import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.bytecode.ASMHelper;
+import amadeus.maho.util.bytecode.Bytecodes;
 import amadeus.maho.util.concurrent.ConcurrentWeakIdentityHashMap;
 import amadeus.maho.util.control.LinkedIterator;
 import amadeus.maho.util.control.OverrideMap;
@@ -83,7 +92,7 @@ import amadeus.maho.util.runtime.ObjectHelper;
 import amadeus.maho.util.runtime.TypeHelper;
 import amadeus.maho.util.tuple.Tuple2;
 
-import static amadeus.maho.lang.idea.IDEAContext.requiresMaho;
+import static amadeus.maho.lang.idea.IDEAContext.*;
 
 @TransformProvider
 public interface HandlerSupport {
@@ -114,7 +123,7 @@ public interface HandlerSupport {
     }
     
     ThreadLocal<LinkedList<PsiClass>>
-            collectMembersContextLocal = ThreadLocal.withInitial(LinkedList::new),
+            collectMembersContextLocal    = ThreadLocal.withInitial(LinkedList::new),
             collectAllMembersContextLocal = ThreadLocal.withInitial(LinkedList::new);
     
     Key<CachedValue<ConcurrentWeakIdentityHashMap<PsiClass, DelayExtensibleMembers>>> members = { "members" }, recursiveMembers = { "recursiveMembers" };
@@ -130,14 +139,14 @@ public interface HandlerSupport {
         public ExtensibleMembers members() {
             @Nullable ExtensibleMembers members = extensibleMembersReference.get();
             if (members == null)
-                extensibleMembersReference.set(members = { context, recursive });
+                extensibleMembersReference.set(members = computeReadActionIgnoreDumbMode(() -> new ExtensibleMembers(context, recursive)));
             return members;
         }
         
         public MembersCache allMembers() {
             @Nullable MembersCache cache = allMembersReference.get();
             if (cache == null) {
-                cache = { context, recursive };
+                cache = computeReadActionIgnoreDumbMode(() -> new MembersCache(context, recursive));
                 if (cache.complete())
                     allMembersReference.set(cache);
                 else
@@ -177,6 +186,23 @@ public interface HandlerSupport {
         return delayExtensibleMembers(owner, true).allMembers();
     }
     
+    @Hook(value = JavaClassTreeElement.class, isStatic = true, forceReturn = true)
+    private static LinkedHashSet<PsiElement> getOwnChildren(final PsiClass owner) = computeReadActionIgnoreDumbMode(() -> {
+        final LinkedHashSet<PsiElement> members = { };
+        addPhysicalElements(owner.getFields(), members, owner);
+        addPhysicalElements(owner.getMethods(), members, owner);
+        addPhysicalElements(owner.getInnerClasses(), members, owner);
+        addPhysicalElements(owner.getInitializers(), members, owner);
+        return members;
+    });
+    
+    private static void addPhysicalElements(final PsiMember elements[], final Collection<? super PsiElement> to, final PsiClass owner) = Stream.of(elements)
+            .map(PsiImplUtil::handleMirror)
+            .filterNot(LightElement.class::isInstance)
+            .cast(PsiMember.class)
+            .filter(member -> owner.equals(member.getContainingClass()))
+            .forEach(to::add);
+    
     @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
     private static Collection<PsiClass> getAllSuperClassesRecursively(final PsiClass psiClass) = allMembers(psiClass).allSupers();
     
@@ -204,48 +230,9 @@ public interface HandlerSupport {
     private static @Nullable PsiClass findInnerClassByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
             = checkBases ? PsiClassImplUtil.findInnerByName((Privilege) $this.myClass, name, true) : members($this).lookup(ExtensibleMembers.INNER_CLASSES, name);
     
-    // @Hook(value = PsiClassImplUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
-    // private static boolean processDeclarationsInClass(
-    //         final boolean capture,
-    //         final PsiClass context,
-    //         final PsiScopeProcessor processor,
-    //         final ResolveState state,
-    //         final @Nullable Set<PsiClass> visited,
-    //         final @Nullable PsiElement last,
-    //         final PsiElement place,
-    //         final LanguageLevel languageLevel,
-    //         final boolean isRaw,
-    //         final GlobalSearchScope resolveScope) {
-    //     if (!capture)
-    //         return false;
-    //     if (requiresMaho(context)) {
-    //         if (last instanceof PsiTypeParameterList || last instanceof PsiModifierList && context.getModifierList() == last || visited != null && visited.contains(context))
-    //             return true;
-    //         if (!(processor instanceof MethodResolverProcessor methodResolverProcessor) || !methodResolverProcessor.isConstructor()) {
-    //             final ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
-    //             final @Nullable NameHint nameHint = processor.getHint(NameHint.KEY);
-    //             final @Nullable String name = nameHint?.getName(state) ?? null;
-    //             final boolean shouldProcessFields = classHint?.shouldProcess(ElementClassHint.DeclarationKind.FIELD) ?? true && (name == null || context.findFieldByName(name, true) == null),
-    //                     shouldProcessMethods = classHint?.shouldProcess(ElementClassHint.DeclarationKind.METHOD) ?? true;
-    //             if (shouldProcessFields || shouldProcessMethods) {
-    //                 final ClassDeclarationsProcessor.ProcessDeclarationsContext pdc = ClassDeclarationsProcessor.processDeclarationsContext(context, place);
-    //                 final List<? extends LightBridgeElement> bridgeElements = Stream.concat(Stream.of(context), supers(context).stream())
-    //                         .cast(PsiExtensibleClass.class)
-    //                         .map(HandlerSupport::members)
-    //                         .flatMap(members -> members.bridgeElements(pdc))
-    //                         .filter(member -> name?.equals(member.getName()) ?? true)
-    //                         .toList();
-    //                 return Stream.<PsiMember>concat(
-    //                                 shouldProcessFields ? bridgeElements.stream().cast(LightBridgeField.class)
-    //                                         .filter(it -> name != null || context.findFieldByName(it.getName(), true) == null) : Stream.empty(),
-    //                                 shouldProcessMethods ? bridgeElements.stream().cast(LightBridgeMethod.class)
-    //                                         .filter(it -> context.findMethodBySignature(it, true) == null) : Stream.empty())
-    //                         .allMatch(member -> processor.execute(member, state));
-    //             }
-    //         }
-    //     }
-    //     return true;
-    // }
+    @Hook(value = ResolveCache.class, isStatic = true, at = @At(var = @At.VarInsn(opcode = Bytecodes.ILOAD, var = 2)), before = false, capture = true)
+    private static <TRef, TResult> boolean resolve(final boolean capture, final TRef ref, final Map<TRef, TResult> cache, final boolean preventRecursion, final Computable<? extends TResult> resolver)
+            = capture && !(ref instanceof PsiJavaCodeReferenceElementImpl);
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static JavaResolveResult[] resolveToMethod(final JavaResolveResult capture[], final PsiReferenceExpressionImpl $this, final PsiFile containingFile) {
@@ -389,7 +376,8 @@ public interface HandlerSupport {
     };
     
     static @Nullable <A extends Annotation> Map.Entry<BaseHandler<A>, List<Tuple2<A, PsiAnnotation>>> getAnnotationsByTypeWithOuter(final PsiModifierListOwner tree, final BaseHandler<A> baseHandler) {
-        final var cache = CachedValuesManager.<PsiModifierListOwner, Map<BaseHandler<A>, Map.Entry<BaseHandler<A>, List<Tuple2<A, PsiAnnotation>>>>>getProjectPsiDependentCache(tree, _ -> new ConcurrentHashMap<>());
+        final var cache = CachedValuesManager.<PsiModifierListOwner, Map<BaseHandler<A>, Map.Entry<BaseHandler<A>, List<Tuple2<A, PsiAnnotation>>>>>
+                getProjectPsiDependentCache(tree, _ -> new ConcurrentHashMap<>());
         @Nullable Map.Entry<BaseHandler<A>, List<Tuple2<A, PsiAnnotation>>> result = cache[baseHandler];
         if (result != null)
             return result == emptyEntry ? null : result;
@@ -492,7 +480,7 @@ public interface HandlerSupport {
         case PsiMethod ignored -> range == Handler.Range.METHOD;
         case PsiClass ignored  -> range == Handler.Range.CLASS;
         case null,
-             default     -> false;
+             default           -> false;
     };
     
 }

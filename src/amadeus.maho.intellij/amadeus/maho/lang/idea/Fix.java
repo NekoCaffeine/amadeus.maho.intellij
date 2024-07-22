@@ -13,13 +13,9 @@ import java.util.stream.Stream;
 import javax.swing.JComponent;
 
 import com.intellij.codeInsight.AnnotationTargetUtil;
-import com.intellij.codeInsight.AutoPopupControllerImpl;
-import com.intellij.codeInsight.completion.CompletionPhase;
-import com.intellij.codeInsight.completion.CompletionType;
-import com.intellij.codeInsight.completion.actions.BaseCodeCompletionAction;
 import com.intellij.codeInsight.daemon.impl.LibrarySourceNotificationProvider;
 import com.intellij.codeInsight.daemon.impl.analysis.GenericsHighlightUtil;
-import com.intellij.codeInsight.daemon.impl.analysis.SwitchBlockHighlightingModel;
+import com.intellij.codeInsight.daemon.impl.analysis.PatternsInSwitchBlockHighlightingModel;
 import com.intellij.codeInsight.folding.impl.JavaFoldingBuilderBase;
 import com.intellij.codeInsight.generation.GenerateEqualsHandler;
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerBase;
@@ -52,7 +48,6 @@ import com.intellij.openapi.roots.LanguageLevelProjectExtension;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.util.Computable;
-import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.util.text.StringUtil;
@@ -75,7 +70,6 @@ import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMember;
 import com.intellij.psi.PsiMethod;
-import com.intellij.psi.PsiModifierList;
 import com.intellij.psi.PsiPackageAccessibilityStatement;
 import com.intellij.psi.PsiRecordComponent;
 import com.intellij.psi.PsiRecordHeader;
@@ -93,8 +87,6 @@ import com.intellij.psi.impl.PsiImplUtil;
 import com.intellij.psi.impl.PsiShortNamesCacheImpl;
 import com.intellij.psi.impl.RecordAugmentProvider;
 import com.intellij.psi.impl.compiled.ClsClassImpl;
-import com.intellij.psi.impl.compiled.ClsElementImpl;
-import com.intellij.psi.impl.compiled.ClsModifierListImpl;
 import com.intellij.psi.impl.compiled.ClsParsingUtil;
 import com.intellij.psi.impl.file.impl.FileManagerImpl;
 import com.intellij.psi.impl.java.JavaFunctionalExpressionIndex;
@@ -105,10 +97,8 @@ import com.intellij.psi.impl.search.AllClassesSearchExecutor;
 import com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.intellij.psi.impl.source.PsiFieldImpl;
-import com.intellij.psi.impl.source.SourceTreeToPsiMap;
 import com.intellij.psi.impl.source.resolve.ParameterTypeInferencePolicy;
 import com.intellij.psi.impl.source.tree.JavaElementType;
-import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.scope.conflictResolvers.JavaMethodsConflictResolver;
@@ -122,7 +112,6 @@ import com.intellij.ui.IconDeferrerImpl;
 import com.intellij.ui.LightweightHint;
 import com.intellij.ui.popup.PopupFactoryImpl;
 import com.intellij.util.Processor;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.indexing.DumbModeAccessType;
 import com.intellij.util.indexing.FileBasedIndexEx;
 import com.intellij.util.indexing.UnindexedFilesUpdater;
@@ -171,7 +160,7 @@ interface Fix {
     @Hook(value = DebugUtil.class, isStatic = true, forceReturn = true)
     private static @Nullable Object currentInvalidationTrace() = null; // fucking slow
     
-    @Hook(value = SwitchBlockHighlightingModel.PatternsInSwitchBlockHighlightingModel.class, isStatic = true, forceReturn = true)
+    @Hook(value = PatternsInSwitchBlockHighlightingModel.class, isStatic = true, forceReturn = true)
     private static Collection<PsiClass> getPermittedClasses(final PsiClass psiClass) = CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> {
         final @Nullable PsiReferenceList permitsList = it.getPermitsList();
         if (permitsList == null)
@@ -195,7 +184,7 @@ interface Fix {
                 @Override
                 public boolean isVarArgs() = true;
             };
-        return new LightRecordCanonicalConstructor(method, containingClass);
+        return { method, containingClass };
     }
     
     @Hook(value = ClassUtil.class, isStatic = true)
@@ -261,20 +250,6 @@ interface Fix {
       PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof PsiMethod method &&
       method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod))
             ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
-    
-    // This eliminates the need to wait for input to stop for a period of time before the auto-complete candidate prompt appears
-    @Hook(metadata = @TransformMetadata(disable = "disable.fast.code.completion"))
-    private static Hook.Result createHandler(final BaseCodeCompletionAction $this, final CompletionType completionType, @Hook.Reference boolean invokedExplicitly, @Hook.Reference boolean autoPopup, @Hook.Reference boolean synchronous) {
-        autoPopup = true;
-        invokedExplicitly = false;
-        synchronous = true;
-        return { };
-    }
-    
-    // Fixed the problem of stupidly disabling the completion when the input is too fast in synchronous completion
-    @Hook(at = @At(method = @At.MethodInsn(name = "isPhase")), capture = true, metadata = @TransformMetadata(disable = "disable.fast.code.completion"))
-    private static Class<? extends CompletionPhase>[] scheduleAutoPopup(final Class<? extends CompletionPhase>[] capture, final AutoPopupControllerImpl $this, final Editor editor, final CompletionType completionType,
-            final @Nullable Condition<? super PsiFile> condition) = ArrayHelper.add(capture, CompletionPhase.ItemsCalculated.class);
     
     // Some annotations(e.g. @Mutable) will generate initialization expression
     @Hook(forceReturn = true)
@@ -390,23 +365,6 @@ interface Fix {
     @Hook(at = @At(var = @At.VarInsn(opcode = ASTORE, var = 3)), capture = true)
     private static JComponent guessBestPopupLocation(final @Nullable JComponent capture, final PopupFactoryImpl $this, final DataContext dataContext)
     = capture ?? (PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(dataContext) instanceof IdeFrameImpl frame ? frame.getComponent() : null);
-    
-    // avoid getQualifiedName crash
-    @Hook(forceReturn = true)
-    private static void setMirror(final ClsModifierListImpl $this, final TreeElement element) {
-        (Privilege) $this.setMirrorCheckingType(element, JavaElementType.MODIFIER_LIST);
-        final PsiAnnotation annotations[] = $this.getAnnotations(), mirrorAnnotations[] = SourceTreeToPsiMap.<PsiModifierList>treeToPsiNotNull(element).getAnnotations();
-        IDEAContext.runReadActionIgnoreDumbMode(() -> {
-            for (final PsiAnnotation annotation : annotations) {
-                final @Nullable String qualifiedName = annotation.getQualifiedName();
-                if (qualifiedName != null) {
-                    final @Nullable PsiAnnotation mirror = ContainerUtil.find(mirrorAnnotations, m -> qualifiedName.equals(m.getQualifiedName()));
-                    if (mirror != null)
-                        (Privilege) ClsElementImpl.setMirror(annotation, mirror);
-                }
-            }
-        });
-    }
     
     // avoid return null when IndexNotReadyException
     @Hook(value = DebuggerUtils.class, isStatic = true, forceReturn = true)
