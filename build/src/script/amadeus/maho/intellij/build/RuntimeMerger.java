@@ -77,7 +77,6 @@ public interface RuntimeMerger {
         
         @Override
         public ResourcePool transform(final ResourcePool in, final ResourcePoolBuilder out) {
-            
             try (final ResourcePath.ResourceTree resourceTree = ResourcePath.ResourceTree.of(jbrSdkDir / "jmods" / JAVA_BASE_JMOD)) {
                 in.transformAndCopy(resource -> {
                     if (resource.type() == ResourcePoolEntry.Type.CLASS_OR_RESOURCE)
