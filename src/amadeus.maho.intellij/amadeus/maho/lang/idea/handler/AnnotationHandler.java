@@ -32,8 +32,8 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 public interface AnnotationHandler {
     
     @Hook
-    private static Hook.Result visitClassType(final AnnotationsHighlightUtil.AnnotationReturnTypeVisitor $this,
-            final PsiClassType classType) = Hook.Result.falseToVoid(classType.equalsToText(CommonClassNames.JAVA_LANG_ANNOTATION_ANNOTATION));
+    private static Hook.Result visitClassType(final AnnotationsHighlightUtil.AnnotationReturnTypeVisitor $this, final PsiClassType classType)
+            = Hook.Result.falseToVoid(classType.equalsToText(CommonClassNames.JAVA_LANG_ANNOTATION_ANNOTATION));
     
     @Hook(isStatic = true, value = AnnotationsHighlightUtil.class)
     private static Hook.Result checkMemberValueType(final PsiAnnotationMemberValue value, final PsiType expectedType, final PsiMethod method) {

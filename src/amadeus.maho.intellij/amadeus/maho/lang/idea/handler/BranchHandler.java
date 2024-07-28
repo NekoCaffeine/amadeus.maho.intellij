@@ -180,19 +180,21 @@ public class BranchHandler extends BaseSyntaxHandler {
     @Hook(at = @At(method = @At.MethodInsn(name = "findChildByType")), before = false, capture = true)
     private static ASTNode deleteChildInternal(final ASTNode capture, final PsiReferenceExpressionImpl $this, final ASTNode child) = capture ?? $this.findChildByType(ACCESS_OPS);
     
-    public static boolean isSafeAccess(final @Nullable PsiExpression expression) = switch (expression) {
+    public static boolean isSafeAccess(final @Nullable PsiElement expression) = switch (expression) {
         case PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
         case PsiReferenceExpression referenceExpression -> referenceExpression instanceof CompositeElement element && element.findPsiChildByType(SAFE_ACCESS) != null;
         case null,
              default                                    -> false;
     };
     
-    public static boolean isAssertAccess(final @Nullable PsiExpression expression) = switch (expression) {
+    public static boolean isAssertAccess(final @Nullable PsiElement expression) = switch (expression) {
         case PsiMethodCallExpression callExpression     -> callExpression.getMethodExpression() instanceof CompositeElement element && element.findPsiChildByType(ASSERT_ACCESS) != null;
         case PsiReferenceExpression referenceExpression -> referenceExpression instanceof CompositeElement element && element.findPsiChildByType(ASSERT_ACCESS) != null;
         case null,
              default                                    -> false;
     };
+    
+    public static boolean isAssertNonNull(final @Nullable PsiElement expression) = expression instanceof PsiPostfixExpression postfixExpression && postfixExpression.getOperationTokenType() == EXCL;
     
     @Hook
     private static <T extends PsiElement> Hook.Result ifMyProblem(final NullabilityProblemKind<T> $this, final NullabilityProblemKind.NullabilityProblem<?> problem, final Consumer<? super T> consumer) {
@@ -201,17 +203,22 @@ public class BranchHandler extends BaseSyntaxHandler {
             if (myProblem != null && ($this == fieldAccessNPE ? myProblem.getAnchor().getParent() : myProblem.getAnchor()) instanceof PsiExpression expression && (isSafeAccess(expression) || isAssertAccess(expression)))
                 return Hook.Result.NULL;
         }
+        if ($this == passingToNotNullParameter) {
+            final NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
+            if (myProblem != null && isAssertNonNull(myProblem.getAnchor()))
+                return Hook.Result.NULL;
+        }
         return Hook.Result.VOID;
     }
     
     @Hook(value = HighlightUtil.class, isStatic = true)
     private static Hook.Result checkUnaryOperatorApplicable(final PsiJavaToken token, final @Nullable PsiExpression expr)
-            = Hook.Result.falseToVoid(expr != null && expr.getParent() instanceof PsiPostfixExpression postfixExpression && postfixExpression.getOperationTokenType() == EXCL, null);
+            = Hook.Result.falseToVoid(expr != null && isAssertNonNull(expr.getParent()), null);
     
     @Hook(value = PsiTypesUtil.class, isStatic = true)
     private static Hook.Result getExpectedTypeByParent(final PsiElement element) {
-        if (element instanceof PsiPostfixExpression postfixExpression && postfixExpression.getOperationTokenType() == EXCL)
-            return { PsiTypesUtil.getExpectedTypeByParent(postfixExpression.getParent()) };
+        if (isAssertNonNull(element))
+            return { PsiTypesUtil.getExpectedTypeByParent(element.getParent()) };
         if (element instanceof PsiLambdaExpression || element instanceof PsiMethodReferenceExpression) {
             @Nullable PsiElement parent = element.getParent(), current = element;
             while (parent != null) {
@@ -230,7 +237,7 @@ public class BranchHandler extends BaseSyntaxHandler {
     }
     
     @Hook(value = PsiUtil.class, isStatic = true)
-    private static Hook.Result isStatement(final PsiElement element) = Hook.Result.falseToVoid(element instanceof PsiPostfixExpression postfixExpression && postfixExpression.getOperationTokenType() == EXCL);
+    private static Hook.Result isStatement(final PsiElement element) = Hook.Result.falseToVoid(isAssertNonNull(element));
     
     @Hook(value = LambdaUtil.class, isStatic = true)
     private static Hook.Result isExpressionStatementExpression(final PsiElement element) = isStatement(element);
@@ -444,7 +451,7 @@ public class BranchHandler extends BaseSyntaxHandler {
             operand.accept($this);
             if (operand.getType() instanceof PsiPrimitiveType primitiveType)
                 (Privilege) $this.generateBoxingUnboxingInstructionFor(operand, primitiveType.getBoxedType(operand));
-            (Privilege) $this.addInstruction(new AssertNonNullInstruction());
+            (Privilege) $this.addNullCheck(NullabilityProblemKind.passingToNotNullParameter.problem(expression, operand));
             return Hook.Result.NULL;
         }
         return Hook.Result.VOID;
@@ -457,8 +464,8 @@ public class BranchHandler extends BaseSyntaxHandler {
     private static Hook.Result evaluateType(final TypeEvaluator $this, final PsiExpression expr) {
         if (expr instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR)
             return { condType(polyadicExpression, $this::evaluateType, polyadicExpression.getOperands()) };
-        if (expr instanceof PsiPostfixExpression postfixExpression && postfixExpression.getOperationTokenType() == EXCL)
-            return { $this.evaluateType(postfixExpression.getOperand()) };
+        if (isAssertNonNull(expr))
+            return { $this.evaluateType(((PsiPostfixExpression) expr).getOperand()) };
         return Hook.Result.VOID;
     }
     

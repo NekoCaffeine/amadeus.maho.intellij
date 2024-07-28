@@ -22,11 +22,17 @@ import amadeus.maho.util.build.Jar;
 import amadeus.maho.util.build.Javac;
 import amadeus.maho.util.build.Module;
 import amadeus.maho.util.build.Workspace;
+import amadeus.maho.util.misc.Environment;
 
 import static amadeus.maho.util.build.ScriptHelper.*;
 
 @SneakyThrows
 public interface Build {
+    
+    // test
+    {
+        Environment.local()[MAHO_JAVA_EXECUTION] = (Path.of("D:\\JDK\\graalvm-jbr-jdk-21") / "bin" / "java").toAbsolutePath().toString();
+    }
     
     @FieldDefaults(level = AccessLevel.PUBLIC)
     class IntellijConfig {
