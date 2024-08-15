@@ -9,8 +9,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.sun.jna.Platform;
-
 import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.SneakyThrows;
@@ -22,17 +20,11 @@ import amadeus.maho.util.build.Jar;
 import amadeus.maho.util.build.Javac;
 import amadeus.maho.util.build.Module;
 import amadeus.maho.util.build.Workspace;
-import amadeus.maho.util.misc.Environment;
 
 import static amadeus.maho.util.build.ScriptHelper.*;
 
 @SneakyThrows
 public interface Build {
-    
-    // test
-    {
-        Environment.local()[MAHO_JAVA_EXECUTION] = (Path.of("D:\\JDK\\graalvm-jbr-jdk-21") / "bin" / "java").toAbsolutePath().toString();
-    }
     
     @FieldDefaults(level = AccessLevel.PUBLIC)
     class IntellijConfig {
@@ -149,9 +141,6 @@ public interface Build {
     
     static Process debug() = workspace.run(run, debugPort, HotSwap.addWatchProperty(runArgs, workspace, module), true, runDir, _ -> false);
     
-    static Process runHost() = switch (Platform.getOSType()) {
-        case Platform.WINDOWS -> workspace.run(Path.of(config.intellijPath) / "bin", List.of("idea"));
-        default               -> throw new IllegalStateException(STR."Unexpected OS Type: \{Platform.getOSType()}");
-    };
+    static Process runHost() = workspace.run(Path.of(config.intellijPath) / "bin", List.of("idea"));
     
 }

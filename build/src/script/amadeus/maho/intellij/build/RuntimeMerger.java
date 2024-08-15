@@ -89,7 +89,7 @@ public interface RuntimeMerger {
                                 replaceVendor(generator, "java.specification.vendor");
                                 replaceVendor(generator, "java.vm.vendor");
                                 replaceVendor(generator, "java.vm.specification.vendor");
-                                final InsnNode returnNode = ~method.instructions.fromIterable().cast(InsnNode.class).filter(it -> it.getOpcode() == Bytecodes.RETURN);
+                                final InsnNode returnNode = (~method.instructions.fromIterable().cast(InsnNode.class).filter(it -> it.getOpcode() == Bytecodes.RETURN))!;
                                 method.instructions.insertBefore(returnNode, shadow);
                                 System.out.println("Replace vendor in VersionProps");
                             });

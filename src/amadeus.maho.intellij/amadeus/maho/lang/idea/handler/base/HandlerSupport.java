@@ -129,10 +129,10 @@ public interface HandlerSupport {
     Key<CachedValue<ConcurrentWeakIdentityHashMap<PsiClass, DelayExtensibleMembers>>> members = { "members" }, recursiveMembers = { "recursiveMembers" };
     
     static ConcurrentWeakIdentityHashMap<PsiClass, DelayExtensibleMembers> membersCacheMap(final Project project, final boolean recursive = false)
-            = CachedValuesManager.getManager(project).getCachedValue(project, recursive ? recursiveMembers : members,
-            () -> CachedValueProvider.Result.create(new ConcurrentWeakIdentityHashMap<>(), PsiModificationTracker.getInstance(project)), false);
+        = CachedValuesManager.getManager(project).getCachedValue(project, recursive ? recursiveMembers : members,
+                () -> CachedValueProvider.Result.create(new ConcurrentWeakIdentityHashMap<>(), PsiModificationTracker.getInstance(project)), false);
     
-    private static ExtensibleMembers members(final ClassInnerStuffCache cache) = members((Privilege) cache.myClass);
+    private static ExtensibleMembers extensibleMembers(final ClassInnerStuffCache cache) = extensibleMembers((Privilege) cache.myClass);
     
     record DelayExtensibleMembers(PsiClass context, boolean recursive, AtomicReference<ExtensibleMembers> extensibleMembersReference = { }, AtomicReference<MembersCache> allMembersReference = { }) {
         
@@ -158,12 +158,12 @@ public interface HandlerSupport {
     }
     
     static DelayExtensibleMembers delayExtensibleMembers(final PsiClass extensible, final boolean recursive = false)
-            = membersCacheMap(extensible.getProject(), recursive).computeIfAbsent(extensible, it -> new DelayExtensibleMembers(it, recursive));
+        = membersCacheMap(extensible.getProject(), recursive).computeIfAbsent(extensible, it -> new DelayExtensibleMembers(it, recursive));
     
-    static ExtensibleMembers members(final PsiClass owner) {
+    static ExtensibleMembers extensibleMembers(final PsiClass owner) {
         if (!accessSourceAST()) {
             final var context = collectMembersContextLocal.get();
-            if (!context[owner]) {
+            if (!context.contains(owner)) {
                 context << owner;
                 try {
                     return delayExtensibleMembers(owner).members();
@@ -173,10 +173,10 @@ public interface HandlerSupport {
         return delayExtensibleMembers(owner, true).members();
     }
     
-    static MembersCache allMembers(final PsiClass owner) {
+    static MembersCache membersCache(final PsiClass owner) {
         if (!accessSourceAST()) {
             final var context = collectAllMembersContextLocal.get();
-            if (!context[owner]) {
+            if (!context.contains(owner)) {
                 context << owner;
                 try {
                     return delayExtensibleMembers(owner).allMembers();
@@ -204,35 +204,35 @@ public interface HandlerSupport {
             .forEach(to::add);
     
     @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
-    private static Collection<PsiClass> getAllSuperClassesRecursively(final PsiClass psiClass) = allMembers(psiClass).allSupers();
+    private static Collection<PsiClass> getAllSuperClassesRecursively(final PsiClass psiClass) = membersCache(psiClass).allSupers();
     
     @Hook(forceReturn = true)
-    private static PsiField[] getFields(final ClassInnerStuffCache $this) = members($this).list(ExtensibleMembers.FIELDS).toArray(PsiField.EMPTY_ARRAY);
+    private static PsiField[] getFields(final ClassInnerStuffCache $this) = extensibleMembers($this).list(ExtensibleMembers.FIELDS).toArray(PsiField.EMPTY_ARRAY);
     
     @Hook(forceReturn = true)
-    private static PsiMethod[] getMethods(final ClassInnerStuffCache $this) = members($this).list(ExtensibleMembers.METHODS).toArray(PsiMethod.EMPTY_ARRAY);
+    private static PsiMethod[] getMethods(final ClassInnerStuffCache $this) = extensibleMembers($this).list(ExtensibleMembers.METHODS).toArray(PsiMethod.EMPTY_ARRAY);
     
     @Hook(forceReturn = true)
-    private static PsiMethod[] getConstructors(final ClassInnerStuffCache $this) = members($this).list(ExtensibleMembers.METHODS).stream().filter(PsiMethod::isConstructor).toArray(PsiMethod.ARRAY_FACTORY::create);
+    private static PsiMethod[] getConstructors(final ClassInnerStuffCache $this) = extensibleMembers($this).list(ExtensibleMembers.METHODS).stream().filter(PsiMethod::isConstructor).toArray(PsiMethod.ARRAY_FACTORY::create);
     
     @Hook(forceReturn = true)
-    private static PsiClass[] getInnerClasses(final ClassInnerStuffCache $this) = members($this).list(ExtensibleMembers.INNER_CLASSES).toArray(PsiClass.EMPTY_ARRAY);
+    private static PsiClass[] getInnerClasses(final ClassInnerStuffCache $this) = extensibleMembers($this).list(ExtensibleMembers.INNER_CLASSES).toArray(PsiClass.EMPTY_ARRAY);
     
     @Hook(forceReturn = true)
     private static @Nullable PsiField findFieldByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
-            = checkBases ? PsiClassImplUtil.findFieldByName((Privilege) $this.myClass, name, true) : members($this).lookup(ExtensibleMembers.FIELDS, name);
+        = checkBases ? PsiClassImplUtil.findFieldByName((Privilege) $this.myClass, name, true) : extensibleMembers($this).lookup(ExtensibleMembers.FIELDS, name);
     
     @Hook(forceReturn = true)
     private static PsiMethod[] findMethodsByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
-            = checkBases ? PsiClassImplUtil.findMethodsByName((Privilege) $this.myClass, name, true) : members($this).lookupAll(ExtensibleMembers.METHODS, method -> method.getName().equals(name), PsiMethod.ARRAY_FACTORY::create);
+        = checkBases ? PsiClassImplUtil.findMethodsByName((Privilege) $this.myClass, name, true) : extensibleMembers($this).lookupAll(ExtensibleMembers.METHODS, method -> method.getName().equals(name), PsiMethod.ARRAY_FACTORY::create);
     
     @Hook(forceReturn = true)
     private static @Nullable PsiClass findInnerClassByName(final ClassInnerStuffCache $this, final String name, final boolean checkBases)
-            = checkBases ? PsiClassImplUtil.findInnerByName((Privilege) $this.myClass, name, true) : members($this).lookup(ExtensibleMembers.INNER_CLASSES, name);
+        = checkBases ? PsiClassImplUtil.findInnerByName((Privilege) $this.myClass, name, true) : extensibleMembers($this).lookup(ExtensibleMembers.INNER_CLASSES, name);
     
     @Hook(value = ResolveCache.class, isStatic = true, at = @At(var = @At.VarInsn(opcode = Bytecodes.ILOAD, var = 2)), before = false, capture = true)
     private static <TRef, TResult> boolean resolve(final boolean capture, final TRef ref, final Map<TRef, TResult> cache, final boolean preventRecursion, final Computable<? extends TResult> resolver)
-            = capture && !(ref instanceof PsiJavaCodeReferenceElementImpl);
+        = capture && !(ref instanceof PsiJavaCodeReferenceElementImpl);
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static JavaResolveResult[] resolveToMethod(final JavaResolveResult capture[], final PsiReferenceExpressionImpl $this, final PsiFile containingFile) {
@@ -341,15 +341,15 @@ public interface HandlerSupport {
     ClassLocal<Method> invokeTarget = { it -> lambdaRedirect(it.constantPool().lastMethodWithoutBoxed()) };
     
     static <T extends PsiModifierListOwner> void process(final T tree, final Class<? extends Annotation> annotationType, final Consumer4<BaseHandler<Annotation>, ? super T, Annotation, PsiAnnotation> consumer)
-            = process(tree, it -> it.handler().value() == annotationType, consumer);
+        = process(tree, it -> it.handler().value() == annotationType, consumer);
     
     static <T extends PsiModifierListOwner> void process(final T tree, final Predicate<BaseHandler<?>> predicate = _ -> true, final Consumer4<BaseHandler<Annotation>, ? super T, Annotation, PsiAnnotation> consumer)
-            = overrideMap[Handler.Marker.baseHandlers()][BaseHandler.Methods.specific(invokeTarget[consumer.getClass()], tree)].stream()
-            .filter(predicate)
-            .map(baseHandler -> getAnnotationsByTypeWithOuter(tree, baseHandler))
-            .nonnull()
-            .sorted((a, b) -> (int) (a.getKey().handler().priority() - b.getKey().handler().priority()))
-            .forEach(entry -> entry.getValue().forEach(annotation -> consumer.accept(entry.getKey(), tree, annotation.v1, annotation.v2)));
+        = overrideMap[Handler.Marker.baseHandlers()][BaseHandler.Methods.specific(invokeTarget[consumer.getClass()], tree)].stream()
+                .filter(predicate)
+                .map(baseHandler -> getAnnotationsByTypeWithOuter(tree, baseHandler))
+                .nonnull()
+                .sorted((a, b) -> (int) (a.getKey().handler().priority() - b.getKey().handler().priority()))
+                .forEach(entry -> entry.getValue().forEach(annotation -> consumer.accept(entry.getKey(), tree, annotation.v1, annotation.v2)));
     
     static boolean hasAnnotation(final PsiModifierListOwner tree, final Class<? extends Annotation> annotationType) = !getAnnotationsByTypeWithOuter(tree, annotationType).isEmpty();
     
@@ -403,7 +403,7 @@ public interface HandlerSupport {
     }
     
     static <A extends Annotation> @Nullable A lookupAnnotation(final PsiModifierListOwner owner, final Class<A> annotationType)
-            = getAnnotationsByTypeWithOuter(owner, annotationType).stream().findFirst().map(Tuple2::v1).orElse(null);
+        = getAnnotationsByTypeWithOuter(owner, annotationType).stream().findFirst().map(Tuple2::v1).orElse(null);
     
     ThreadLocal<AtomicInteger> accessSourceASTCounterLocal = ThreadLocal.withInitial(AtomicInteger::new);
     
@@ -479,8 +479,7 @@ public interface HandlerSupport {
         case PsiField ignored  -> range == Handler.Range.FIELD;
         case PsiMethod ignored -> range == Handler.Range.METHOD;
         case PsiClass ignored  -> range == Handler.Range.CLASS;
-        case null,
-             default           -> false;
+        default                -> false;
     };
     
 }

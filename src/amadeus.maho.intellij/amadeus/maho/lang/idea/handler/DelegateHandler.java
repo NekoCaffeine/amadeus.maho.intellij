@@ -141,7 +141,7 @@ public class DelegateHandler extends BaseHandler<Delegate> {
     }
     
     private static PsiSubstitutor substitutor(final ClassDeclarationsProcessor.ProcessDeclarationsContext pdc, final PsiClass context, final PsiClass derived)
-            = pdc.qualifier() ? pdc.substitutor() : TypeConversionUtil.getClassSubstitutor(context, derived, pdc.substitutor()) ?? pdc.substitutor();
+            = TypeConversionUtil.getClassSubstitutor(context, derived, pdc.substitutor()) ?? pdc.substitutor();
     
     @Override
     public void processVariable(final PsiField tree, final Delegate annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context)

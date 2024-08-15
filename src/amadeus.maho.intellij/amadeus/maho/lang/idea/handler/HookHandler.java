@@ -63,7 +63,7 @@ public class HookHandler extends BaseHandler<Hook> {
                 final List<PsiType> types = Stream.of(parameters)
                         .map(HookHandler::mapInvisibleType)
                         .toList();
-                if (!types[null]) {
+                if (!types.contains(null)) {
                     final boolean isStatic = annotation.isStatic();
                     final int targetIndex = isStatic ? -1 : annotation.capture() ? 1 : 0;
                     final @Nullable PsiClass target = (annotationTree.hasAttribute("value") ? annotation.accessPsiClass(Hook::value) :

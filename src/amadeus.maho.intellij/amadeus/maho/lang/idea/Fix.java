@@ -36,6 +36,7 @@ import com.intellij.openapi.actionSystem.PlatformCoreDataKeys;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.options.ex.ConfigurableWrapper;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
@@ -129,6 +130,10 @@ import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.bytecode.ASMHelper;
 import amadeus.maho.util.runtime.ArrayHelper;
 
+import com.jediterm.terminal.model.LinesBuffer;
+import com.jediterm.terminal.model.TerminalLine;
+import com.jediterm.terminal.model.hyperlinks.HyperlinkFilter;
+import com.jediterm.terminal.model.hyperlinks.TextProcessing;
 import com.siyeh.ig.BaseInspectionVisitor;
 import org.cef.SystemBootstrap;
 
@@ -145,6 +150,13 @@ interface Fix {
             return Hook.Result.VOID;
         application.invokeLaterOnWriteThread($this::clearCache);
         return Hook.Result.NULL;
+    }
+    
+    @Hook(forceReturn = true)
+    private static void processHyperlinks(final TextProcessing $this, final LinesBuffer buffer, final TerminalLine updatedLine) {
+        final List<HyperlinkFilter> filters = (Privilege) $this.myHyperlinkFilter;
+        if (!filters.isEmpty())
+            ReadAction.run(() -> (Privilege) $this.doProcessHyperlinks(buffer, updatedLine)); // Fix: UI thread deadlock in 2024.2, when EDT waiting TerminalTextBuffer#myLock, HyperlinkFilter#apply may ReadAction
     }
     
     @Hook
@@ -246,10 +258,10 @@ interface Fix {
     // <T> @A T, '@A' not applicable to type use
     @Hook(value = AnnotationTargetUtil.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static PsiAnnotation.TargetType[] getTargetsForLocation(final PsiAnnotation.TargetType capture[], final @Nullable PsiAnnotationOwner owner)
-    = owner instanceof PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement &&
-      PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof PsiMethod method &&
-      method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod))
-            ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
+        = owner instanceof PsiClassReferenceType type && type.getReference().getParent() instanceof PsiTypeElement &&
+          PsiTreeUtil.skipParentsOfType(type.getReference(), PsiTypeElement.class) instanceof PsiMethod method &&
+          method.getReturnTypeElement() == PsiTreeUtil.skipMatching(type.getReference(), PsiElement::getParent, it -> !(it.getParent() instanceof PsiMethod))
+                ? ArrayHelper.add(capture, PsiAnnotation.TargetType.METHOD) : capture;
     
     // Some annotations(e.g. @Mutable) will generate initialization expression
     @Hook(forceReturn = true)
@@ -288,7 +300,7 @@ interface Fix {
     
     @Hook
     private static Hook.Result createDescription(final RedundantCastInspection $this, final PsiTypeCastExpression cast, final InspectionManager manager, final boolean onTheFly)
-            = Hook.Result.falseToVoid(cast.getOperand() instanceof PsiSwitchExpression, null);
+        = Hook.Result.falseToVoid(cast.getOperand() instanceof PsiSwitchExpression, null);
     
     @Hook(value = ControlFlowUtil.class, isStatic = true, at = @At(type = @At.TypeInsn(opcode = INSTANCEOF, type = PsiLambdaExpression.class)), capture = true)
     private static Hook.Result findCodeFragment(final PsiElement capture, final PsiElement element) = Hook.Result.falseToVoid(capture instanceof PsiRecordHeader, capture);
@@ -316,11 +328,11 @@ interface Fix {
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "subSequence")), before = false, capture = true)
     private static CharSequence createMemberCopyFromText(final CharSequence capture, final PsiMember member, final TextRange range)
-            = member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? STR."\{field.getTypeElement().getText()} \{capture}" : capture;
+        = member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? STR."\{field.getTypeElement().getText()} \{capture}" : capture;
     
     @Hook(value = JavaFunctionalExpressionSearcher.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "findPsiByAST")), capture = true)
     private static int getNonPhysicalCopy(final int capture, final Map<TextRange, PsiFile> fragmentCache, final JavaFunctionalExpressionIndex.IndexEntry entry, final PsiFunctionalExpression expression) {
-        final PsiMember member = PsiTreeUtil.getStubOrPsiParentOfType(expression, PsiMember.class);
+        final @Nullable PsiMember member = PsiTreeUtil.getStubOrPsiParentOfType(expression, PsiMember.class);
         return member instanceof PsiFieldImpl field && field != (Privilege) field.findFirstFieldInDeclaration() && field.getTypeElement() != null ? capture + field.getTypeElement().getText().length() + 1 : capture;
     }
     
@@ -363,8 +375,8 @@ interface Fix {
     
     // IllegalArgumentException: focusOwner == null
     @Hook(at = @At(var = @At.VarInsn(opcode = ASTORE, var = 3)), capture = true)
-    private static JComponent guessBestPopupLocation(final @Nullable JComponent capture, final PopupFactoryImpl $this, final DataContext dataContext)
-    = capture ?? (PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(dataContext) instanceof IdeFrameImpl frame ? frame.getComponent() : null);
+    private static @Nullable JComponent guessBestPopupLocation(final @Nullable JComponent capture, final PopupFactoryImpl $this, final DataContext dataContext)
+        = capture ?? (PlatformCoreDataKeys.CONTEXT_COMPONENT.getData(dataContext) instanceof IdeFrameImpl frame ? frame.getComponent() : null);
     
     // avoid return null when IndexNotReadyException
     @Hook(value = DebuggerUtils.class, isStatic = true, forceReturn = true)
@@ -375,9 +387,9 @@ interface Fix {
             return null;
         final String name = StringUtil.notNullize(StringUtil.substringBefore(className, "<"), className);
         final PsiManager manager = PsiManager.getInstance(project);
-        PsiClass psiClass = ClassUtil.findPsiClass(manager, name, null, true, scope);
+        @Nullable PsiClass psiClass = ClassUtil.findPsiClass(manager, name, null, true, scope);
         if (psiClass == null && fallbackToAllScope) {
-            final GlobalSearchScope globalScope = (Privilege) DebuggerUtils.getInstance().getFallbackAllScope(scope, project);
+            final @Nullable GlobalSearchScope globalScope = (Privilege) DebuggerUtils.getInstance().getFallbackAllScope(scope, project);
             if (globalScope != null)
                 psiClass = ClassUtil.findPsiClass(manager, name, null, true, globalScope);
         }

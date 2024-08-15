@@ -106,10 +106,10 @@ public interface ClassDeclarationsProcessor {
     
     @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
     private static List<? extends PsiMember> findByMap(final PsiClass context, final @Nullable String name, final boolean checkBases, final PsiClassImplUtil.MemberType memberType) = name == null ? List.of() : checkBases ?
-            HandlerSupport.allMembers(context).membersByName(name, MembersCache.memberType(memberType)) : HandlerSupport.members(context).list(ExtensibleMembers.memberType(memberType), name);
+            HandlerSupport.membersCache(context).membersByName(name, MembersCache.memberType(memberType)) : HandlerSupport.extensibleMembers(context).list(ExtensibleMembers.memberType(memberType), name);
     
     @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
-    private static List<? extends PsiMember> getAllByMap(final PsiClass context, final PsiClassImplUtil.MemberType memberType) = HandlerSupport.allMembers(context).allMembers(MembersCache.memberType(memberType));
+    private static List<? extends PsiMember> getAllByMap(final PsiClass context, final PsiClassImplUtil.MemberType memberType) = HandlerSupport.membersCache(context).allMembers(MembersCache.memberType(memberType));
     
     @Hook(value = PsiClassImplUtil.class, isStatic = true, forceReturn = true)
     private static List<Pair<PsiMember, PsiSubstitutor>> getAllWithSubstitutorsByMap(final PsiClass context, final PsiClassImplUtil.MemberType memberType) = withSubstitutors(context, getAllByMap(context, memberType));
@@ -141,7 +141,7 @@ public interface ClassDeclarationsProcessor {
         final @Nullable String name = processor.getHint(NameHint.KEY)?.getName(state) ?? null;
         final @Nullable ElementClassHint classHint = processor.getHint(ElementClassHint.KEY);
         final Predicate<PsiMember> memberProcessor = member -> processor.execute(member, state);
-        final MembersCache cache = HandlerSupport.allMembers(context);
+        final MembersCache cache = HandlerSupport.membersCache(context);
         return KINDS.entrySet().stream().allMatch(entry -> !(classHint?.shouldProcess(entry.getKey()) ?? true) || processMembers(cache, entry.getValue(), name, memberProcessor)) &&
                processImportableBridgeElements(context, processor, state, name);
     }
@@ -187,7 +187,7 @@ public interface ClassDeclarationsProcessor {
             return processor.execute(member, containingClass == context ? state : state.put(PsiSubstitutor.KEY, substitutorFunction.apply(member)));
         };
         final boolean shouldProcessFields = classHint?.shouldProcess(ElementClassHint.DeclarationKind.FIELD) ?? true;
-        final MembersCache cache = HandlerSupport.allMembers(context);
+        final MembersCache cache = HandlerSupport.membersCache(context);
         { // Field
             if (shouldProcessFields)
                 if (!processMembers(cache, PsiField.class, name, memberProcessor))
@@ -241,7 +241,7 @@ public interface ClassDeclarationsProcessor {
             final @Nullable String name, final boolean shouldProcessFields, final boolean shouldProcessMethods, final boolean staticOnly = false) {
         final List<? extends LightBridgeElement> bridgeElements = Stream.concat(Stream.of(context), supers(context).stream())
                 .cast(PsiExtensibleClass.class)
-                .map(HandlerSupport::members)
+                .map(HandlerSupport::extensibleMembers)
                 .flatMap(members -> members.bridgeElements(pdc, staticOnly))
                 .filter(member -> name?.equals(member.getName()) ?? true)
                 .toList();
