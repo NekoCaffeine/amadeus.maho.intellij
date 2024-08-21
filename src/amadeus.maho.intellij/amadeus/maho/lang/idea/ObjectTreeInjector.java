@@ -21,8 +21,7 @@ public interface ObjectTreeInjector { // FWIW ObjectTree performance increase wa
     ReferenceCollector.Base collector = new ReferenceCollector.Base().let(ReferenceCollector.Base::start);
     
     static void inject() {
-        // noinspection TestOnlyProblems
-        final ObjectTree tree = Disposer.getTree();
+        final ObjectTree tree = (Privilege) Disposer.ourTree;
         try {
             final Field disposedObjects = tree.getClass().getDeclaredField("myDisposedObjects");
             final Unsafe unsafe = UnsafeHelper.unsafe();

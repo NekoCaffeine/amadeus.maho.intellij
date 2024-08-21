@@ -71,7 +71,7 @@ public abstract non-sealed class BaseHandler<A extends Annotation> implements Co
     
     public boolean contextFilter(final PsiClass context) = !(context instanceof PsiCompiledElement);
     
-    public void process(final PsiElement tree, final A annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
+    public final void process(final PsiElement tree, final A annotation, final PsiAnnotation annotationTree, final ExtensibleMembers members, final PsiClass context) {
         if (contextFilter(context)) {
             switch (tree) {
                 case PsiField element           -> processVariable(element, annotation, annotationTree, members, context);

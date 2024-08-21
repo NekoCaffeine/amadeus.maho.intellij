@@ -326,7 +326,7 @@ public interface HandlerSupport {
     
     ConcurrentWeakIdentityHashMap<Method, Method> redirectCache = { };
     
-    static Method lambdaRedirect(final Method method, final Predicate<Method> predicate = _ -> true) = redirectCache.computeIfAbsent(method, it -> {
+    static Method lambdaRedirect(final Method method) = redirectCache.computeIfAbsent(method, it -> {
         final MethodNode methodNode = Maho.getMethodNodeFromMethodNonNull(it);
         if (methodNode.instructions == null)
             return it;

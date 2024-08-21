@@ -12,6 +12,7 @@
     <depends>com.intellij.modules.lang</depends>
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
+    <depends optional="true">io.unthrottled.doki.icons</depends>
     <application-components>
         <component>
             <implementation-class>amadeus.maho.lang.idea.MahoIDEA</implementation-class>

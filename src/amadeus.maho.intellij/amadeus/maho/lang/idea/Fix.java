@@ -54,6 +54,7 @@ import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.impl.IdeFrameImpl;
 import com.intellij.psi.GenericsUtil;
+import com.intellij.psi.ImplicitlyImportedStaticMember;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiAnnotationOwner;
 import com.intellij.psi.PsiAnonymousClass;
@@ -84,7 +85,6 @@ import com.intellij.psi.SyntaxTraverser;
 import com.intellij.psi.controlFlow.ControlFlowUtil;
 import com.intellij.psi.impl.DebugUtil;
 import com.intellij.psi.impl.PsiElementFactoryImpl;
-import com.intellij.psi.impl.PsiImplUtil;
 import com.intellij.psi.impl.PsiShortNamesCacheImpl;
 import com.intellij.psi.impl.RecordAugmentProvider;
 import com.intellij.psi.impl.compiled.ClsClassImpl;
@@ -360,10 +360,10 @@ interface Fix {
         }
     }
     
-    // fucking slow: createImportStaticStatement => reformat
-    @Redirect(targetClass = PsiImplUtil.class, selector = "getImplicitStaticImports", slice = @Slice(@At(method = @At.MethodInsn(name = "createImportStaticStatement"))))
-    private static PsiImportStaticStatement createImportStaticStatement(final PsiElementFactory factory, final PsiClass owner, final String member) {
-        final PsiJavaFile dummy = (Privilege) ((PsiElementFactoryImpl) factory).createDummyJavaFile(STR."import static \{owner.getQualifiedName()}.\{member};");
+    // fucking slow: createImportStaticStatementFromText => reformat
+    @Redirect(targetClass = ImplicitlyImportedStaticMember.class, selector = ASMHelper._INIT_, slice = @Slice(@At(method = @At.MethodInsn(name = "createImportStaticStatementFromText"))))
+    private static PsiImportStaticStatement createImportStaticStatementFromText(final PsiElementFactory factory, final String classFullyQualifiedName, final String member) {
+        final PsiJavaFile dummy = (Privilege) ((PsiElementFactoryImpl) factory).createDummyJavaFile(STR."import static \{classFullyQualifiedName}.\{member};");
         return (PsiImportStaticStatement) (Privilege) PsiElementFactoryImpl.extractImport(dummy, true);
     }
     
