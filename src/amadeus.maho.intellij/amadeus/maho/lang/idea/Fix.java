@@ -1,5 +1,6 @@
 package amadeus.maho.lang.idea;
 
+import java.awt.Window;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -119,6 +120,7 @@ import com.intellij.util.indexing.UnindexedFilesUpdater;
 
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.SneakyThrows;
+import amadeus.maho.lang.Special;
 import amadeus.maho.lang.inspection.Fixed;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
@@ -150,6 +152,14 @@ interface Fix {
             return Hook.Result.VOID;
         application.invokeLaterOnWriteThread($this::clearCache);
         return Hook.Result.NULL;
+    }
+    
+    // 2024.2.1 infinite recursion
+    @Hook(value = IdeFrameImpl.class, isStatic = true, forceReturn = true)
+    private static void doDispose$lambda$1(final IdeFrameImpl $this) {
+        $this.setVisible(false);
+        (@Special Privilege) ((Window) $this).doDispose();
+        (Privilege) ($this.isDisposed = true);
     }
     
     @Hook(forceReturn = true)

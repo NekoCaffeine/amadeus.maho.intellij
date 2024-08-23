@@ -12,6 +12,7 @@ import java.util.stream.Stream;
 import amadeus.maho.lang.AccessLevel;
 import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.SneakyThrows;
+import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.AOTTransformer;
 import amadeus.maho.util.build.Distributive;
 import amadeus.maho.util.build.HotSwap;
@@ -20,11 +21,18 @@ import amadeus.maho.util.build.Jar;
 import amadeus.maho.util.build.Javac;
 import amadeus.maho.util.build.Module;
 import amadeus.maho.util.build.Workspace;
+import amadeus.maho.util.misc.Environment;
 
 import static amadeus.maho.util.build.ScriptHelper.*;
 
 @SneakyThrows
 public interface Build {
+    
+    {
+        final @Nullable String IDEA_JDK = System.getenv("IDEA_JDK");
+        if (IDEA_JDK != null)
+            Environment.local()[MAHO_JAVA_EXECUTION] = (Path.of(IDEA_JDK) / "bin" / "java").toAbsolutePath().toString();
+    }
     
     @FieldDefaults(level = AccessLevel.PUBLIC)
     class IntellijConfig {

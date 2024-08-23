@@ -124,8 +124,8 @@ public class AnnotationInvocationHandler implements InvocationHandler {
     
     public Tuple2<Object, String> attributeValueOrError(final String attributeName) {
         if (annotationTreeCopy != null) {
-            final PsiNameValuePair attribute = AnnotationUtil.findDeclaredAttribute(annotationTreeCopy, attributeName);
-            final PsiAnnotationMemberValue value = attribute == null ? null : attribute.getValue();
+            final @Nullable PsiNameValuePair attribute = AnnotationUtil.findDeclaredAttribute(annotationTreeCopy, attributeName);
+            final @Nullable PsiAnnotationMemberValue value = attribute == null ? null : attribute.getValue();
             if (value != null) {
                 final Method method = annotationType.members()[attributeName];
                 if (Annotation.class.isAssignableFrom(method.getReturnType()) && value instanceof PsiAnnotation valueAnnotation) {
@@ -165,7 +165,7 @@ public class AnnotationInvocationHandler implements InvocationHandler {
     protected @Nullable Object computeConstant(final PsiAnnotationMemberValue value, final Class<?> type) {
         if (type == Class.class || type == Class[].class) {
             if (value instanceof PsiArrayInitializerMemberValue array)
-                return new PsiClassesException(Stream.of(array.getInitializers()).map(this::tryResolvePsiClass).toList());
+                return new PsiClassesException(Stream.of(array.getInitializers()).map(this::tryResolvePsiClass).nonnull().toList());
             final @Nullable PsiClassType classType = tryResolvePsiClass(value);
             return classType != null ? new PsiClassesException(List.of(classType)) : null;
         }
@@ -200,7 +200,7 @@ public class AnnotationInvocationHandler implements InvocationHandler {
                     result.append(", ");
                 final @Nullable String name = pair.getName();
                 result.append(name == null ? "value" : name).append('=');
-                final PsiAnnotationMemberValue value = pair.getValue();
+                final @Nullable PsiAnnotationMemberValue value = pair.getValue();
                 result.append(value == null ? "null" : value.getText());
             }
         }

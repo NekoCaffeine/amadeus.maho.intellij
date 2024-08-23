@@ -540,7 +540,7 @@ public class OperatorOverloadingHandler {
     @Hook(value = JavaFindUsagesHelper.class, isStatic = true)
     private static void processElementUsages(final PsiElement element, final FindUsagesOptions options, final Processor<? super UsageInfo> processor) {
         if (options instanceof JavaMethodFindUsagesOptions methodOptions && element instanceof PsiMethod method) {
-            final PsiMethod target = element instanceof ClsMethodImpl clsMethod ? clsMethod.getSourceMirrorMethod() ?? method : method;
+            final PsiMethod target = element instanceof ClsMethodImpl clsMethod ? IDEAContext.computeReadActionIgnoreDumbMode(clsMethod::getSourceMirrorMethod) ?? method : method;
             if (!target.isConstructor()) {
                 final Project project = PsiUtilCore.getProjectInReadAction(element);
                 final String name = target.getName();

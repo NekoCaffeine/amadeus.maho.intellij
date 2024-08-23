@@ -4,6 +4,7 @@ import java.lang.module.ModuleDescriptor;
 import java.lang.module.ModuleFinder;
 import java.lang.module.ModuleReference;
 import java.lang.module.Resolver;
+import java.net.URI;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -129,6 +130,9 @@ public interface RuntimeMerger {
                     System.out.println("Copy jbrapi.registry");
                 }
             }
+            final Path options = Path.of(URI.create("jrt:/java.base/jdk/internal/vm/options"));
+            if (Files.isRegularFile(options))
+                out.add(ResourcePoolEntry.create("/java.base/jdk/internal/vm/options", Files.readAllBytes(options)));
             return out.build();
         }
         

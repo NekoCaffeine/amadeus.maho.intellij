@@ -8,6 +8,7 @@ import amadeus.maho.lang.FieldDefaults;
 import amadeus.maho.lang.RequiredArgsConstructor;
 import amadeus.maho.util.build.Distributive;
 import amadeus.maho.util.build.Github;
+import amadeus.maho.util.link.http.HttpApi;
 
 import static amadeus.maho.intellij.build.Build.*;
 
@@ -23,7 +24,7 @@ public interface Remote {
     
     GithubConfig githubConfig = workspace.config().load(new GithubConfig());
     
-    Github github = Github.make(Github.authorization(githubConfig.token));
+    Github github = Github.make(HttpApi.authorization(githubConfig.token));
     
     Github.Repo repo = github["NekoCaffeine"]["amadeus.maho.intellij"];
     

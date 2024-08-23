@@ -15,11 +15,8 @@ import amadeus.maho.core.extension.ReflectBreaker;
 import amadeus.maho.lang.SneakyThrows;
 import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.handler.ShareMarker;
-import amadeus.maho.util.misc.Environment;
 import amadeus.maho.util.resource.ResourcePath;
 import amadeus.maho.util.runtime.DebugHelper;
-import amadeus.maho.vm.JDWP;
-import amadeus.maho.vm.tools.hotspot.JIT;
 
 @SneakyThrows
 public final class MahoIDEA implements AppLifecycleListener {
@@ -35,26 +32,6 @@ public final class MahoIDEA implements AppLifecycleListener {
         if (target.getName().startsWith("amadeus.maho."))
             return url -> name.apply(url).startsWith("amadeus.maho-");
         throw new IllegalArgumentException(target.getName());
-    }
-    
-    private static final List<String> packages = List.of(
-            "java.io.",
-            "java.nio.",
-            "java.util.concurrent.",
-            "java.awt.",
-            "javax.swing.",
-            "sun.nio.",
-            "sun.java2d.",
-            "com.intellij.",
-            "com.jetbrains.",
-            "amadeus.maho.lang.idea."
-    );
-    
-    private static boolean shouldCompile(final String name) {
-        for (final String pkg : packages)
-            if (name.startsWith(pkg))
-                return true;
-        return false;
     }
     
     static {
@@ -75,8 +52,6 @@ public final class MahoIDEA implements AppLifecycleListener {
                 Maho.setupFromClass();
                 ReflectBreaker.jailbreak();
                 ObjectTreeInjector.inject();
-                if (Environment.local().lookup("maho.intellij.enqueue", !JDWP.isJDWPEnable()))
-                    JIT.instance().scheduler().runAsync(() -> JIT.instance().compileAll(target -> shouldCompile(target.getName())));
                 final @Nullable Thread edt = EDTWatcher.lookupThread("AWT-EventQueue-0");
                 if (edt != null) {
                     final EDTWatcher watcher = { edt, future -> EventQueue.invokeLater(() -> future.complete(null)) };
