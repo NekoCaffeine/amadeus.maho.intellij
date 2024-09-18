@@ -63,6 +63,7 @@ import com.intellij.lang.PsiBuilderFactory;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.lang.java.parser.BasicDeclarationParser;
 import com.intellij.lang.java.parser.BasicOldExpressionParser;
+import com.intellij.lang.java.parser.BasicPrattExpressionParser;
 import com.intellij.lang.java.parser.JavaParser;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.command.undo.UndoUtil;
@@ -265,8 +266,22 @@ public class AssignHandler extends BaseSyntaxHandler {
     
     @Hook
     private static Hook.Result parseArrayInitializer(final BasicOldExpressionParser $this, final PsiBuilder builder, final IElementType type,
+            final Function<? super PsiBuilder, PsiBuilder.Marker> elementParser, final String missingElementKey)
+        = parseArrayInitializer((Privilege) $this.myJavaElementTypeContainer, builder, type, elementParser, missingElementKey);
+    
+    @Hook(at = @At(method = @At.MethodInsn(name = "parseArrayInitializer")))
+    private static void parseNew_$Before(final BasicPrattExpressionParser $this, final PsiBuilder builder, final @Nullable PsiBuilder.Marker marker) = parsingNewExpressionLocal.set(true);
+    
+    @Hook(at = @At(method = @At.MethodInsn(name = "parseArrayInitializer")), before = false)
+    private static void parseNew_$After(final BasicPrattExpressionParser $this, final PsiBuilder builder, final @Nullable PsiBuilder.Marker marker) = parsingNewExpressionLocal.remove();
+    
+    @Hook
+    private static Hook.Result parseArrayInitializer(final BasicPrattExpressionParser $this, final PsiBuilder builder, final IElementType type,
+            final Function<? super PsiBuilder, PsiBuilder.Marker> elementParser, final String missingElementKey)
+        = parseArrayInitializer((Privilege) $this.myJavaElementTypeContainer, builder, type, elementParser, missingElementKey);
+    
+    private static Hook.Result parseArrayInitializer(final AbstractBasicJavaElementTypeFactory.JavaElementTypeContainer container, final PsiBuilder builder, final IElementType type,
             final Function<? super PsiBuilder, PsiBuilder.Marker> elementParser, final String missingElementKey) {
-        final AbstractBasicJavaElementTypeFactory.JavaElementTypeContainer container = (Privilege) $this.myJavaElementTypeContainer;
         if (type == container.ARRAY_INITIALIZER_EXPRESSION) {
             if (parsingNewExpressionLocal.get()?.booleanValue() ?? false)
                 return Hook.Result.VOID;
@@ -347,13 +362,13 @@ public class AssignHandler extends BaseSyntaxHandler {
         } else if (myRole2 == ChildRole.RBRACE) {
             final boolean space = myRole1 == ChildRole.COMMA || mySettings.SPACE_WITHIN_ARRAY_INITIALIZER_BRACES;
             if (mySettings.CALL_PARAMETERS_RPAREN_ON_NEXT_LINE && list.getExpressionCount() > 1)
-                (Privilege) $this.createSpaceWithLinefeedIfListWrapped(list, space);
+                (Privilege) $this.createSpaceWithLinefeedIfListWrapped(list.getExpressions(), space);
             else
                 (Privilege) $this.createSpaceInCode(space);
         } else if (myRole1 == ChildRole.LBRACE) {
             final boolean space = true;
             if (mySettings.CALL_PARAMETERS_LPAREN_ON_NEXT_LINE && list.getExpressionCount() > 1)
-                (Privilege) $this.createSpaceWithLinefeedIfListWrapped(list, space);
+                (Privilege) $this.createSpaceWithLinefeedIfListWrapped(list.getExpressions(), space);
             else
                 (Privilege) $this.createSpaceInCode(space);
         } else
@@ -381,7 +396,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             final AlignmentStrategy alignmentStrategy, final int startOffset, final FormattingMode formattingMode) {
         final ASTNode node = $this.getNode();
         if (child.getElementType() == JavaTokenType.LBRACE && node instanceof PsiExpressionList list && list.getParent() instanceof PsiNewExpression newExpression && isNewExpressionFromArrayInitializer(newExpression)) {
-            final Alignment alignment = alignmentStrategy.getAlignment(JavaElementType.ARRAY_INITIALIZER_EXPRESSION);
+            final @Nullable Alignment alignment = alignmentStrategy.getAlignment(JavaElementType.ARRAY_INITIALIZER_EXPRESSION);
             return { new BlockContainingJavaBlock(child, wrap, alignment, indent == null ? Indent.getNoneIndent() : indent, settings, javaSettings, formattingMode) };
         }
         return Hook.Result.VOID;
@@ -473,7 +488,7 @@ public class AssignHandler extends BaseSyntaxHandler {
                 
                 @Override
                 public JavaResolveResult[] resolveInner(final boolean incompleteCode, final PsiFile containingFile) {
-                    final PsiType type = $this.getType();
+                    final @Nullable PsiType type = $this.getType();
                     final @Nullable PsiExpressionList argumentList = $this.getArgumentList();
                     if (argumentList != null)
                         if (type instanceof PsiClassType classType) {
@@ -544,7 +559,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             return null;
         final PsiElement parent = parent(expression);
         if (parent instanceof PsiReturnStatement) {
-            final PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class);
+            final @Nullable PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class);
             if (owner instanceof PsiMethod method)
                 return method.getReturnTypeElement()?.getInnermostComponentReferenceElement() ?? null;
         } else if (parent instanceof PsiVariable variable) {
@@ -560,7 +575,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     private static @Nullable PsiType lookupType(final PsiNewExpression expression) {
         final PsiElement parent = parent(expression);
         if (parent instanceof PsiReturnStatement) {
-            final PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class);
+            final @Nullable PsiParameterListOwner owner = PsiTreeUtil.getContextOfType(parent, PsiParameterListOwner.class);
             if (owner instanceof PsiMethod method)
                 return method.getReturnType();
         } else if (parent instanceof PsiVariable variable) {
@@ -597,16 +612,14 @@ public class AssignHandler extends BaseSyntaxHandler {
     private static Hook.Result visitNewExpression(final ControlFlowAnalyzer $this, final PsiNewExpression expression) {
         if (expression.isArrayCreation() && expression.getArgumentList() instanceof PsiExpressionList argumentList) {
             (Privilege) $this.startElement(expression);
-            final PsiType type = expression.getType();
-            final PsiType componentType = type instanceof PsiArrayType arrayType ? arrayType.getComponentType() : null;
-            DfaVariableValue var = (Privilege) $this.getTargetVariable(expression);
-            DfaVariableValue arrayWriteTarget = var;
+            final @Nullable PsiType type = expression.getType(),  componentType = type instanceof PsiArrayType arrayType ? arrayType.getComponentType() : null;
+            @Nullable DfaVariableValue var = (Privilege) $this.getTargetVariable(expression), arrayWriteTarget = var;
             if (var == null)
                 var = (Privilege) $this.createTempVariable(type);
             final PsiExpression[] initializers = argumentList.getExpressions();
             final DfaValueFactory factory = (Privilege) $this.getFactory();
             if (arrayWriteTarget != null) {
-                final PsiVariable arrayVariable = ObjectUtils.tryCast(arrayWriteTarget.getPsiVariable(), PsiVariable.class);
+                final @Nullable PsiVariable arrayVariable = ObjectUtils.tryCast(arrayWriteTarget.getPsiVariable(), PsiVariable.class);
                 if (arrayWriteTarget.isFlushableByCalls() ||
                     arrayVariable == null ||
                     VariableAccessUtils.variableIsUsed(arrayVariable, expression) ||
@@ -623,7 +636,7 @@ public class AssignHandler extends BaseSyntaxHandler {
                 (Privilege) $this.addInstruction(new AssignInstruction(expression, arrayWriteTarget));
                 int index = 0;
                 for (final PsiExpression initializer : initializers) {
-                    DfaValue target = null;
+                    @Nullable DfaValue target = null;
                     if (index < (Privilege) ControlFlowAnalyzer.MAX_ARRAY_INDEX_FOR_INITIALIZER)
                         target = Objects.requireNonNull(ArrayElementDescriptor.getArrayElementValue(factory, arrayWriteTarget, index));
                     index++;
@@ -665,7 +678,7 @@ public class AssignHandler extends BaseSyntaxHandler {
         if (expression.isArrayCreation() && expression.getArgumentList() instanceof PsiExpressionList argumentList) {
             final PsiExpression initializers[] = argumentList.getExpressions();
             final Evaluator evaluators[] = new Evaluator[initializers.length];
-            final PsiType type = expression.getType();
+            final @Nullable PsiType type = expression.getType();
             final boolean primitive = type instanceof PsiArrayType arrayType && arrayType.getComponentType() instanceof PsiPrimitiveType;
             for (int idx = 0; idx < initializers.length; idx++) {
                 final PsiExpression initializer = initializers[idx];
@@ -687,7 +700,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     @Hook(value = HighlightUtil.class, isStatic = true)
     private static Hook.Result checkReturnStatementType(final PsiReturnStatement statement, final PsiElement parent) {
         if (parent instanceof PsiMethodImpl method && method.getBody() instanceof PsiCodeBlockImpl codeBlock && codeBlock.getFirstChild() instanceof PsiJavaToken token && token.getTokenType() == EQ) {
-            final PsiTypeElement typeElement = method.getReturnTypeElement();
+            final @Nullable PsiTypeElement typeElement = method.getReturnTypeElement();
             final @Nullable PsiType returnType = method.getReturnType();
             if (typeElement == null || returnType == null || PsiTypes.voidType().equals(returnType) || SelfHandler.isSelfReference(typeElement.getText()))
                 return Hook.Result.NULL;
@@ -740,7 +753,7 @@ public class AssignHandler extends BaseSyntaxHandler {
         final @Nullable PsiCodeBlock body = constructor.getBody();
         if (body == null)
             return Hook.Result.NULL;
-        PsiElement bodyElement = body.getFirstBodyElement();
+        @Nullable PsiElement bodyElement = body.getFirstBodyElement();
         while (bodyElement != null && !(bodyElement instanceof PsiStatement))
             bodyElement = bodyElement.getNextSibling();
         final @Nullable PsiExpression expression = bodyElement instanceof PsiExpressionStatement statement ? statement.getExpression() :
@@ -751,7 +764,7 @@ public class AssignHandler extends BaseSyntaxHandler {
     @Hook
     private static Hook.Result parseMethodBody(final BasicDeclarationParser $this, final PsiBuilder builder, final PsiBuilder.Marker declaration, final boolean anno) {
         if (!anno) {
-            final IElementType tokenType = builder.getTokenType();
+            final @Nullable IElementType tokenType = builder.getTokenType();
             if (tokenType == EQ) {
                 final PsiBuilder.Marker block = builder.mark();
                 builder.advanceLexer();
@@ -778,7 +791,7 @@ public class AssignHandler extends BaseSyntaxHandler {
             final PsiBuilder.Marker block = builder.mark();
             builder.advanceLexer();
             final PsiBuilder.Marker statement = builder.mark();
-            final PsiBuilder.Marker expr = JavaParser.INSTANCE.getExpressionParser().parse(builder);
+            final @Nullable PsiBuilder.Marker expr = JavaParser.INSTANCE.getExpressionParser().parse(builder);
             if (expr == null)
                 error(builder, JavaErrorBundle.message("expected.expression"));
             semicolon(builder);
@@ -835,7 +848,7 @@ public class AssignHandler extends BaseSyntaxHandler {
                 final @Nullable PsiCodeBlock body = ((PsiMethod) element).getBody();
                 if (body == null || body.getLBrace() == null || body.getStatementCount() != 1)
                     return false;
-                final PsiElement forward = PsiTreeUtil.skipWhitespacesAndCommentsForward(body.getLBrace());
+                final @Nullable PsiElement forward = PsiTreeUtil.skipWhitespacesAndCommentsForward(body.getLBrace());
                 return forward instanceof PsiExpressionStatement || forward instanceof PsiReturnStatement;
             }
             return false;

@@ -36,7 +36,6 @@ import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.PlatformCoreDataKeys;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.options.ex.ConfigurableWrapper;
@@ -137,7 +136,6 @@ import com.jediterm.terminal.model.TerminalLine;
 import com.jediterm.terminal.model.hyperlinks.HyperlinkFilter;
 import com.jediterm.terminal.model.hyperlinks.TextProcessing;
 import com.siyeh.ig.BaseInspectionVisitor;
-import org.cef.SystemBootstrap;
 
 import static amadeus.maho.util.bytecode.Bytecodes.*;
 
@@ -360,15 +358,6 @@ interface Fix {
     
     @Hook
     private static void getDisplayName(final ConfigurableWrapper $this) = $this.getConfigurable();
-    
-    @Hook(value = SystemBootstrap.class, isStatic = true, forceReturn = true)
-    private static void loadLibrary(final String libName) {
-        try {
-            System.loadLibrary(libName);
-        } catch (final UnsatisfiedLinkError e) {
-            System.load(Path.of(PathManager.getHomePath()) / "jbr" / "bin" / System.mapLibraryName(libName) | "/");
-        }
-    }
     
     // fucking slow: createImportStaticStatementFromText => reformat
     @Redirect(targetClass = ImplicitlyImportedStaticMember.class, selector = ASMHelper._INIT_, slice = @Slice(@At(method = @At.MethodInsn(name = "createImportStaticStatementFromText"))))

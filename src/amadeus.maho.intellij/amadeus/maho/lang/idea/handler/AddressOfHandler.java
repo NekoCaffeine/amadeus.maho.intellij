@@ -15,6 +15,7 @@ import com.intellij.codeInspection.dataFlow.lang.ir.DupInstruction;
 import com.intellij.codeInspection.dataFlow.lang.ir.PopInstruction;
 import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.java.parser.BasicOldExpressionParser;
+import com.intellij.lang.java.parser.BasicPrattExpressionParser;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiJavaToken;
@@ -54,7 +55,7 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     
     @ToString
     @EqualsAndHashCode
-    public record ArgInfo(PsiExpression arg, Set<IElementType> tags) { }
+    public record ArgInfo(@Nullable PsiExpression arg, Set<IElementType> tags) { }
     
     @Override
     public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
@@ -68,6 +69,9 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     @Hook(at = @At(method = @At.MethodInsn(name = "contains", descriptor = @MethodDescriptor(value = boolean.class, parameters = IElementType.class))), before = false, capture = true)
     private static boolean parseUnary(final boolean capture, final BasicOldExpressionParser $this, final PsiBuilder builder, final int mode) = capture || builder.getTokenType() == AND;
     
+    @Hook(at = @At(method = @At.MethodInsn(name = "contains", descriptor = @MethodDescriptor(value = boolean.class, parameters = IElementType.class))), before = false, capture = true)
+    private static boolean parseUnary(final boolean capture, final BasicPrattExpressionParser $this, final PsiBuilder builder, final int mode) = capture || builder.getTokenType() == AND;
+    
     @Hook
     private static Hook.Result getType(final PsiPrefixExpressionImpl $this) = Hook.Result.falseToVoid($this.getOperationSign().getTokenType() == AND, longType());
     
@@ -78,7 +82,7 @@ public class AddressOfHandler extends BaseSyntaxHandler {
             = token.getTokenType() == AND ? type instanceof PsiPrimitiveType && addressOfApplicableType.contains(type.getCanonicalText(false)) ? Hook.Result.TRUE : Hook.Result.FALSE : Hook.Result.VOID;
     
     private static ArgInfo argInfo(final PsiUnaryExpression expression) {
-        PsiExpression arg = PsiUtil.skipParenthesizedExprDown(expression);
+        @Nullable PsiExpression arg = PsiUtil.skipParenthesizedExprDown(expression);
         if (!(expression.getOperand() instanceof PsiUnaryExpression))
             return { arg, Set.of() };
         final HashSet<IElementType> tags = { };
@@ -93,9 +97,10 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     private static Hook.Result visitPrefixExpression(final ControlFlowAnalyzer $this, final PsiPrefixExpression expression) {
         if (expression.getOperationSign().getTokenType() == AND) {
             final ArgInfo argInfo = argInfo(expression);
-            final PsiExpression operand = argInfo.arg();
-            (Privilege) $this.addInstruction(new DupInstruction());
-            (Privilege) $this.addInstruction(new AssignInstruction(operand, null, JavaDfaValueFactory.getExpressionDfaValue((Privilege) $this.myFactory, operand)));
+            if (argInfo.arg() instanceof PsiExpression operand) {
+                (Privilege) $this.addInstruction(new DupInstruction());
+                (Privilege) $this.addInstruction(new AssignInstruction(operand, null, JavaDfaValueFactory.getExpressionDfaValue((Privilege) $this.myFactory, operand)));
+            }
             return new Hook.Result().jump();
         }
         return Hook.Result.VOID;
@@ -105,8 +110,7 @@ public class AddressOfHandler extends BaseSyntaxHandler {
     private static void visitPrefixExpression(final com.intellij.psi.controlFlow.ControlFlowAnalyzer $this, final PsiPrefixExpression expression) {
         if (expression.getOperationSign().getTokenType() == AND) {
             final ArgInfo argInfo = argInfo(expression);
-            final PsiExpression operand = argInfo.arg();
-            if (operand instanceof PsiReferenceExpression referenceExpression) {
+            if (argInfo.arg() instanceof PsiReferenceExpression referenceExpression) {
                 final @Nullable PsiVariable variable = (Privilege) $this.getUsedVariable(referenceExpression);
                 if (variable != null) {
                     if (!argInfo.tags().contains(MINUS))

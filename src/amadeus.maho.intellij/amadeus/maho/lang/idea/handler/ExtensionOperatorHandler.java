@@ -59,7 +59,7 @@ public class ExtensionOperatorHandler extends BaseHandler<Extension.Operator> {
     
     @Override
     public void check(final PsiElement tree, final Extension.Operator annotation, final PsiAnnotation annotationTree, final ProblemsHolder holder, final QuickFixFactory quickFix) {
-        if (annotation.value().isEmpty())
+        if (annotation.value()?.isEmpty() ?? true)
             holder.registerProblem(annotationTree, "Operator name is empty", quickFix.createDeleteFix(annotationTree));
     }
     

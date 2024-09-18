@@ -34,7 +34,9 @@ import com.intellij.debugger.engine.evaluation.expression.Evaluator;
 import com.intellij.debugger.engine.evaluation.expression.EvaluatorBuilderImpl;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.PsiBuilder;
+import com.intellij.lang.java.parser.BasicJavaParser;
 import com.intellij.lang.java.parser.BasicOldExpressionParser;
+import com.intellij.lang.java.parser.BasicPrattExpressionParser;
 import com.intellij.lang.java.parser.BasicReferenceParser;
 import com.intellij.psi.GenericsUtil;
 import com.intellij.psi.JavaPsiFacade;
@@ -114,15 +116,19 @@ public class BranchHandler extends BaseSyntaxHandler {
     
     public static final int PRIORITY = 1 << 4;
     
+    private static final TokenSet NULL_OR_OPS = TokenSet.create(NULL_OR), ACCESS_OPS = TokenSet.create(SAFE_ACCESS, ASSERT_ACCESS);
+    
     @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
     private static boolean parsePrimary(final boolean capture, final BasicOldExpressionParser $this, final PsiBuilder builder,
             final @Nullable BasicOldExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode) = capture || ACCESS_OPS.contains(builder.getTokenType());
     
     @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
+    private static boolean parsePrimary(final boolean capture, final BasicPrattExpressionParser $this, final PsiBuilder builder,
+            final @Nullable BasicPrattExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode) = capture || ACCESS_OPS.contains(builder.getTokenType());
+    
+    @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
     private static boolean parseJavaCodeReference(final boolean capture, final BasicReferenceParser $this, final PsiBuilder builder, final boolean eatLastDot, final boolean parameterList,
             final boolean isImport, final boolean isStaticImport, final boolean isNew, final boolean diamonds, final BasicReferenceParser.TypeInfo typeInfo) = capture || ACCESS_OPS.contains(builder.getTokenType());
-    
-    private static final TokenSet NULL_OR_OPS = TokenSet.create(NULL_OR), ACCESS_OPS = TokenSet.create(SAFE_ACCESS, ASSERT_ACCESS);
     
     @Proxy(NEW)
     private static native BasicOldExpressionParser.ExprType newExprType(String name, int id);
@@ -150,7 +156,11 @@ public class BranchHandler extends BaseSyntaxHandler {
     
     @Hook
     private static Hook.Result parseExpression(final BasicOldExpressionParser $this, final PsiBuilder builder, final BasicOldExpressionParser.ExprType type, final int mode)
-            = type == NULL_OR_TYPE ? new Hook.Result((Privilege) $this.parseBinary(builder, BasicOldExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
+        = type == NULL_OR_TYPE ? new Hook.Result((Privilege) $this.parseBinary(builder, BasicOldExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
+    
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
+    private static void _init_(final BasicPrattExpressionParser $this, final BasicJavaParser parser, final @Hook.LocalVar(index = 3) BasicPrattExpressionParser.PolyExprParser polyExprParser)
+        = ((Privilege) $this.ourInfixParsers)[NULL_OR] = (Privilege) new BasicPrattExpressionParser.ParserData(1, polyExprParser);
     
     @Hook
     private static Hook.Result visitPolyadicExpression(final JavaSpacePropertyProcessor $this, final PsiPolyadicExpression expression) {
@@ -163,19 +173,19 @@ public class BranchHandler extends BaseSyntaxHandler {
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static @Nullable ASTNode findChildByRole(final @Nullable ASTNode capture, final PsiPolyadicExpressionImpl $this, final int role)
-            = capture == null && role == ChildRole.OPERATION_SIGN ? $this.findChildByType(NULL_OR_OPS) : capture;
+        = capture == null && role == ChildRole.OPERATION_SIGN ? $this.findChildByType(NULL_OR_OPS) : capture;
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static int getChildRole(final int capture, final PsiPolyadicExpressionImpl $this, final ASTNode child)
-            = capture == ChildRoleBase.NONE && NULL_OR_OPS.contains(child.getElementType()) ? ChildRole.OPERATION_SIGN : capture;
+        = capture == ChildRoleBase.NONE && NULL_OR_OPS.contains(child.getElementType()) ? ChildRole.OPERATION_SIGN : capture;
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static @Nullable ASTNode findChildByRole(final @Nullable ASTNode capture, final PsiBinaryExpressionImpl $this, final int role)
-            = capture == null && role == ChildRole.OPERATION_SIGN ? $this.findChildByType(NULL_OR_OPS) : capture;
+        = capture == null && role == ChildRole.OPERATION_SIGN ? $this.findChildByType(NULL_OR_OPS) : capture;
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static int getChildRole(final int capture, final PsiBinaryExpressionImpl $this, final ASTNode child)
-            = capture == ChildRoleBase.NONE && NULL_OR_OPS.contains(child.getElementType()) ? ChildRole.OPERATION_SIGN : capture;
+        = capture == ChildRoleBase.NONE && NULL_OR_OPS.contains(child.getElementType()) ? ChildRole.OPERATION_SIGN : capture;
     
     @Hook(at = @At(method = @At.MethodInsn(name = "findChildByType")), before = false, capture = true)
     private static ASTNode deleteChildInternal(final ASTNode capture, final PsiReferenceExpressionImpl $this, final ASTNode child) = capture ?? $this.findChildByType(ACCESS_OPS);
@@ -199,12 +209,12 @@ public class BranchHandler extends BaseSyntaxHandler {
     @Hook
     private static <T extends PsiElement> Hook.Result ifMyProblem(final NullabilityProblemKind<T> $this, final NullabilityProblemKind.NullabilityProblem<?> problem, final Consumer<? super T> consumer) {
         if ($this == callNPE || $this == fieldAccessNPE) {
-            final NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
+            final @Nullable NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
             if (myProblem != null && ($this == fieldAccessNPE ? myProblem.getAnchor().getParent() : myProblem.getAnchor()) instanceof PsiExpression expression && (isSafeAccess(expression) || isAssertAccess(expression)))
                 return Hook.Result.NULL;
         }
         if ($this == passingToNotNullParameter) {
-            final NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
+            final @Nullable NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
             if (myProblem != null && isAssertNonNull(myProblem.getAnchor()))
                 return Hook.Result.NULL;
         }
@@ -213,7 +223,7 @@ public class BranchHandler extends BaseSyntaxHandler {
     
     @Hook(value = HighlightUtil.class, isStatic = true)
     private static Hook.Result checkUnaryOperatorApplicable(final PsiJavaToken token, final @Nullable PsiExpression expr)
-            = Hook.Result.falseToVoid(expr != null && isAssertNonNull(expr.getParent()), null);
+        = Hook.Result.falseToVoid(expr != null && isAssertNonNull(expr.getParent()), null);
     
     @Hook(value = PsiTypesUtil.class, isStatic = true)
     private static Hook.Result getExpectedTypeByParent(final PsiElement element) {
@@ -247,23 +257,23 @@ public class BranchHandler extends BaseSyntaxHandler {
     
     @Hook(value = PsiPrecedenceUtil.class, isStatic = true)
     private static Hook.Result areParenthesesNeeded(final PsiExpression expression, final PsiExpression parentExpression, final boolean ignoreClarifyingParentheses)
-            = Hook.Result.falseToVoid(expression instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR);
+        = Hook.Result.falseToVoid(expression instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR);
     
     @Hook
     private static Hook.Result isUnboxingNecessary(final UnnecessaryUnboxingInspection.UnnecessaryUnboxingVisitor $this, final PsiExpression expression, final PsiExpression unboxedExpression)
-            = Hook.Result.falseToVoid(isSafeAccess(expression));
+        = Hook.Result.falseToVoid(isSafeAccess(expression));
     
     @Hook(value = PsiPrecedenceUtil.class, isStatic = true)
     private static Hook.Result getPrecedenceForOperator(final IElementType operator)
-            = Hook.Result.falseToVoid(operator == NULL_OR, PsiPrecedenceUtil.TYPE_CAST_PRECEDENCE);
+        = Hook.Result.falseToVoid(operator == NULL_OR, PsiPrecedenceUtil.TYPE_CAST_PRECEDENCE);
     
     @Hook(value = PsiBinaryExpressionImpl.class, isStatic = true)
     private static Hook.Result doGetType(final PsiBinaryExpressionImpl expression)
-            = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getLOperand(), expression.getROperand())) : Hook.Result.VOID;
+        = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getLOperand(), expression.getROperand())) : Hook.Result.VOID;
     
     @Hook(value = PsiPolyadicExpressionImpl.class, isStatic = true)
     private static Hook.Result doGetType(final PsiPolyadicExpressionImpl expression)
-            = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getOperands())) : Hook.Result.VOID;
+        = expression.getOperationTokenType() == NULL_OR ? new Hook.Result(condType(expression, expression.getOperands())) : Hook.Result.VOID;
     
     private static @Nullable PsiType condType(final PsiExpression owner, final Function<PsiExpression, PsiType> typeEvaluator = expression -> expression?.getType() ?? null, final PsiExpression... expressions) {
         if (expressions.length == 0)
@@ -295,9 +305,9 @@ public class BranchHandler extends BaseSyntaxHandler {
     }
     
     private static @Nullable Object mergeConstInt(final @Nullable Object constValue1, final @Nullable Object constValue2)
-            = constValue1 instanceof Integer integer1 ? constValue2 instanceof Integer integer2 ? (Integer) Math.max(integer1, integer2) : constValue2 instanceof Character integer2 ?
-            (Integer) Math.max(integer1, integer2) : null : constValue1 instanceof Character integer1 ? constValue2 instanceof Integer integer2 ?
-            (Integer) Math.max(integer1, integer2) : constValue2 instanceof Character integer2 ? (Integer) Math.max(integer1, integer2) : null : null;
+        = constValue1 instanceof Integer integer1 ? constValue2 instanceof Integer integer2 ? (Integer) Math.max(integer1, integer2) : constValue2 instanceof Character integer2 ?
+                (Integer) Math.max(integer1, integer2) : null : constValue1 instanceof Character integer1 ? constValue2 instanceof Integer integer2 ?
+                (Integer) Math.max(integer1, integer2) : constValue2 instanceof Character integer2 ? (Integer) Math.max(integer1, integer2) : null : null;
     
     private static @Nullable PsiType lubType(final PsiExpression context, final @Nullable PsiType type1, final @Nullable PsiType type2, final @Nullable Object constValue1, final @Nullable Object constValue2) {
         if (Objects.equals(type1, type2))
@@ -345,7 +355,7 @@ public class BranchHandler extends BaseSyntaxHandler {
             return true;
         if (isAssignable(lType, rType))
             return true;
-        final PsiType unboxedLType = !(lType instanceof PsiPrimitiveType) ? PsiPrimitiveType.getUnboxedType(lType) : lType;
+        final @Nullable PsiType unboxedLType = !(lType instanceof PsiPrimitiveType) ? PsiPrimitiveType.getUnboxedType(lType) : lType;
         if (unboxedLType == null)
             return false;
         final int rTypeRank = getTypeRank(rType);
@@ -368,7 +378,7 @@ public class BranchHandler extends BaseSyntaxHandler {
     }
     
     @Hook
-    private static Hook.Result visitPolyadicExpression(final RedundantCastUtil.MyIsRedundantVisitor $this, final PsiPolyadicExpression expression) {
+    private static Hook.Result visitPolyadicExpression(final RedundantCastUtil.RedundantCastVisitorBase $this, final PsiPolyadicExpression expression) {
         if (expression.getOperationTokenType() == NULL_OR) {
             $this.visitExpression(expression);
             return Hook.Result.NULL;
@@ -381,11 +391,11 @@ public class BranchHandler extends BaseSyntaxHandler {
     
     @Hook(value = ExpressionUtils.class, isStatic = true, at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static boolean isNullLiteral(final boolean capture, final PsiExpression expression)
-            = capture || expression instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR && Stream.of(polyadicExpression.getOperands()).allMatch(ExpressionUtils::isNullLiteral);
+        = capture || expression instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR && Stream.of(polyadicExpression.getOperands()).allMatch(ExpressionUtils::isNullLiteral);
     
     @Hook(value = ExpressionUtils.class, isStatic = true)
     private static Hook.Result isConversionToStringNecessary(final PsiExpression expression, final boolean throwable, final @Nullable PsiType type) {
-        final PsiElement parent = ParenthesesUtils.getParentSkipParentheses(expression);
+        final @Nullable PsiElement parent = ParenthesesUtils.getParentSkipParentheses(expression);
         return Hook.Result.falseToVoid(parent instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR);
     }
     
@@ -502,7 +512,6 @@ public class BranchHandler extends BaseSyntaxHandler {
                 }
             if (value instanceof String string)
                 value = ((Privilege) $this.myInterner).intern(string);
-            // noinspection DataFlowIssue
             (Privilege) ($this.myResult = value);
             return Hook.Result.NULL;
         }
