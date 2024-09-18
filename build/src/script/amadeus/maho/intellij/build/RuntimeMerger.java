@@ -75,11 +75,11 @@ public interface RuntimeMerger {
         
         private static final Map<String, String> copyMissingMethod = Stream.of("jdk.internal.access.JavaLangInvokeAccess", "java.lang.invoke.MethodHandleImpl$1")
                 .collect(Collectors.toMap(it -> STR."/java.base/\{it.replace('.', '/')}.class", Function.identity()));
-				
-		private static final Set<String> useJBRClasses = Set.of(
-		         "/java.base/java/net/UnixDomainSocketAddress.class",
-				 "/java.base/sun/nio/ch/UnixDomainSockets.class"
-		 );
+        
+        private static final Set<String> useJBRClasses = Set.of(
+                "/java.base/java/net/UnixDomainSocketAddress.class",
+                "/java.base/sun/nio/ch/UnixDomainSockets.class"
+        );
         
         @Override
         public ResourcePool transform(final ResourcePool in, final ResourcePoolBuilder out) {
@@ -109,10 +109,10 @@ public interface RuntimeMerger {
                             System.out.println("Add JBR API to module-info");
                             return resource.copyWithContent(ClassWriter.toBytecode(node::accept));
                         } else if (useJBRClasses[resource.path()]) {
-							final String className = resource.path().substring("/java.base/".length(), resource.path().length() - ".class".length()).replace('/', '.');
-							System.out.println(STR."Replace class from JBR: \{className}");
-							return resource.copyWithContent(resourceTree.findClassInfo(className)!.readAll());
-						} else {
+                            final String className = resource.path().substring("/java.base/".length(), resource.path().length() - ".class".length()).replace('/', '.');
+                            System.out.println(STR."Replace class from JBR: \{className}");
+                            return resource.copyWithContent(resourceTree.findClassInfo(className)!.readAll());
+                        } else {
                             final @Nullable String className = copyMissingMethod[resource.path()];
                             if (className != null) {
                                 final @Nullable ResourcePath.ClassInfo classInfo = resourceTree.findClassInfo(className);
