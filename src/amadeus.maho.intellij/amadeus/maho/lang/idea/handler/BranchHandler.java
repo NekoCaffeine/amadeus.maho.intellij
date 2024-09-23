@@ -9,6 +9,7 @@ import java.util.stream.Stream;
 
 import com.intellij.codeInsight.Nullability;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
+import com.intellij.codeInsight.editorActions.JavaTypedHandler;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.LambdaCanBeMethodReferenceInspection;
 import com.intellij.codeInspection.ProblemHighlightType;
@@ -38,6 +39,9 @@ import com.intellij.lang.java.parser.BasicJavaParser;
 import com.intellij.lang.java.parser.BasicOldExpressionParser;
 import com.intellij.lang.java.parser.BasicPrattExpressionParser;
 import com.intellij.lang.java.parser.BasicReferenceParser;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Condition;
 import com.intellij.psi.GenericsUtil;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.LambdaUtil;
@@ -46,6 +50,7 @@ import com.intellij.psi.PsiConstantEvaluationHelper;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiExpression;
 import com.intellij.psi.PsiExpressionStatement;
+import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiJavaToken;
 import com.intellij.psi.PsiLambdaExpression;
 import com.intellij.psi.PsiLiteral;
@@ -119,16 +124,14 @@ public class BranchHandler extends BaseSyntaxHandler {
     private static final TokenSet NULL_OR_OPS = TokenSet.create(NULL_OR), ACCESS_OPS = TokenSet.create(SAFE_ACCESS, ASSERT_ACCESS);
     
     @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
-    private static boolean parsePrimary(final boolean capture, final BasicOldExpressionParser $this, final PsiBuilder builder,
-            final @Nullable BasicOldExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode) = capture || ACCESS_OPS.contains(builder.getTokenType());
-    
-    @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
-    private static boolean parsePrimary(final boolean capture, final BasicPrattExpressionParser $this, final PsiBuilder builder,
-            final @Nullable BasicPrattExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode) = capture || ACCESS_OPS.contains(builder.getTokenType());
-    
-    @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
     private static boolean parseJavaCodeReference(final boolean capture, final BasicReferenceParser $this, final PsiBuilder builder, final boolean eatLastDot, final boolean parameterList,
             final boolean isImport, final boolean isStaticImport, final boolean isNew, final boolean diamonds, final BasicReferenceParser.TypeInfo typeInfo) = capture || ACCESS_OPS.contains(builder.getTokenType());
+    
+    // # Old parser start
+    
+    @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
+    private static boolean parsePrimary(final boolean capture, final BasicOldExpressionParser $this, final PsiBuilder builder,
+            final @Nullable BasicOldExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode) = capture || ACCESS_OPS.contains(builder.getTokenType());
     
     @Proxy(NEW)
     private static native BasicOldExpressionParser.ExprType newExprType(String name, int id);
@@ -158,9 +161,31 @@ public class BranchHandler extends BaseSyntaxHandler {
     private static Hook.Result parseExpression(final BasicOldExpressionParser $this, final PsiBuilder builder, final BasicOldExpressionParser.ExprType type, final int mode)
         = type == NULL_OR_TYPE ? new Hook.Result((Privilege) $this.parseBinary(builder, BasicOldExpressionParser.ExprType.UNARY, NULL_OR_OPS, mode)) : Hook.Result.VOID;
     
+    // # Old parser end
+    
+    // # Pratt parser start
+    
+    @Hook(at = @At(field = @At.FieldInsn(name = "DOT"), ordinal = 0), before = false, capture = true)
+    private static boolean parsePrimary(final boolean capture, final BasicPrattExpressionParser $this, final PsiBuilder builder,
+            final @Nullable BasicPrattExpressionParser.BreakPoint breakPoint, final int breakOffset, final int mode) = capture || ACCESS_OPS.contains(builder.getTokenType());
+    
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)))
     private static void _init_(final BasicPrattExpressionParser $this, final BasicJavaParser parser, final @Hook.LocalVar(index = 3) BasicPrattExpressionParser.PolyExprParser polyExprParser)
         = ((Privilege) $this.ourInfixParsers)[NULL_OR] = (Privilege) new BasicPrattExpressionParser.ParserData(1, polyExprParser);
+    
+    static {
+        final TokenSet NEW_POSTFIX_OPS = TokenSet.orSet((Privilege) BasicPrattExpressionParser.POSTFIX_OPS, TokenSet.create(EXCL));
+        final MethodHandles.Lookup lookup = MethodHandleHelper.lookup();
+        try {
+            lookup.findStaticVarHandle(BasicPrattExpressionParser.class, "POSTFIX_OPS", TokenSet.class).set(NEW_POSTFIX_OPS);
+            final Method parsePostfix = BasicPrattExpressionParser.class.getDeclaredMethod("parsePostfix", PsiBuilder.class, int.class);
+            final WhiteBox whiteBox = WhiteBox.instance();
+            if (whiteBox.getMethodCompilationLevel(parsePostfix) > 0)
+                whiteBox.deoptimizeMethod(parsePostfix);
+        } catch (final ReflectiveOperationException e) { DebugHelper.breakpoint(e); }
+    }
+    
+    // # Pratt parser end
     
     @Hook
     private static Hook.Result visitPolyadicExpression(final JavaSpacePropertyProcessor $this, final PsiPolyadicExpression expression) {
@@ -170,6 +195,10 @@ public class BranchHandler extends BaseSyntaxHandler {
         }
         return Hook.Result.VOID;
     }
+    
+    @Hook(at = @At(method = @At.MethodInsn(name = "autoPopupMemberLookup")), capture = true)
+    private static Condition<? super PsiFile> autoPopupMemberLookup(final Condition<? super PsiFile> capture, final JavaTypedHandler $this, final Project project, final Editor editor)
+        = file -> file.findElementAt(editor.getCaretModel().getOffset() - 1) instanceof PsiJavaToken token && ACCESS_OPS.contains(token.getTokenType()) || capture.value(file);
     
     @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
     private static @Nullable ASTNode findChildByRole(final @Nullable ASTNode capture, final PsiPolyadicExpressionImpl $this, final int role)
@@ -225,10 +254,20 @@ public class BranchHandler extends BaseSyntaxHandler {
     private static Hook.Result checkUnaryOperatorApplicable(final PsiJavaToken token, final @Nullable PsiExpression expr)
         = Hook.Result.falseToVoid(expr != null && isAssertNonNull(expr.getParent()), null);
     
+    private static @Nullable PsiElement skipAssertAccess(final @Nullable PsiElement element) = switch (element) {
+        case null                                -> null;
+        case PsiPostfixExpression expression
+                when isAssertNonNull(expression) -> skipAssertAccess(PsiUtil.skipParenthesizedExprUp(expression.getParent()));
+        default                                  -> element;
+    };
+    
+    @Hook(value = PsiPolyExpressionUtil.class, isStatic = true, at = @At(method = @At.MethodInsn(name = "skipParenthesizedExprUp"), ordinal = 0), before = false, capture = true)
+    private static @Nullable PsiElement isInAssignmentOrInvocationContext(final @Nullable PsiElement capture, final PsiExpression expression) = skipAssertAccess(capture);
+    
     @Hook(value = PsiTypesUtil.class, isStatic = true)
     private static Hook.Result getExpectedTypeByParent(final PsiElement element) {
-        if (isAssertNonNull(element))
-            return { PsiTypesUtil.getExpectedTypeByParent(element.getParent()) };
+        if (PsiUtil.skipParenthesizedExprUp(element.getParent()) instanceof PsiExpression expression && isAssertNonNull(expression))
+            return { PsiTypesUtil.getExpectedTypeByParent(expression) };
         if (element instanceof PsiLambdaExpression || element instanceof PsiMethodReferenceExpression) {
             @Nullable PsiElement parent = element.getParent(), current = element;
             while (parent != null) {
@@ -525,7 +564,7 @@ public class BranchHandler extends BaseSyntaxHandler {
             while (parent != null) {
                 if (!(parent instanceof PsiReferenceExpression || parent instanceof PsiMethodCallExpression callExpression && callExpression.getMethodExpression() == current || parent instanceof PsiTypeCastExpression)) {
                     if (parent instanceof PsiExpressionStatement || parent instanceof PsiLambdaExpression lambdaExpression && lambdaExpression.getBody() == current && lambdaExpression.isVoidCompatible() ||
-                        parent instanceof PsiReturnStatement returnStatement && PsiTypes.voidType().equals(PsiTreeUtil.getParentOfType(returnStatement, PsiMethod.class)?.getReturnType() ?? null) ||
+                        parent instanceof PsiReturnStatement returnStatement && (SelfHandler.isSelfReturn(returnStatement) || PsiTypes.voidType().equals(PsiTreeUtil.getParentOfType(returnStatement, PsiMethod.class)?.getReturnType() ?? null)) ||
                         parent instanceof PsiPolyadicExpression polyadicExpression && polyadicExpression.getOperationTokenType() == NULL_OR &&
                         polyadicExpression.getOperands().length > 1 && polyadicExpression.getOperands()[polyadicExpression.getOperands().length - 1] != current)
                         return;

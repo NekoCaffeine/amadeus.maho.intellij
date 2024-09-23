@@ -48,7 +48,7 @@ public class ExternalAnnotationsHandler {
         
         @Override
         public boolean isAvailable(final Project project, final Editor editor, final PsiFile file) {
-            final PsiModifierListOwner owner = PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()), PsiModifierListOwner.class);
+            final @Nullable PsiModifierListOwner owner = PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()), PsiModifierListOwner.class);
             if (owner != null && ExternalAnnotationsManagerImpl.areExternalAnnotationsApplicable(owner)) {
                 setText("Comment external");
                 return true;

@@ -16,7 +16,9 @@ import com.intellij.psi.PsiClass;
 import amadeus.maho.lang.Privilege;
 import amadeus.maho.lang.idea.debugger.render.CodePathPerceptionRenderer;
 import amadeus.maho.lang.idea.debugger.render.LambdaRenderer;
+import amadeus.maho.lang.inspection.Nullable;
 import amadeus.maho.transform.mark.Hook;
+import amadeus.maho.transform.mark.base.At;
 import amadeus.maho.transform.mark.base.TransformProvider;
 import amadeus.maho.util.runtime.DebugHelper;
 
@@ -25,25 +27,24 @@ import static com.intellij.debugger.settings.NodeRendererSettings.*;
 @TransformProvider
 public interface DebugRenderer {
     
-    @Hook
-    @Privilege
-    private static void addAnnotationRenderers(final NodeRendererSettings $this, final List<NodeRenderer> renderers, final Project project) {
+    @Hook(at = @At(endpoint = @At.Endpoint(At.Endpoint.Type.RETURN)), capture = true)
+    private static void getAllRenderers(final List<NodeRenderer> capture, final NodeRendererSettings $this, final Project project) {
         try {
-            visitAnnotatedElements(DebugHelper.Renderer.class.getCanonicalName(), project, (e, annotation) -> {
+            (Privilege) visitAnnotatedElements(DebugHelper.Renderer.class.getCanonicalName(), project, (e, annotation) -> {
                 if (e instanceof PsiClass cls) {
-                    final String expr = getAttributeValue(annotation, "value");
-                    final LabelRenderer labelRenderer = StringUtil.isEmpty(expr) ? null : createLabelRenderer(null, expr);
-                    final String childrenArray = getAttributeValue(annotation, "childrenArray");
-                    final String isLeaf = getAttributeValue(annotation, "hasChildren");
-                    final ExpressionChildrenRenderer childrenRenderer = StringUtil.isEmpty(childrenArray) ? null : createExpressionArrayChildrenRenderer(childrenArray, isLeaf, $this.myArrayRenderer);
+                    final String expr = (Privilege) getAttributeValue(annotation, "value");
+                    final @Nullable LabelRenderer labelRenderer = StringUtil.isEmpty(expr) ? null : (Privilege) createLabelRenderer(null, expr);
+                    final String childrenArray = (Privilege) getAttributeValue(annotation, "childrenArray");
+                    final String isLeaf = (Privilege) getAttributeValue(annotation, "hasChildren");
+                    final @Nullable ExpressionChildrenRenderer childrenRenderer = StringUtil.isEmpty(childrenArray) ? null : (Privilege) createExpressionArrayChildrenRenderer(childrenArray, isLeaf, (Privilege) $this.myArrayRenderer);
                     final CompoundReferenceRenderer renderer = $this.createCompoundReferenceRenderer(cls.getQualifiedName(), cls.getQualifiedName(), labelRenderer, childrenRenderer);
                     renderer.setEnabled(true);
-                    renderers.add(renderer);
+                    capture += renderer;
                 }
             });
-            renderers.add(new CodePathPerceptionRenderer().createRenderer());
-            renderers.add(new LambdaRenderer().createRenderer());
-        } catch (final IndexNotReadyException | ProcessCanceledException ignore) { } catch (final Exception e) { LOG.error(e); }
+            capture += new CodePathPerceptionRenderer().createRenderer();
+            capture += new LambdaRenderer().createRenderer();
+        } catch (final IndexNotReadyException | ProcessCanceledException ignore) { } catch (final Exception e) { ((Privilege) LOG).error(e); }
     }
     
 }

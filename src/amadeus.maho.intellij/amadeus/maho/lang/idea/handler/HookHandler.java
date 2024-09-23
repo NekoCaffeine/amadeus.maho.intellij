@@ -57,7 +57,10 @@ public class HookHandler extends BaseHandler<Hook> {
                 case "_clinit_"    -> ASMHelper._CLINIT_;
                 case String string -> string;
             } : annotation.selector();
-            if (annotation.capture() && (!annotationTree.hasAttribute("at") || !canCapture(annotation.at())))
+            final boolean isHookTargetSpecified = annotationTree.hasAttribute("at");
+            if (ASMHelper._INIT_.equals(name) && !isHookTargetSpecified)
+                holder.registerProblem(annotationTree, "Cannot hook constructor head because 'this' is not initialized (UNINITIALIZED_THIS)", ProblemHighlightType.GENERIC_ERROR);
+            if (annotation.capture() && (!isHookTargetSpecified || !canCapture(annotation.at())))
                 holder.registerProblem(annotationTree, "Cannot capture value in method header", ProblemHighlightType.GENERIC_ERROR);
             if (!At.Lookup.WILDCARD.equals(name) && !ASMHelper._CLINIT_.equals(name)) {
                 final List<PsiType> types = Stream.of(parameters)

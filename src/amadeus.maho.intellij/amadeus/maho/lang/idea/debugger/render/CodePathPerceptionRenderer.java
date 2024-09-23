@@ -60,10 +60,13 @@ public class CodePathPerceptionRenderer extends CompoundRendererProvider {
             try {
                 final ObjectReference reference = (ObjectReference) value();
                 // noinspection SpellCheckingInspection
-                final Method codePathStringMethod = DebuggerUtils.findMethod(reference.virtualMachine().classesByName(DebugHelper.CodePathPerception.class.getName())[0], "codePathString", "()Ljava/lang/String;");
-                final String valueAsString = DebuggerUtils.processCollectibleValue(
+                final @Nullable Method codePathStringMethod = DebuggerUtils.findMethod(reference.virtualMachine().classesByName(DebugHelper.CodePathPerception.class.getName())[0], "codePathString", "()Ljava/lang/String;");
+                if (codePathStringMethod == null)
+                    throw new EvaluateException("Method not found: DebugHelper.CodePathPerception#codePathString()Ljava/lang/String;", null);
+                final String valueAsString = DebuggerUtils.getInstance().processCollectibleValue(
                         () -> context().getDebugProcess().invokeInstanceMethod(context, reference, codePathStringMethod, Collections.emptyList(), 0),
-                        result -> result == null ? "null" : result instanceof StringReference stringReference ? stringReference.value() : result.toString()
+                        result -> result == null ? "null" : result instanceof StringReference stringReference ? stringReference.value() : result.toString(),
+                        context().getDebugProcess().getVirtualMachineProxy()
                 );
                 evaluationResult(valueAsString);
             } catch (final EvaluateException ex) { evaluationError(ex.getMessage()); }
@@ -114,7 +117,7 @@ public class CodePathPerceptionRenderer extends CompoundRendererProvider {
                 @Override
                 public void evaluationError(final String message) {
                     // noinspection SpellCheckingInspection
-                    final String msg = value != null ? message + " " + JavaDebuggerBundle.message("evaluation.error.cannot.evaluate.tostring", value.type().name()) : message;
+                    final String msg = value != null ? STR."\{message} \{JavaDebuggerBundle.message("evaluation.error.cannot.evaluate.tostring", value.type().name())}" : message;
                     descriptor.setValueLabelFailed(new EvaluateException(msg, null));
                     listener.labelChanged();
                 }

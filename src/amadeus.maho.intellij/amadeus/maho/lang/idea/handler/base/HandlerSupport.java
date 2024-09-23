@@ -126,11 +126,11 @@ public interface HandlerSupport {
             collectMembersContextLocal    = ThreadLocal.withInitial(LinkedList::new),
             collectAllMembersContextLocal = ThreadLocal.withInitial(LinkedList::new);
     
-    Key<CachedValue<ConcurrentWeakIdentityHashMap<PsiClass, DelayExtensibleMembers>>> members = { "members" }, recursiveMembers = { "recursiveMembers" };
+    Key<CachedValue<Map<PsiClass, DelayExtensibleMembers>>> members = { "members" }, recursiveMembers = { "recursiveMembers" };
     
-    static ConcurrentWeakIdentityHashMap<PsiClass, DelayExtensibleMembers> membersCacheMap(final Project project, final boolean recursive = false)
+    static Map<PsiClass, DelayExtensibleMembers> membersCacheMap(final Project project, final boolean recursive = false)
         = CachedValuesManager.getManager(project).getCachedValue(project, recursive ? recursiveMembers : members,
-                () -> CachedValueProvider.Result.create(new ConcurrentWeakIdentityHashMap<>(), PsiModificationTracker.getInstance(project)), false);
+                () -> CachedValueProvider.Result.create(new ConcurrentHashMap<>(), PsiModificationTracker.getInstance(project)), false);
     
     private static ExtensibleMembers extensibleMembers(final ClassInnerStuffCache cache) = extensibleMembers((Privilege) cache.myClass);
     

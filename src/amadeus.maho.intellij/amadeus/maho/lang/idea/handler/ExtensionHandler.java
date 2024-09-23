@@ -99,16 +99,13 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         @Hook
         private static <T extends PsiElement> Hook.Result ifMyProblem(final NullabilityProblemKind<T> $this, final NullabilityProblemKind.NullabilityProblem<?> problem, final Consumer<? super T> consumer) {
             if ($this == NullabilityProblemKind.callNPE) {
-                final NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
+                final @Nullable NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
                 if (myProblem != null && skipNullabilityCheck(((PsiMethodCallExpression) myProblem.getAnchor()).resolveMethod()))
                     return Hook.Result.NULL;
             } else if ($this == NullabilityProblemKind.callMethodRefNPE) {
-                final NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
-                if (myProblem != null) {
-                    final PsiElement element = ((PsiMethodReferenceExpression) myProblem.getAnchor()).getReferenceNameElement();
-                    if (element instanceof PsiMethod method && skipNullabilityCheck(method))
-                        return Hook.Result.NULL;
-                }
+                final @Nullable NullabilityProblemKind.NullabilityProblem<T> myProblem = $this.asMyProblem(problem);
+                if (myProblem != null && ((PsiMethodReferenceExpression) myProblem.getAnchor()).getReferenceNameElement() instanceof PsiMethod method && skipNullabilityCheck(method))
+                    return Hook.Result.NULL;
             }
             return Hook.Result.VOID;
         }
@@ -158,8 +155,8 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                         .map(ExtensionHandler::providerData)
                         .flatMap(Collection::stream)
                         .collect(Collectors.toList()));
-        return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<String, Supplier<Collection<ExtensionMethod>>>>())
-                .computeIfAbsent(resolveScope, _ -> new ConcurrentHashMap<>()).computeIfAbsent(type.getCanonicalText(), it -> FunctionHelper.lazy(() -> supers.stream().flatMap(node -> {
+        return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<PsiType, Supplier<Collection<ExtensionMethod>>>>())
+                .computeIfAbsent(resolveScope, _ -> new ConcurrentHashMap<>()).computeIfAbsent(type, it -> FunctionHelper.lazy(() -> supers.stream().flatMap(node -> {
                     final PsiType contextType = psiClass == node ? type : new PsiImmediateClassType(node, TypeConversionUtil.getSuperClassSubstitutor(node, psiClass, substitutor));
                     return caches.stream()
                             .filter(cache -> cache.predicate().test(contextType))

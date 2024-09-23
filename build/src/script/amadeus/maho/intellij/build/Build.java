@@ -4,6 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -56,17 +57,25 @@ public interface Build {
     });
     
     // list of built-in plug-ins to be referenced
-    Set<String> plugins = Set.of("java");
+    Set<String> plugins = Set.of("java", "vcs-git");
     
     // avoid analyzing unnecessary libraries, thereby improving compilation speed
     List<String> shouldInCompile = Stream.of("platform-loader", "app", "app-client", "platform-loader", "lib", "lib-client", "util", "util-8", "util_rt", "spellchecker", "java-frontback", "java-impl")
             .map(name -> name + Jar.SUFFIX).collect(Collectors.toList());
     
     Module.DependencySet
-            ddlc = { "DDLC", Files.list(workspace.root() / "ddlc").filter(path -> path.getFileName().toString().endsWith(Jar.SUFFIX)).map(Path::toAbsolutePath).map(Module.SingleDependency::new).collect(Collectors.toSet()) },
-            copilot = { "Copilot", Files.list(workspace.root() / "copilot").filter(path -> path.getFileName().toString().endsWith(Jar.SUFFIX)).map(Path::toAbsolutePath).map(Module.SingleDependency::new).collect(Collectors.toSet()) };
+            ddlc    = dependencySet("DDLC"),
+            copilot = dependencySet("Copilot");
     
-    static Set<Module.Dependency> dependencies() = IDEA.DevKit.attachLocalInstance(Path.of(config.intellijPath), plugins, path -> shouldInCompile.contains(path.getFileName().toString())) *= List.of(Module.DependencySet.maho(), ddlc, copilot);
+    static Module.DependencySet dependencySet(final String name) = { name, Files.list(workspace.root() / name.toLowerCase(Locale.ROOT))
+            .filter(path -> path.getFileName().toString().endsWith(Jar.SUFFIX))
+            .map(Path::toAbsolutePath)
+            .map(Module.SingleDependency::new)
+            .collect(Collectors.toSet())
+    };
+    
+    static Set<Module.Dependency> dependencies() = IDEA.DevKit.attachLocalInstance(Path.of(config.intellijPath), plugins,
+            path -> shouldInCompile.contains(path.getFileName().toString())) *= List.of(Module.DependencySet.maho(), ddlc, copilot);
     
     Module module = { "amadeus.maho.intellij", dependencies() }, run = IDEA.DevKit.run(Path.of(config.intellijPath));
     
