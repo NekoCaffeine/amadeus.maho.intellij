@@ -53,7 +53,7 @@ public class LambdaRenderer extends CompoundRendererProvider {
             if (descriptor instanceof ValueDescriptorImpl valueDescriptor && context instanceof EvaluationContextImpl evaluationContext) {
                 final @Nullable SourcePosition lambdaPosition = lambdaPosition(evaluationContext, valueDescriptor);
                 if (lambdaPosition != null) {
-                    final PsiElement at = lambdaPosition.getElementAt();
+                    final @Nullable PsiElement at = lambdaPosition.getElementAt();
                     return ReadAction.compute(() -> {
                         final @Nullable PsiMember parent = PsiTreeUtil.getParentOfType(at, PsiMember.class);
                         if (parent != null) {
@@ -104,10 +104,8 @@ public class LambdaRenderer extends CompoundRendererProvider {
             final @Nullable Method lambdaMethod = MethodBytecodeUtil.getLambdaMethod(classType, debugProcess.getVirtualMachineProxy().getClassesByNameProvider());
             if (lambdaMethod != null) {
                 final @Nullable Location lambdaLocation = ContainerUtil.getFirstItem(DebuggerUtilsEx.allLineLocations(lambdaMethod));
-                if (lambdaLocation != null) {
-                    final @Nullable SourcePosition lambdaPosition = debugProcess.getPositionManager().getSourcePosition(lambdaLocation);
-                    return lambdaPosition;
-                }
+                if (lambdaLocation != null)
+                    return debugProcess.getPositionManager().getSourcePosition(lambdaLocation);
             }
         }
         return null;

@@ -21,8 +21,11 @@ import amadeus.maho.util.llm.LLMApi;
 @TransformProvider
 public interface LLMHandler {
     
+    static boolean mayGenerateBody(final PsiMethod method, final @Nullable PsiClass containingClass = method.getContainingClass())
+        = method.hasAnnotation(LLM.class.getCanonicalName()) || containingClass?.hasAnnotation(LLM.class.getCanonicalName()) ?? false;
+    
     @Hook(value = HighlightMethodUtil.class, isStatic = true)
-    private static Hook.Result checkMethodMustHaveBody(final PsiMethod method, final @Nullable PsiClass containingClass) = Hook.Result.falseToVoid(method.hasAnnotation(LLM.class.getCanonicalName()), null);
+    private static Hook.Result checkMethodMustHaveBody(final PsiMethod method, final @Nullable PsiClass containingClass) = Hook.Result.falseToVoid(mayGenerateBody(method), null);
     
     Method invokeDefaultInstanceMethod = LookupHelper.<Method, Object[], Object>method2(LLMApi::invokeDefaultInstance);
     

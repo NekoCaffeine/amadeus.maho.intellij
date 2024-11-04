@@ -131,6 +131,8 @@ public interface Build {
         { // without jbr
             it += "--add-opens";
             it += "java.base/java.lang=ALL-UNNAMED";
+            it += "--add-opens";
+            it += "java.base/sun.nio.fs=ALL-UNNAMED";
         }
         it += D_PAIR.formatted("idea.vendor.name", "NekoCaffeine"); // in dev flag
         { // see idea.bat
@@ -141,7 +143,7 @@ public interface Build {
             it += D_PAIR.formatted("jna.nounpack", true);
         }
         if (!config.appendArgs.isEmpty())
-            it *= List.of(config.appendArgs.split(" "));
+            it *= Stream.of(config.appendArgs.split("\n")).filterNot(String::isBlank).collect(Collectors.toList());
     });
     
     List<String> fastArgs = List.of("-XX:CICompilerCount=24", "-XX:CompileThresholdScaling=0.05");

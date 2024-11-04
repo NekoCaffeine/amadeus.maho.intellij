@@ -41,7 +41,7 @@ public class EDTWatcher extends Thread {
     
     { setDaemon(true); }
     
-    protected void sleep0(final long time = timeout()) = Interrupt.doInterruptible(() -> Thread.sleep(time));
+    protected void sleep0(final long time = timeout()) = Interrupt.doInterruptible(() -> sleep(time));
     
     @Override
     public void run() {
@@ -70,6 +70,6 @@ public class EDTWatcher extends Thread {
             .map("    "::concat)
             .collect(Collectors.joining("\n", STR."\{thread.getName()}\n", ""));
     
-    public static @Nullable Thread lookupThread(final String name) = ~Stream.of((Privilege) Thread.getAllThreads()).filter(thread -> thread.getName().equals(name));
+    public static @Nullable Thread lookupThread(final String name) = ~Stream.of((Privilege) getAllThreads()).filter(thread -> thread.getName().equals(name));
     
 }

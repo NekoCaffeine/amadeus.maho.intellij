@@ -318,7 +318,7 @@ public class IDEAContext {
             if (result != type || ((PsiClassType) result).getParameters().length == 0)
                 return result;
             final PsiClassType.ClassResolveResult classResolveResult = type.resolveGenerics();
-            final PsiClass psiClass = classResolveResult.getElement();
+            final @Nullable PsiClass psiClass = classResolveResult.getElement();
             if (psiClass == null)
                 return type;
             PsiSubstitutor substitutor = PsiSubstitutor.EMPTY;
@@ -348,7 +348,7 @@ public class IDEAContext {
         public Set<PsiTypeParameter> visitClassType(final PsiClassType classType) {
             if (visited.add(classType)) {
                 final PsiClassType.ClassResolveResult resolveResult = classType.resolveGenerics();
-                final PsiClass element = resolveResult.getElement();
+                final @Nullable PsiClass element = resolveResult.getElement();
                 if (element instanceof PsiTypeParameter parameter) {
                     result += parameter;
                     Stream.of(element.getExtendsListTypes()).forEach(type -> type.accept(this));

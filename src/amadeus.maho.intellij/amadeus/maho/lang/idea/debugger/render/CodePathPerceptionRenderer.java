@@ -66,7 +66,7 @@ public class CodePathPerceptionRenderer extends CompoundRendererProvider {
                 final String valueAsString = DebuggerUtils.getInstance().processCollectibleValue(
                         () -> context().getDebugProcess().invokeInstanceMethod(context, reference, codePathStringMethod, Collections.emptyList(), 0),
                         result -> result == null ? "null" : result instanceof StringReference stringReference ? stringReference.value() : result.toString(),
-                        context().getDebugProcess().getVirtualMachineProxy()
+                        context()
                 );
                 evaluationResult(valueAsString);
             } catch (final EvaluateException ex) { evaluationError(ex.getMessage()); }

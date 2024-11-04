@@ -50,7 +50,10 @@ public class LightParameter extends com.intellij.psi.impl.light.LightParameter i
         if (o == null || getClass() != o.getClass())
             return false;
         final LightParameter parameter = (LightParameter) o;
-        return ObjectHelper.equals(getName(), parameter.getName()) && ObjectHelper.equals(getType(), parameter.getType());
+        if (!ObjectHelper.equals(getName(), parameter.getName()))
+            return false;
+        final PsiType type = getType(), otherType = parameter.getType();
+        return type.isValid() && otherType.isValid() && type.equals(otherType);
     }
     
     @Override

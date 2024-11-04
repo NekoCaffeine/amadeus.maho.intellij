@@ -25,6 +25,7 @@ import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiInvalidElementAccessException;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
@@ -111,7 +112,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         }
         
         public static boolean skipNullabilityCheck(final @Nullable PsiMethod method)
-                = method instanceof ExtensionMethod extensionMethod && extensionMethod.sourceMethod().getParameterList().getParameters()[0].hasAnnotation(Nullable.class.getCanonicalName());
+            = method instanceof ExtensionMethod extensionMethod && extensionMethod.sourceMethod().getParameterList().getParameters()[0].hasAnnotation(Nullable.class.getCanonicalName());
         
         @Hook
         private static Hook.Result isRawSubstitution(final MethodCandidateInfo $this) = Hook.Result.falseToVoid($this.getElement() instanceof ExtensionMethod, false);
@@ -135,6 +136,24 @@ public class ExtensionHandler extends BaseSyntaxHandler {
     @EqualsAndHashCode
     public record ExtensionMethodCacheByType(Predicate<PsiType> predicate, BiFunction<PsiClass, PsiType, ExtensionMethod> provider) { }
     
+    @ToString
+    public record PsiTypeIdentity(PsiType type) {
+        
+        @Override
+        public int hashCode() = type.hashCode();
+        
+        @Override
+        public boolean equals(final Object obj) = switch (obj) {
+            case PsiTypeIdentity identity -> {
+                try {
+                    yield type.equals(identity.type);
+                } catch (final PsiInvalidElementAccessException e) { yield false; }
+            }
+            default                       -> false;
+        };
+        
+    }
+    
     public static boolean isProvider(final @Nullable PsiClass node) = node != null && node.hasAnnotation(Extension.class.getCanonicalName()) && node.hasModifierProperty(PsiModifier.PUBLIC);
     
     public static boolean isExtensionMethodOrSource(final @Nullable PsiElement element) = isExtensionMethod(element) || isExtensionMethodSource(element);
@@ -155,8 +174,8 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                         .map(ExtensionHandler::providerData)
                         .flatMap(Collection::stream)
                         .collect(Collectors.toList()));
-        return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<PsiType, Supplier<Collection<ExtensionMethod>>>>())
-                .computeIfAbsent(resolveScope, _ -> new ConcurrentHashMap<>()).computeIfAbsent(type, it -> FunctionHelper.lazy(() -> supers.stream().flatMap(node -> {
+        return CachedValuesManager.getProjectPsiDependentCache(psiClass, it -> new ConcurrentHashMap<GlobalSearchScope, Map<PsiTypeIdentity, Supplier<Collection<ExtensionMethod>>>>())
+                .computeIfAbsent(resolveScope, _ -> new ConcurrentHashMap<>()).computeIfAbsent(new PsiTypeIdentity(type), it -> FunctionHelper.lazy(() -> supers.stream().flatMap(node -> {
                     final PsiType contextType = psiClass == node ? type : new PsiImmediateClassType(node, TypeConversionUtil.getSuperClassSubstitutor(node, psiClass, substitutor));
                     return caches.stream()
                             .filter(cache -> cache.predicate().test(contextType))
@@ -235,7 +254,7 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                                 .forEach(lightMethod::addException);
                         Stream.of(methodNode.getTypeParameters())
                                 .filter(targetTypeParameter -> !dropTypeParameters.contains(targetTypeParameter))
-                                .forEach(((LightTypeParameterListBuilder) lightMethod.getTypeParameterList())::addParameter);
+                                .forEach(((LightTypeParameterListBuilder) lightMethod.getTypeParameterList()!)::addParameter);
                         lightMethod.setNavigationElement(methodNode);
                         lightMethod.setContainingClass(injectNode);
                         if (injectNode.isInterface())
@@ -243,19 +262,16 @@ public class ExtensionHandler extends BaseSyntaxHandler {
                         lightMethod.setMethodKind(Extension.class.getCanonicalName());
                         return lightMethod;
                     };
-                    final ConcurrentHashMap<PsiClass, Map<PsiType, Supplier<ExtensionMethod>>> cache = { };
+                    final ConcurrentHashMap<PsiClass, Map<PsiTypeIdentity, Supplier<ExtensionMethod>>> cache = { };
                     final ExtensionMethodCacheByType cacheByType = {
                             injectType -> TypeConversionUtil.isAssignable(resolveHelper.inferTypeArguments(typeParameters, leftTypes, new PsiType[]{ injectType }, languageLevel).substitute(type), injectType),
-                            (injectNode, injectType) -> cache.computeIfAbsent(injectNode, _ -> new ConcurrentHashMap<>()).computeIfAbsent(injectType, _ -> FunctionHelper.lazy(() -> function.apply(injectNode, injectType))).get()
+                            (injectNode, injectType) -> cache.computeIfAbsent(injectNode, _ -> new ConcurrentHashMap<>())
+                                    .computeIfAbsent(new PsiTypeIdentity(injectType), _ -> FunctionHelper.lazy(() -> function.apply(injectNode, injectType))).get()
                     };
                     result += cacheByType;
                 });
         return result;
     }
-    
-    private static final String
-            CANNOT_INNER_CLASS      = "@Extension cannot be marked on an inner class",
-            CAN_ONLY_STATIC_CONTEXT = "The extension owner must be in a static context";
     
     @Override
     public void check(final PsiElement tree, final ProblemsHolder holder, final QuickFixFactory quickFix, final boolean isOnTheFly) {
@@ -267,9 +283,9 @@ public class ExtensionHandler extends BaseSyntaxHandler {
         if (Extension.class.getCanonicalName().equals(annotation.getQualifiedName()))
             if (annotation.getOwner() instanceof PsiModifierList modifierList && modifierList.getParent() instanceof PsiClass owner) {
                 if (!checkOwnerPublic(owner))
-                    holder.registerProblem(owner, CANNOT_INNER_CLASS, ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotation));
+                    holder.registerProblem(owner, "@Extension cannot be marked on an inner class", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotation));
             } else
-                holder.registerProblem(annotation, CAN_ONLY_STATIC_CONTEXT, ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotation));
+                holder.registerProblem(annotation, "The extension owner must be in a static context", ProblemHighlightType.GENERIC_ERROR, quickFix.createDeleteFix(annotation));
     }
     
     private boolean checkOwnerPublic(final PsiClass owner) {
